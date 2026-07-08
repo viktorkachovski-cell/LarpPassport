@@ -10,6 +10,11 @@
     "@react-native-async-storage/async-storage": "2.1.2",
     "@supabase/supabase-js": "^2.47.0",
     "expo": "~53.0.9",
+    "expo-asset": "~11.1.7",
+    "expo-constants": "~17.1.8",
+    "expo-file-system": "~18.1.11",
+    "expo-font": "~13.3.2",
+    "expo-keep-awake": "~14.1.4",
     "expo-location": "~18.1.6",
     "expo-notifications": "~0.31.5",
     "expo-status-bar": "~2.2.3",
@@ -18,9 +23,5 @@
     "react-native": "0.79.6",
     "react-native-safe-area-context": "5.4.0",
     "react-native-url-polyfill": "^2.0.0"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.25.0",
-    "babel-preset-expo": "~13.0.0"
   }
 }
