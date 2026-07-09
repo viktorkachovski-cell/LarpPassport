@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 import { supabase } from '../lib/supabase'
 import { C } from '../lib/theme'
-import { startSharing, stopSharing, isSharing, flush, queueStatus } from '../lib/locationTask'
+import { startSharing, stopSharing, isSharing, flush, queueStatus, notifyEvents, markSeenUpTo } from '../lib/locationTask'
 
 const btn = (bg, fg = '#14110a') => ({
   backgroundColor: bg, borderRadius: 8, paddingVertical: 11, paddingHorizontal: 16, alignItems: 'center',
@@ -50,7 +50,12 @@ export default function GameScreen({ gameId, session, onBack }) {
       setGame(g.data ?? null)
       setCharacter(ch.data ?? null)
       setEvents(ev.data ?? [])
-      for (const e of ev.data ?? []) seenEvents.current.add(e.id)
+      let maxSeq = 0
+      for (const e of ev.data ?? []) {
+        seenEvents.current.add(e.id)
+        if (e.player_visible && e.profile_id === uid && e.seq > maxSeq) maxSeq = e.seq
+      }
+      if (maxSeq > 0) markSeenUpTo(maxSeq)
       setMember(mem.data ?? null)
     }
     load()
@@ -71,20 +76,12 @@ export default function GameScreen({ gameId, session, onBack }) {
           if (i === -1) return [row, ...prev].slice(0, 100)
           const next = [...prev]; next[i] = row; return next
         })
-        if (!seenEvents.current.has(row.id) && row.player_visible && row.profile_id === uid) {
-          seenEvents.current.add(row.id)
-          const title = row.type === 'gm_note' ? 'Message from your GM' : 'Something stirs…'
-          Notifications.scheduleNotificationAsync({
-            content: { title, body: row.payload?.message ?? 'Check your passport.' },
-            trigger: null,
-          }).catch(() => {})
-        } else {
-          seenEvents.current.add(row.id)
-        }
+        seenEvents.current.add(row.id)
+        if (row.player_visible && row.profile_id === uid) notifyEvents([row])
       })
       .subscribe()
 
-    const interval = setInterval(() => queueStatus().then(setQueue), 20000)
+    const interval = setInterval(() => { queueStatus().then(setQueue); isSharing().then(setSharing) }, 20000)
     return () => { alive = false; clearInterval(interval); supabase.removeChannel(ch) }
   }, [gameId, uid])
 
@@ -187,6 +184,7 @@ export default function GameScreen({ gameId, session, onBack }) {
             <View style={{ backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 12 }}>
               <Text style={{ color: C.muted }}>Queued on device: <Text style={{ color: C.text }}>{queue.queued}</Text></Text>
               <Text style={{ color: C.muted, marginTop: 4 }}>Last sent: <Text style={{ color: C.text }}>{timeAgo(queue.lastSent)}</Text></Text>
+              <Text style={{ color: C.muted, marginTop: 4 }}>GPS mode: <Text style={{ color: C.text }}>{queue.profile === 'far' ? 'relaxed — saving battery' : 'precise'}</Text></Text>
               <TouchableOpacity onPress={sendNow} style={[btn(C.panel2), { borderColor: C.lineStrong, borderWidth: 1, marginTop: 12 }]}>
                 <Text style={{ color: C.text }}>Send now</Text>
               </TouchableOpacity>

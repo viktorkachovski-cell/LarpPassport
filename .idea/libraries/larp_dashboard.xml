@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="larp-dashboard">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/larp-dashboard.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
