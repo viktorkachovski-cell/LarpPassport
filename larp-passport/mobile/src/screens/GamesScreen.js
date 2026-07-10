@@ -22,10 +22,10 @@ export default function GamesScreen({ session, onOpen }) {
     const { data, error } = await supabase.rpc('join_game', { code: code.trim() })
     setBusy(false)
     if (error) { setError(error.message); return }
+    if (!data?.ok) { setError(data?.error ?? 'Could not join the game.'); return }
     setCode('')
     await load()
-    const row = Array.isArray(data) ? data[0] : data
-    if (row?.joined_game_id) onOpen({ id: row.joined_game_id, name: row.joined_game_name })
+    onOpen({ id: data.joined_game_id, name: data.joined_game_name })
   }
 
   return (
@@ -35,8 +35,8 @@ export default function GamesScreen({ session, onOpen }) {
       <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
         <TextInput
           style={{ flex: 1, backgroundColor: C.panel, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 8, color: C.text, paddingHorizontal: 12, paddingVertical: 10, letterSpacing: 4, fontSize: 16 }}
-          autoCapitalize="characters" maxLength={6} value={code} onChangeText={setCode}
-          placeholder="ABC123" placeholderTextColor={C.lineStrong} />
+          autoCapitalize="characters" maxLength={8} value={code} onChangeText={setCode}
+          placeholder="GAME CODE" placeholderTextColor={C.lineStrong} />
         <TouchableOpacity disabled={busy} onPress={join}
           style={{ backgroundColor: C.brass, borderRadius: 8, paddingHorizontal: 18, justifyContent: 'center', opacity: busy ? 0.6 : 1 }}>
           <Text style={{ color: '#14110a', fontWeight: '700' }}>Join</Text>
