@@ -6,6 +6,7 @@ import CharactersPanel from './CharactersPanel'
 import TemplatePanel from './TemplatePanel'
 import EventsPanel from './EventsPanel'
 import PlayersPanel from './PlayersPanel'
+import HuntPanel from './HuntPanel'
 
 export default function GameView({ gameId, session, onBack }) {
   const uid = session.user.id
@@ -16,7 +17,8 @@ export default function GameView({ gameId, session, onBack }) {
   const [members, setMembers] = useState([])
   const [factions, setFactions] = useState([])
   const [events, setEvents] = useState([])
-  const [tab, setTab] = useState('map')
+  const [hunt, setHunt] = useState(null)
+  const [tab, setTab] = useState('hunt')
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -49,6 +51,13 @@ export default function GameView({ gameId, session, onBack }) {
     return null
   }, [gameId, reportAction])
 
+  const refetchHunt = useCallback(async () => {
+    const { data, error } = await supabase.rpc('get_hunt_admin', { g: gameId })
+    if (error) return reportAction(error)
+    setHunt(data)
+    return null
+  }, [gameId, reportAction])
+
   useEffect(() => {
     let alive = true
 
@@ -67,15 +76,16 @@ export default function GameView({ gameId, session, onBack }) {
         || (mem.data ?? []).some((member) => member.profile_id === uid && member.role === 'gm')
       if (!canManage) return
 
-      const [z, pos, chars, fac, ev] = await Promise.all([
+      const [z, pos, chars, fac, ev, huntState] = await Promise.all([
         supabase.from('zones_view').select('*').eq('game_id', gameId),
         supabase.from('player_positions_view').select('*').eq('game_id', gameId),
         supabase.from('characters').select('*').eq('game_id', gameId),
         supabase.from('factions').select('*').eq('game_id', gameId),
         supabase.from('game_events').select('*').eq('game_id', gameId).order('seq', { ascending: false }).limit(200),
+        supabase.rpc('get_hunt_admin', { g: gameId }),
       ])
       if (!alive) return
-      const failed = [z, pos, chars, fac, ev].find((result) => result.error)
+      const failed = [z, pos, chars, fac, ev, huntState].find((result) => result.error)
       if (failed) { setLoadError(failed.error.message); return }
       setZones(z.data ?? [])
       const posMap = {}
@@ -84,6 +94,7 @@ export default function GameView({ gameId, session, onBack }) {
       setCharacters(chars.data ?? [])
       setFactions(fac.data ?? [])
       setEvents(ev.data ?? [])
+      setHunt(huntState.data)
     }
 
     load()
@@ -122,6 +133,9 @@ export default function GameView({ gameId, session, onBack }) {
         } else if (payload.eventType === 'DELETE') {
           setEvents((prev) => prev.filter((e) => e.id !== payload.old?.id))
         }
+        if (payload.new?.type?.startsWith('hunt_')
+            || payload.new?.type?.startsWith('elimination_')
+            || payload.new?.type === 'eliminated') refetchHunt()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
         if (payload.eventType === 'DELETE') {
@@ -139,7 +153,7 @@ export default function GameView({ gameId, session, onBack }) {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [gameId, isGm, refetchZones, refetchMembers])
+  }, [gameId, isGm, refetchZones, refetchMembers, refetchHunt])
 
   const usernameOf = useCallback((profileId) => {
     const m = members.find((x) => x.profile_id === profileId)
@@ -269,6 +283,26 @@ export default function GameView({ gameId, session, onBack }) {
     return reportAction(refreshError)
   }
 
+  async function startHunt() {
+    const denied = requireGm()
+    if (denied) return denied
+    const { data, error } = await supabase.rpc('start_hunt', { g: gameId })
+    if (error) return reportAction(error)
+    setHunt(data)
+    setGame((current) => ({ ...current, status: 'active', location_visibility: 'gm_only' }))
+    return reportAction(null)
+  }
+
+  async function resetHunt() {
+    const denied = requireGm()
+    if (denied) return denied
+    const { data, error } = await supabase.rpc('reset_hunt', { g: gameId })
+    if (error) return reportAction(error)
+    setHunt(data)
+    setGame((current) => ({ ...current, status: 'draft' }))
+    return reportAction(null)
+  }
+
   function copyCode() {
     navigator.clipboard?.writeText(game.join_code)
     setCopied(true); setTimeout(() => setCopied(false), 1400)
@@ -308,7 +342,7 @@ export default function GameView({ gameId, session, onBack }) {
         </select>
       </div>
       <div className="tabs">
-        {['map', 'characters', 'template', 'events', 'players'].map((t) => (
+        {['hunt', 'map', 'characters', 'template', 'events', 'players'].map((t) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
             {t[0].toUpperCase() + t.slice(1)}
             {t === 'events' && pendingEvents.length > 0 && <span className="badge">{pendingEvents.length}</span>}
@@ -322,6 +356,16 @@ export default function GameView({ gameId, session, onBack }) {
         </div>
       )}
       <div className={`tab-body ${tab === 'map' ? 'no-scroll' : ''}`}>
+        {tab === 'hunt' && (
+          <HuntPanel
+            hunt={hunt}
+            members={members}
+            characters={characters}
+            startHunt={startHunt}
+            resetHunt={resetHunt}
+            refresh={refetchHunt}
+          />
+        )}
         <div style={{ display: tab === 'map' ? 'block' : 'none', height: '100%' }}>
           <MapPanel
             zones={zones} positions={positions} members={members} characters={characters} factions={factions}

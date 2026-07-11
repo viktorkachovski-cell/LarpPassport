@@ -16,7 +16,7 @@ Expo mobile app -----/                 |
 
 There is no separate Node backend to host. The dashboard is a static Vite app,
 and both clients use Supabase with the signed-in user's JWT. Authorization is
-enforced in Postgres through RLS and three narrow RPC boundaries.
+enforced in Postgres through RLS and narrow RPC boundaries.
 
 ## Schema
 
@@ -42,6 +42,9 @@ Internal `private` tables:
 | `location_pings` | Deduplicated raw location trail with retention |
 | `zone_state` | Per-player entry, dwell, exit, and one-shot state |
 | `join_attempts` | Join-code rate-limit history |
+| `hunt_rounds` | Server-owned lifecycle and winner for each time hunt |
+| `hunt_players` | Secret target chain, eliminations, and cloak expiry |
+| `hunt_claims` | Victim-confirmed elimination workflow |
 
 `zones_view` and `player_positions_view` are security-invoker views. Realtime
 publishes only `characters`, `game_events`, `game_players`,
@@ -60,12 +63,31 @@ The callable RPCs are:
 - `ingest_pings(g, pings, last_seen_seq)`: validates up to 500 points/256 KiB,
   deduplicates retries, updates the latest position, evaluates zones, and
   piggybacks visible events.
+- `get_hunt_status(g)`: returns only the caller's safe hunt state, target
+  character, coarse proximity, and anonymous incoming claim.
+- `get_hunt_admin(g)`: returns the complete chain and claim history to the GM.
+- `start_hunt(g)` / `reset_hunt(g)`: manage the GM-controlled round lifecycle.
+- `request_elimination(g)` / `respond_elimination(claim_id, confirm_elimination)`:
+  run the two-device confirmation and target inheritance transaction.
 
 These RPCs intentionally use `SECURITY DEFINER` with `search_path = ''` because
 they cross RLS/private-table boundaries. Supabase's security advisor therefore
-reports three expected warnings. Removing definer execution would break these
+reports nine expected warnings. Removing definer execution would break these
 API contracts; any new definer RPC needs the same explicit authentication,
 validation, schema qualification, revocation, and test coverage.
+
+## Time Hunt
+
+Starting a hunt creates a randomized circular target chain from player-role
+members with non-NPC characters. GMs are observers. The active roster is locked
+and location visibility is forced to GM-only until reset or completion.
+
+Players receive only their target's character name and a coarse proximity band;
+no target profile ID or hunter identity crosses the API boundary. A confirmed
+elimination atomically removes the victim, gives their target to the hunter,
+revokes the victim's location sharing, and cloaks the hunter for ten minutes.
+Per-game advisory locks serialize simultaneous claims. The final survivor is
+recorded as winner and the game is marked finished.
 
 ## PostGIS Fix
 
@@ -109,6 +131,9 @@ Current hosted test coverage is transactional and leaves no fixtures behind.
 It verifies schema/RLS/grants, Auth profile creation, GM membership, join flow,
 zone privacy, consent, character text limits, idempotent pings, PostGIS zone
 state, and event emission.
+The time-hunt suite adds 42 checks covering secret assignments, roster locks,
+anonymous confirmation, rejection, elimination, target inheritance, cloak
+behavior, location revocation, and final-winner completion.
 
 ### Hosted Auth URL
 

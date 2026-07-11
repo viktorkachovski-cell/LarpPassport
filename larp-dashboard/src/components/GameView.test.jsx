@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   mutationResults: {},
   queryResults: {},
   removeChannel: vi.fn(),
+  rpc: vi.fn(),
 }))
 
 vi.mock('../lib/supabase', () => ({
@@ -15,6 +16,7 @@ vi.mock('../lib/supabase', () => ({
     channel: mocks.channel,
     from: mocks.from,
     removeChannel: mocks.removeChannel,
+    rpc: mocks.rpc,
   },
 }))
 
@@ -23,6 +25,7 @@ vi.mock('./CharactersPanel', () => ({ default: () => <div>Characters panel</div>
 vi.mock('./TemplatePanel', () => ({ default: () => <div>Template panel</div> }))
 vi.mock('./EventsPanel', () => ({ default: () => <div>Events panel</div> }))
 vi.mock('./PlayersPanel', () => ({ default: () => <div>Players panel</div> }))
+vi.mock('./HuntPanel', () => ({ default: () => <div>Hunt panel</div> }))
 
 import GameView from './GameView'
 
@@ -87,6 +90,10 @@ beforeEach(() => {
   mocks.mutationResults = {}
   mocks.queryResults = {}
   mocks.from.mockImplementation((table) => queryBuilder(table))
+  mocks.rpc.mockResolvedValue({
+    data: { claims: [], phase: 'not_started', players: [] },
+    error: null,
+  })
 
   const realtimeChannel = {
     on: vi.fn(),

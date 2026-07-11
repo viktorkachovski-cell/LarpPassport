@@ -1,0 +1,14 @@
+create index hunt_claims_hunter_id_idx
+  on private.hunt_claims (hunter_id);
+create index hunt_claims_victim_id_idx
+  on private.hunt_claims (victim_id);
+create index hunt_claims_response_by_idx
+  on private.hunt_claims (response_by);
+create index hunt_players_profile_id_idx
+  on private.hunt_players (profile_id);
+create index hunt_players_eliminated_by_idx
+  on private.hunt_players (eliminated_by);
+create index hunt_rounds_started_by_idx
+  on private.hunt_rounds (started_by);
+create index hunt_rounds_winner_id_idx
+  on private.hunt_rounds (winner_id);

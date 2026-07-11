@@ -103,7 +103,7 @@ export async function notifyEvents(events) {
     for (const e of sorted) {
       if (!e || typeof e.seq !== 'number' || e.seq <= last) continue
       last = e.seq
-      const title = e.type === 'gm_note' ? 'Message from your GM' : 'Something stirs…'
+      const title = notificationTitle(e.type)
       await Notifications.scheduleNotificationAsync({
         content: { title, body: e.payload?.message ?? 'Check your passport.' },
         trigger: null,
@@ -118,6 +118,18 @@ export async function markSeenUpTo(seq) {
     const last = Number((await AsyncStorage.getItem(SEQ_KEY)) ?? 0)
     if (typeof seq === 'number' && seq > last) await AsyncStorage.setItem(SEQ_KEY, String(seq))
   } catch {}
+}
+
+function notificationTitle(type) {
+  if (type === 'gm_note') return 'Message from your GM'
+  if (type === 'hunt_started') return 'The hunt has begun'
+  if (type === 'elimination_requested') return 'Confirm an elimination'
+  if (type === 'elimination_claimed') return 'Elimination claim sent'
+  if (type === 'elimination_rejected') return 'Elimination rejected'
+  if (type === 'elimination_confirmed') return 'Target eliminated'
+  if (type === 'eliminated') return 'You have been eliminated'
+  if (type === 'hunt_finished') return 'The hunt is over'
+  return 'New passport event'
 }
 
 async function applyProfile(mode) {

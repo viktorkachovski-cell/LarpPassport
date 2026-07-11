@@ -18,6 +18,13 @@ export default function EventsPanel({ events, members, usernameOf, zoneNameOf, c
     if (e.type === 'gm_note') return `GM message: “${e.payload?.message ?? ''}”`
     if (e.type === 'consent_granted') return 'started sharing location'
     if (e.type === 'consent_revoked') return 'stopped sharing location'
+    if (e.type === 'hunt_started') return 'received a secret target'
+    if (e.type === 'elimination_requested') return 'was asked to confirm an elimination'
+    if (e.type === 'elimination_claimed') return 'submitted an elimination claim'
+    if (e.type === 'elimination_rejected') return 'received an elimination rejection'
+    if (e.type === 'elimination_confirmed') return 'confirmed an elimination and inherited a new target'
+    if (e.type === 'eliminated') return 'was eliminated from the hunt'
+    if (e.type === 'hunt_finished') return `was notified that ${e.payload?.winner ?? 'a traveller'} won the hunt`
     return e.type
   }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Switch } from 'react-native'
+import { Alert, View, Text, TextInput, TouchableOpacity, ScrollView, Switch } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 import { supabase } from '../lib/supabase'
@@ -28,14 +28,28 @@ export default function GameScreen({ gameId, session, onBack }) {
   const [game, setGame] = useState(null)
   const [character, setCharacter] = useState(undefined) // undefined = loading, null = none yet
   const [events, setEvents] = useState([])
-  const [tab, setTab] = useState('sheet')
+  const [tab, setTab] = useState('hunt')
   const [sharing, setSharing] = useState(false)
   const [member, setMember] = useState(null)
+  const [hunt, setHunt] = useState(null)
+  const [huntBusy, setHuntBusy] = useState(false)
+  const [huntError, setHuntError] = useState('')
   const [queue, setQueue] = useState({ queued: 0, lastSent: null })
   const [error, setError] = useState('')
   const seenEvents = useRef(new Set())
 
   const stats = game?.template?.stats ?? []
+
+  const loadHunt = useCallback(async () => {
+    const { data, error: huntLoadError } = await supabase.rpc('get_hunt_status', { g: gameId })
+    if (huntLoadError) {
+      setHuntError(huntLoadError.message)
+      return null
+    }
+    setHunt(data)
+    setHuntError('')
+    return data
+  }, [gameId])
 
   useEffect(() => {
     let alive = true
@@ -59,6 +73,7 @@ export default function GameScreen({ gameId, session, onBack }) {
       setMember(mem.data ?? null)
     }
     load()
+    loadHunt()
     isSharing().then(setSharing)
     queueStatus().then(setQueue)
     Notifications.requestPermissionsAsync().catch(() => {})
@@ -78,12 +93,26 @@ export default function GameScreen({ gameId, session, onBack }) {
         })
         seenEvents.current.add(row.id)
         if (row.player_visible && row.profile_id === uid) notifyEvents([row])
+        if (row.profile_id === uid && (
+          row.type?.startsWith('hunt_')
+          || row.type?.startsWith('elimination_')
+          || row.type === 'eliminated'
+        )) loadHunt()
       })
       .subscribe()
 
-    const interval = setInterval(() => { queueStatus().then(setQueue); isSharing().then(setSharing) }, 20000)
+    const interval = setInterval(() => {
+      queueStatus().then(setQueue)
+      isSharing().then(setSharing)
+      loadHunt()
+    }, 15000)
     return () => { alive = false; clearInterval(interval); supabase.removeChannel(ch) }
-  }, [gameId, uid])
+  }, [gameId, uid, loadHunt])
+
+  useEffect(() => {
+    if (!hunt?.participant || hunt.alive || !sharing) return
+    stopSharing().then(() => setSharing(false)).catch(() => {})
+  }, [hunt?.alive, hunt?.participant, sharing])
 
   async function toggleSharing(next) {
     setError('')
@@ -112,6 +141,37 @@ export default function GameScreen({ gameId, session, onBack }) {
     queueStatus().then(setQueue)
   }
 
+  async function requestElimination() {
+    setHuntBusy(true); setHuntError('')
+    const { error: claimError } = await supabase.rpc('request_elimination', { g: gameId })
+    setHuntBusy(false)
+    if (claimError) { setHuntError(claimError.message); return }
+    await loadHunt()
+  }
+
+  function confirmEliminationRequest() {
+    Alert.alert(
+      'Confirm elimination?',
+      'Only confirm after the live mock battle has been resolved.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Request confirmation', onPress: requestElimination },
+      ],
+    )
+  }
+
+  async function respondToElimination(confirmed) {
+    if (!hunt?.incoming_claim?.id) return
+    setHuntBusy(true); setHuntError('')
+    const { data, error: responseError } = await supabase.rpc('respond_elimination', {
+      claim_id: hunt.incoming_claim.id,
+      confirm_elimination: confirmed,
+    })
+    setHuntBusy(false)
+    if (responseError) { setHuntError(responseError.message); return }
+    setHunt(data)
+  }
+
   const visibleEvents = events.filter((e) => e.player_visible && e.profile_id === uid)
 
   if (!game || character === undefined) {
@@ -133,13 +193,25 @@ export default function GameScreen({ gameId, session, onBack }) {
       </View>
 
       <View style={{ flexDirection: 'row', borderBottomColor: C.line, borderBottomWidth: 1 }}>
-        {[['sheet', 'Character'], ['events', 'Events'], ['share', 'Sharing']].map(([k, label]) => (
+        {[['hunt', 'Hunt'], ['sheet', 'Character'], ['events', 'Events'], ['share', 'Sharing']].map(([k, label]) => (
           <TouchableOpacity key={k} onPress={() => setTab(k)}
             style={{ flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: tab === k ? C.brass : 'transparent' }}>
             <Text style={{ color: tab === k ? C.text : C.muted }}>{label}</Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      {tab === 'hunt' && (
+        <HuntPanel
+          hunt={hunt}
+          hasCharacter={character !== null}
+          busy={huntBusy}
+          error={huntError}
+          requestElimination={confirmEliminationRequest}
+          respondToElimination={respondToElimination}
+          refresh={loadHunt}
+        />
+      )}
 
       {tab === 'sheet' && (
         character === null
@@ -153,7 +225,7 @@ export default function GameScreen({ gameId, session, onBack }) {
           {visibleEvents.map((e) => (
             <View key={e.id} style={{ backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderLeftColor: C.brass, borderLeftWidth: 3, borderRadius: 8, padding: 12, marginBottom: 10 }}>
               <Text style={{ color: C.text, fontWeight: '600' }}>
-                {e.type === 'gm_note' ? 'Message from your GM' : e.type === 'consent_granted' ? 'You started sharing your location' : e.type === 'consent_revoked' ? 'You stopped sharing your location' : 'Something happens'}
+                {eventTitle(e.type)}
               </Text>
               {!!e.payload?.message && <Text style={{ color: C.text, marginTop: 4 }}>{e.payload.message}</Text>}
               <Text style={{ color: C.muted, fontSize: 12, marginTop: 6 }}>{timeAgo(e.created_at)}</Text>
@@ -193,6 +265,159 @@ export default function GameScreen({ gameId, session, onBack }) {
         </ScrollView>
       )}
     </SafeAreaView>
+  )
+}
+
+function eventTitle(type) {
+  if (type === 'gm_note') return 'Message from your GM'
+  if (type === 'consent_granted') return 'You started sharing your location'
+  if (type === 'consent_revoked') return 'You stopped sharing your location'
+  if (type === 'hunt_started') return 'The hunt has begun'
+  if (type === 'elimination_requested') return 'Elimination confirmation requested'
+  if (type === 'elimination_claimed') return 'Waiting for your target to confirm'
+  if (type === 'elimination_rejected') return 'Elimination was rejected'
+  if (type === 'elimination_confirmed') return 'Elimination confirmed - target updated'
+  if (type === 'eliminated') return 'You have been eliminated'
+  if (type === 'hunt_finished') return 'The hunt is over'
+  return 'Something happens'
+}
+
+function remainingMinutes(timestamp) {
+  if (!timestamp) return 0
+  return Math.max(0, Math.ceil((new Date(timestamp).getTime() - Date.now()) / 60000))
+}
+
+function proximityText(proximity) {
+  if (!proximity) return 'Waiting for a target signal.'
+  if (proximity.state === 'cloaked') {
+    return `Target signal is masked for about ${remainingMinutes(proximity.available_at)} minute(s).`
+  }
+  if (proximity.state === 'waiting_for_location') return 'Waiting for both devices to report location.'
+  if (proximity.state === 'stale') return 'Target signal is stale. Keep moving and try again.'
+  if (proximity.state === 'available') {
+    return `${proximity.band} - approximately ${proximity.distance_m} m away`
+  }
+  return 'Target signal unavailable.'
+}
+
+function HuntPanel({ hunt, hasCharacter, busy, error, requestElimination, respondToElimination, refresh }) {
+  function confirmDefeat() {
+    Alert.alert(
+      'Confirm your elimination?',
+      'This removes you from the hunt and cannot be undone by a player.',
+      [
+        { text: 'Not confirmed', style: 'cancel', onPress: () => respondToElimination(false) },
+        { text: 'Confirm elimination', style: 'destructive', onPress: () => respondToElimination(true) },
+      ],
+    )
+  }
+
+  if (!hunt) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ color: error ? C.wax : C.muted }}>{error || 'Loading hunt status...'}</Text>
+        {!!error && (
+          <TouchableOpacity onPress={refresh} style={[btn(C.panel2), { borderColor: C.lineStrong, borderWidth: 1, marginTop: 14 }]}>
+            <Text style={{ color: C.text }}>Retry</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    )
+  }
+
+  if (hunt.phase === 'not_started') {
+    return (
+      <ScrollView style={{ flex: 1, padding: 16 }}>
+        <View style={{ backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 12, padding: 18 }}>
+          <Text style={{ color: C.brass, fontFamily: 'serif', fontSize: 22 }}>Awaiting the hunt</Text>
+          <Text style={{ color: C.muted, marginTop: 8, lineHeight: 19 }}>
+            The GM will lock the player roster and assign one secret target to every traveller.
+          </Text>
+          {!hasCharacter && <Text style={{ color: C.wax, marginTop: 10 }}>Create your character before the hunt can start.</Text>}
+          {!!error && <Text style={{ color: C.wax, marginTop: 10 }}>{error}</Text>}
+          <TouchableOpacity onPress={refresh} style={[btn(C.panel2), { borderColor: C.lineStrong, borderWidth: 1, marginTop: 14 }]}>
+            <Text style={{ color: C.text }}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    )
+  }
+
+  if (!hunt.participant) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ color: C.muted, textAlign: 'center' }}>You are observing this hunt and have no target assignment.</Text>
+      </View>
+    )
+  }
+
+  if (hunt.phase === 'finished') {
+    const won = hunt.winner?.is_self
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ color: won ? C.brass : C.text, fontFamily: 'serif', fontSize: 30, textAlign: 'center' }}>
+          {won ? 'Timeline secured' : 'The timeline belongs to another'}
+        </Text>
+        <Text style={{ color: C.muted, marginTop: 10, textAlign: 'center' }}>
+          {hunt.winner?.character_name ?? 'The final traveller'} is the last player standing.
+        </Text>
+      </View>
+    )
+  }
+
+  if (!hunt.alive) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ color: C.wax, fontFamily: 'serif', fontSize: 28 }}>Eliminated</Text>
+        <Text style={{ color: C.muted, marginTop: 10, textAlign: 'center' }}>
+          Your location sharing has stopped. You can watch the remaining count, but no target is revealed.
+        </Text>
+        <Text style={{ color: C.text, marginTop: 16 }}>{hunt.alive_count} traveller(s) remain</Text>
+      </View>
+    )
+  }
+
+  const cloakMinutes = remainingMinutes(hunt.hidden_until)
+  const pending = hunt.incoming_claim
+
+  return (
+    <ScrollView style={{ flex: 1, padding: 16 }}>
+      {pending && (
+        <View style={{ backgroundColor: C.panel, borderColor: C.wax, borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+          <Text style={{ color: C.wax, fontSize: 18, fontWeight: '700' }}>Elimination claimed</Text>
+          <Text style={{ color: C.muted, marginTop: 7, lineHeight: 19 }}>
+            Confirm only if the live mock battle was completed. The hunter remains anonymous in the app.
+          </Text>
+          <TouchableOpacity disabled={busy} onPress={confirmDefeat} style={[btn(C.wax, C.text), { marginTop: 12, opacity: busy ? 0.6 : 1 }]}>
+            <Text style={{ color: C.text, fontWeight: '700' }}>Review confirmation</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {cloakMinutes > 0 && (
+        <View style={{ backgroundColor: C.panel, borderColor: C.moss, borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <Text style={{ color: C.moss, fontWeight: '700' }}>Temporal cloak active</Text>
+          <Text style={{ color: C.muted, marginTop: 4 }}>Your hunter cannot read your proximity for about {cloakMinutes} minute(s).</Text>
+        </View>
+      )}
+
+      <View style={{ backgroundColor: C.panel, borderColor: C.brassDim, borderWidth: 1, borderRadius: 12, padding: 18 }}>
+        <Text style={{ color: C.muted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Your target</Text>
+        <Text style={{ color: C.brass, fontFamily: 'serif', fontSize: 28, marginTop: 5 }}>{hunt.target?.character_name ?? 'Signal pending'}</Text>
+        <Text style={{ color: C.text, fontSize: 17, marginTop: 14 }}>{proximityText(hunt.target?.proximity)}</Text>
+        <Text style={{ color: C.muted, marginTop: 8 }}>{hunt.alive_count} traveller(s) remain</Text>
+        <TouchableOpacity
+          disabled={busy || !!hunt.outgoing_claim}
+          onPress={requestElimination}
+          style={[btn(C.brass), { marginTop: 18, opacity: busy || hunt.outgoing_claim ? 0.55 : 1 }]}
+        >
+          <Text style={{ color: '#14110a', fontWeight: '700' }}>
+            {hunt.outgoing_claim ? 'Waiting for target confirmation' : 'Claim elimination'}
+          </Text>
+        </TouchableOpacity>
+        {!!error && <Text style={{ color: C.wax, marginTop: 10 }}>{error}</Text>}
+      </View>
+    </ScrollView>
   )
 }
 
