@@ -303,6 +303,57 @@ export default function GameView({ gameId, session, onBack }) {
     return reportAction(null)
   }
 
+  async function resolveHuntClaim(claimId, confirmed) {
+    const denied = requireGm()
+    if (denied) return denied
+    const { data, error } = await supabase.rpc('gm_resolve_elimination', {
+      claim_id: claimId,
+      confirm_elimination: confirmed,
+    })
+    if (error) return reportAction(error)
+    setHunt(data)
+    if (data.phase === 'finished') setGame((current) => ({ ...current, status: 'finished' }))
+    return reportAction(null)
+  }
+
+  async function eliminateHuntPlayer(profileId) {
+    const denied = requireGm()
+    if (denied) return denied
+    const { data, error } = await supabase.rpc('gm_eliminate_player', {
+      g: gameId,
+      victim_id: profileId,
+    })
+    if (error) return reportAction(error)
+    setHunt(data)
+    if (data.phase === 'finished') setGame((current) => ({ ...current, status: 'finished' }))
+    return reportAction(null)
+  }
+
+  async function restoreHuntPlayer(profileId) {
+    const denied = requireGm()
+    if (denied) return denied
+    const { data, error } = await supabase.rpc('gm_restore_player', {
+      g: gameId,
+      profile_id: profileId,
+    })
+    if (error) return reportAction(error)
+    setHunt(data)
+    setGame((current) => ({ ...current, status: 'active', location_visibility: 'gm_only' }))
+    return reportAction(null)
+  }
+
+  async function saveHuntChain(profileIds) {
+    const denied = requireGm()
+    if (denied) return denied
+    const { data, error } = await supabase.rpc('gm_set_hunt_chain', {
+      g: gameId,
+      player_ids: profileIds,
+    })
+    if (error) return reportAction(error)
+    setHunt(data)
+    return reportAction(null)
+  }
+
   function copyCode() {
     navigator.clipboard?.writeText(game.join_code)
     setCopied(true); setTimeout(() => setCopied(false), 1400)
@@ -363,6 +414,10 @@ export default function GameView({ gameId, session, onBack }) {
             characters={characters}
             startHunt={startHunt}
             resetHunt={resetHunt}
+            resolveClaim={resolveHuntClaim}
+            eliminatePlayer={eliminateHuntPlayer}
+            restorePlayer={restoreHuntPlayer}
+            saveChain={saveHuntChain}
             refresh={refetchHunt}
           />
         )}

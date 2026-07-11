@@ -129,6 +129,8 @@ function notificationTitle(type) {
   if (type === 'elimination_confirmed') return 'Target eliminated'
   if (type === 'eliminated') return 'You have been eliminated'
   if (type === 'hunt_finished') return 'The hunt is over'
+  if (type === 'hunt_player_restored') return 'Traveller restored'
+  if (type === 'hunt_chain_changed') return 'Target chain corrected'
   return 'New passport event'
 }
 

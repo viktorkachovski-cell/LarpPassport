@@ -25,6 +25,8 @@ export default function EventsPanel({ events, members, usernameOf, zoneNameOf, c
     if (e.type === 'elimination_confirmed') return 'confirmed an elimination and inherited a new target'
     if (e.type === 'eliminated') return 'was eliminated from the hunt'
     if (e.type === 'hunt_finished') return `was notified that ${e.payload?.winner ?? 'a traveller'} won the hunt`
+    if (e.type === 'hunt_player_restored') return 'was notified that the GM restored a traveller'
+    if (e.type === 'hunt_chain_changed') return 'received a corrected target assignment from the GM'
     return e.type
   }
 

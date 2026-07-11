@@ -69,10 +69,16 @@ The callable RPCs are:
 - `start_hunt(g)` / `reset_hunt(g)`: manage the GM-controlled round lifecycle.
 - `request_elimination(g)` / `respond_elimination(claim_id, confirm_elimination)`:
   run the two-device confirmation and target inheritance transaction.
+- `gm_resolve_elimination(claim_id, confirm_elimination)`: lets a GM accept or
+  reject a pending claim without impersonating the target.
+- `gm_eliminate_player(g, victim_id)` / `gm_restore_player(g, profile_id)`:
+  apply adjudicated elimination or restoration while repairing the ring.
+- `gm_set_hunt_chain(g, player_ids)`: atomically replaces the complete ordered
+  chain of living players and rejects stale claims.
 
 These RPCs intentionally use `SECURITY DEFINER` with `search_path = ''` because
 they cross RLS/private-table boundaries. Supabase's security advisor therefore
-reports nine expected warnings. Removing definer execution would break these
+reports thirteen expected warnings. Removing definer execution would break these
 API contracts; any new definer RPC needs the same explicit authentication,
 validation, schema qualification, revocation, and test coverage.
 
@@ -131,9 +137,9 @@ Current hosted test coverage is transactional and leaves no fixtures behind.
 It verifies schema/RLS/grants, Auth profile creation, GM membership, join flow,
 zone privacy, consent, character text limits, idempotent pings, PostGIS zone
 state, and event emission.
-The time-hunt suite adds 42 checks covering secret assignments, roster locks,
+The time-hunt suite adds 56 checks covering secret assignments, roster locks,
 anonymous confirmation, rejection, elimination, target inheritance, cloak
-behavior, location revocation, and final-winner completion.
+behavior, location revocation, final-winner completion, and GM recovery.
 
 ### Hosted Auth URL
 

@@ -279,6 +279,8 @@ function eventTitle(type) {
   if (type === 'elimination_confirmed') return 'Elimination confirmed - target updated'
   if (type === 'eliminated') return 'You have been eliminated'
   if (type === 'hunt_finished') return 'The hunt is over'
+  if (type === 'hunt_player_restored') return 'The GM restored a traveller'
+  if (type === 'hunt_chain_changed') return 'The GM corrected the target chain'
   return 'Something happens'
 }
 

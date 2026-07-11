@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(42);
+select extensions.plan(56);
 
 select extensions.has_table('private', 'hunt_rounds', 'hunt rounds are private');
 select extensions.has_table('private', 'hunt_players', 'target assignments are private');
@@ -26,11 +26,13 @@ select extensions.is(
    where schema.nspname = 'public'
      and function.proname in (
        'get_hunt_status', 'get_hunt_admin', 'start_hunt', 'reset_hunt',
-       'request_elimination', 'respond_elimination'
+       'request_elimination', 'respond_elimination',
+       'gm_resolve_elimination', 'gm_eliminate_player',
+       'gm_restore_player', 'gm_set_hunt_chain'
      )
      and has_function_privilege('authenticated', function.oid, 'EXECUTE')),
-  6,
-  'authenticated users can execute the six hunt RPCs'
+  10,
+  'authenticated users can execute the ten hunt RPCs'
 );
 select extensions.is(
   (select count(*)::integer
@@ -39,7 +41,9 @@ select extensions.is(
    where schema.nspname = 'public'
      and function.proname in (
        'get_hunt_status', 'get_hunt_admin', 'start_hunt', 'reset_hunt',
-       'request_elimination', 'respond_elimination'
+       'request_elimination', 'respond_elimination',
+       'gm_resolve_elimination', 'gm_eliminate_player',
+       'gm_restore_player', 'gm_set_hunt_chain'
      )
      and has_function_privilege('anon', function.oid, 'EXECUTE')),
   0,
@@ -53,7 +57,9 @@ select extensions.ok(
     where schema.nspname = 'public'
       and function.proname in (
         'get_hunt_status', 'get_hunt_admin', 'start_hunt', 'reset_hunt',
-        'request_elimination', 'respond_elimination'
+        'request_elimination', 'respond_elimination',
+        'gm_resolve_elimination', 'gm_eliminate_player',
+        'gm_restore_player', 'gm_set_hunt_chain'
       )
       and (
         not function.prosecdef
@@ -556,6 +562,252 @@ select extensions.is(
      and status = 'pending'),
   0,
   'finished hunt leaves no pending claims'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '61000000-0000-0000-0000-000000000001',
+  true
+);
+select extensions.is(
+  public.gm_restore_player(
+    '71000000-0000-0000-0000-000000000001',
+    current_setting('test.final_target')::uuid
+  )->>'phase',
+  'active',
+  'GM can restore a player after the hunt finished'
+);
+reset role;
+
+select extensions.ok(
+  (select count(*) = 2
+          and count(*) filter (where target_profile_id is not null) = 2
+          and count(*) filter (where profile_id = target_profile_id) = 0
+   from private.hunt_players
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and state = 'alive'),
+  'restoring the player creates a valid two-player ring'
+);
+select extensions.ok(
+  (select status = 'active' and location_visibility = 'gm_only'
+   from public.games
+   where id = '71000000-0000-0000-0000-000000000001')
+  and (select winner_id is null and finished_at is null
+       from private.hunt_rounds
+       where game_id = '71000000-0000-0000-0000-000000000001'),
+  'restoring reactivates the game and clears the old winner'
+);
+select extensions.ok(
+  (select state = 'alive'
+          and eliminated_at is null
+          and eliminated_by is null
+   from private.hunt_players
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and profile_id = current_setting('test.final_target')::uuid),
+  'restoring clears elimination state'
+);
+
+select set_config(
+  'test.override_chain',
+  (select array_agg(profile_id order by profile_id desc)::text
+   from private.hunt_players
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and state = 'alive'),
+  true
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '61000000-0000-0000-0000-000000000001',
+  true
+);
+select extensions.is(
+  public.gm_set_hunt_chain(
+    '71000000-0000-0000-0000-000000000001',
+    current_setting('test.override_chain')::uuid[]
+  )->>'phase',
+  'active',
+  'GM can replace the complete target chain'
+);
+reset role;
+
+select extensions.is(
+  (select count(*)::integer
+   from pg_catalog.unnest(
+     current_setting('test.override_chain')::uuid[]
+   ) with ordinality as supplied(profile_id, position)
+   join private.hunt_players player
+     on player.game_id = '71000000-0000-0000-0000-000000000001'
+    and player.profile_id = supplied.profile_id
+    and player.target_profile_id = (
+      current_setting('test.override_chain')::uuid[]
+    )[((supplied.position::integer) % 2) + 1]),
+  2,
+  'saved target assignments follow the supplied circular order'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '61000000-0000-0000-0000-000000000001',
+  true
+);
+select extensions.throws_ok(
+  format(
+    'select public.gm_set_hunt_chain(%L, array[%L::uuid, %L::uuid])',
+    '71000000-0000-0000-0000-000000000001',
+    '62000000-0000-0000-0000-000000000002',
+    '62000000-0000-0000-0000-000000000002'
+  ),
+  '22023',
+  'chain must contain every living player exactly once',
+  'GM cannot save a duplicate or incomplete target chain'
+);
+select extensions.is(
+  public.gm_eliminate_player(
+    '71000000-0000-0000-0000-000000000001',
+    current_setting('test.final_target')::uuid
+  )->>'phase',
+  'finished',
+  'GM can directly eliminate a living player'
+);
+reset role;
+
+select extensions.is(
+  (select count(*)::integer
+   from private.hunt_claims
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and victim_id = current_setting('test.final_target')::uuid
+     and status = 'confirmed'
+     and response_by = '61000000-0000-0000-0000-000000000001'),
+  1,
+  'direct GM elimination is attributed to the GM'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '62000000-0000-0000-0000-000000000002',
+  true
+);
+select extensions.throws_ok(
+  format(
+    'select public.gm_restore_player(%L, %L)',
+    '71000000-0000-0000-0000-000000000001',
+    current_setting('test.final_target')
+  ),
+  '42501',
+  'GM access required',
+  'players cannot use GM restoration controls'
+);
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '61000000-0000-0000-0000-000000000001',
+  true
+);
+select public.gm_restore_player(
+  '71000000-0000-0000-0000-000000000001',
+  current_setting('test.final_target')::uuid
+);
+reset role;
+
+select extensions.is(
+  (select count(*)::integer
+   from private.hunt_players
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and state = 'alive'),
+  2,
+  'GM can restore the directly eliminated player'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '62000000-0000-0000-0000-000000000002',
+  true
+);
+select public.request_elimination(
+  '71000000-0000-0000-0000-000000000001'
+);
+reset role;
+
+select set_config(
+  'test.gm_override_claim',
+  (select id::text
+   from private.hunt_claims
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and hunter_id = '62000000-0000-0000-0000-000000000002'
+     and status = 'pending'),
+  true
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '61000000-0000-0000-0000-000000000001',
+  true
+);
+select public.gm_resolve_elimination(
+  current_setting('test.gm_override_claim')::uuid,
+  false
+);
+reset role;
+
+select extensions.is(
+  (select status from private.hunt_claims
+   where id = current_setting('test.gm_override_claim')::uuid),
+  'rejected',
+  'GM can force reject a pending claim'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '62000000-0000-0000-0000-000000000002',
+  true
+);
+select public.request_elimination(
+  '71000000-0000-0000-0000-000000000001'
+);
+reset role;
+
+select set_config(
+  'test.gm_confirm_claim',
+  (select id::text
+   from private.hunt_claims
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and hunter_id = '62000000-0000-0000-0000-000000000002'
+     and status = 'pending'),
+  true
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '61000000-0000-0000-0000-000000000001',
+  true
+);
+select extensions.is(
+  public.gm_resolve_elimination(
+    current_setting('test.gm_confirm_claim')::uuid,
+    true
+  )->>'phase',
+  'finished',
+  'GM can force confirm a pending claim'
+);
+reset role;
+
+select extensions.is(
+  (select response_by::text
+   from private.hunt_claims
+   where id = current_setting('test.gm_confirm_claim')::uuid),
+  '61000000-0000-0000-0000-000000000001',
+  'GM claim override records the GM as responder'
 );
 
 select * from extensions.finish();

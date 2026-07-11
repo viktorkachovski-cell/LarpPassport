@@ -108,6 +108,15 @@ not be shown to active players.
 - **Refresh** reloads the authoritative hunt state.
 - **Reset hunt** clears assignments, claims, eliminations, cloaks, and winner,
   then returns the game to `draft`.
+- **Force confirm** and **Force reject** resolve a pending claim when the GM's
+  live ruling must override or replace the player's response.
+- **Eliminate** applies a GM-confirmed kill even when no usable player claim
+  exists, then performs the normal target inheritance and privacy cleanup.
+- **Restore** brings an eliminated traveller back and safely reinserts them into
+  the circular chain. Restoring the finished game's loser reopens the round.
+- **Edit target chain** lets the GM order every living traveller. Each row
+  targets the next and the last targets the first; saving rejects stale pending
+  claims and replaces all assignments atomically.
 - The GM cannot manually alter the roster, game status, or location visibility
   while a hunt is active. This prevents a partial or broken target chain.
 
@@ -150,9 +159,9 @@ reject that claim.
 
 - There is no pause/resume state. A round is either not started, active, or
   finished; use reset only when the current round should be discarded.
-- There is no GM force-confirm action. The claimed target must confirm or reject
-  while the round is active. A permanently unavailable target requires a GM
-  ruling and round reset.
+- GM recovery actions are intentionally powerful and take effect immediately.
+  The dashboard should remain restricted to adjudicating GMs, and the GM should
+  announce corrections that materially change active targets.
 - The app does not use FCM remote push. Hunt events arrive through Realtime while
   connected or through the next background location flush. Players should check
   the Hunt tab when resolving a battle rather than relying only on a notification.
@@ -182,8 +191,8 @@ npx expo export --platform android --output-dir dist-test
 
 The database tests are transactional and roll their fixtures back. The hunt
 suite covers assignment secrecy, roster locks, anonymous confirmation,
-rejection, target inheritance, cloak behavior, location revocation, and final
-winner resolution.
+rejection, target inheritance, cloak behavior, location revocation, final
+winner resolution, and GM adjudication/recovery operations.
 
 ## Native Testing And Distribution
 
