@@ -29,7 +29,7 @@ Client-facing `public` tables:
 | `game_players` | Membership, role, and location consent |
 | `factions` | Per-game factions |
 | `characters` | Player characters and GM-created NPCs |
-| `zones` | PostGIS trigger geometry and behavior |
+| `zones` | PostGIS event zones and the per-game time-anomaly play area |
 | `player_positions` | Latest position per player and game |
 | `game_events` | Ordered player/GM event stream |
 | `push_tokens` | User-owned device notification tokens |
@@ -75,10 +75,14 @@ The callable RPCs are:
   apply adjudicated elimination or restoration while repairing the ring.
 - `gm_set_hunt_chain(g, player_ids)`: atomically replaces the complete ordered
   chain of living players and rejects stale claims.
+- `gm_assign_next_target(g, hunter_id)`: releases the inherited target after a
+  confirmed non-final kill.
+- `send_gm_message(g, message)`: records a rate-limited player message of at
+  most 100 characters in the GM event stream.
 
 These RPCs intentionally use `SECURITY DEFINER` with `search_path = ''` because
 they cross RLS/private-table boundaries. Supabase's security advisor therefore
-reports thirteen expected warnings. Removing definer execution would break these
+reports fifteen expected warnings. Removing definer execution would break these
 API contracts; any new definer RPC needs the same explicit authentication,
 validation, schema qualification, revocation, and test coverage.
 
@@ -90,10 +94,16 @@ and location visibility is forced to GM-only until reset or completion.
 
 Players receive only their target's character name and a coarse proximity band;
 no target profile ID or hunter identity crosses the API boundary. A confirmed
-elimination atomically removes the victim, gives their target to the hunter,
-revokes the victim's location sharing, and cloaks the hunter for ten minutes.
+elimination atomically removes the victim, revokes their location sharing, and
+cloaks the hunter for ten minutes. The inherited target remains private and
+unassigned until the GM explicitly releases it or replaces the complete chain.
 Per-game advisory locks serialize simultaneous claims. The final survivor is
 recorded as winner and the game is marked finished.
+
+One zone per game may use `zone_type = 'play_area'`. Background ping evaluation
+uses PostGIS distance-to-edge checks to emit a one-shot warning in the configured
+band. Crossing the boundary rejects the player's pending elimination claim and
+creates a pending GM breach event; it does not auto-eliminate from GPS alone.
 
 ## PostGIS Fix
 
@@ -137,9 +147,11 @@ Current hosted test coverage is transactional and leaves no fixtures behind.
 It verifies schema/RLS/grants, Auth profile creation, GM membership, join flow,
 zone privacy, consent, character text limits, idempotent pings, PostGIS zone
 state, and event emission.
-The time-hunt suite adds 56 checks covering secret assignments, roster locks,
-anonymous confirmation, rejection, elimination, target inheritance, cloak
-behavior, location revocation, final-winner completion, and GM recovery.
+The time-hunt suite adds 62 checks covering secret assignments, roster locks,
+messages, anonymous confirmation, elimination, GM target assignment, cloak,
+location revocation, final-winner completion, and GM recovery. A separate
+10-check PostGIS suite covers safe interior positions, edge warnings, exits,
+claim forfeiture, duplicate suppression, and warning rearming.
 
 ### Hosted Auth URL
 

@@ -92,11 +92,12 @@ export default function GameScreen({ gameId, session, onBack }) {
           const next = [...prev]; next[i] = row; return next
         })
         seenEvents.current.add(row.id)
-        if (row.player_visible && row.profile_id === uid) notifyEvents([row])
+        if (row.player_visible && row.profile_id === uid && row.type !== 'player_message') notifyEvents([row])
         if (row.profile_id === uid && (
           row.type?.startsWith('hunt_')
           || row.type?.startsWith('elimination_')
           || row.type === 'eliminated'
+          || row.type === 'zone_boundary_exit'
         )) loadHunt()
       })
       .subscribe()
@@ -221,6 +222,7 @@ export default function GameScreen({ gameId, session, onBack }) {
 
       {tab === 'events' && (
         <ScrollView style={{ flex: 1, padding: 16 }}>
+          <PlayerMessageBox gameId={gameId} />
           {visibleEvents.length === 0 && <Text style={{ color: C.muted, textAlign: 'center', marginTop: 30 }}>Nothing yet. Stay alert.</Text>}
           {visibleEvents.map((e) => (
             <View key={e.id} style={{ backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderLeftColor: C.brass, borderLeftWidth: 3, borderRadius: 8, padding: 12, marginBottom: 10 }}>
@@ -281,7 +283,50 @@ function eventTitle(type) {
   if (type === 'hunt_finished') return 'The hunt is over'
   if (type === 'hunt_player_restored') return 'The GM restored a traveller'
   if (type === 'hunt_chain_changed') return 'The GM corrected the target chain'
+  if (type === 'hunt_target_assigned') return 'The GM assigned your next target'
+  if (type === 'player_message') return 'Message sent to your GM'
+  if (type === 'zone_boundary_warning') return 'You are nearing the anomaly boundary'
+  if (type === 'zone_boundary_exit') return 'You left the time anomaly'
   return 'Something happens'
+}
+
+function PlayerMessageBox({ gameId }) {
+  const [message, setMessage] = useState('')
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function send() {
+    const clean = message.trim()
+    if (!clean) return
+    setBusy(true); setStatus('')
+    const { error } = await supabase.rpc('send_gm_message', { g: gameId, message: clean })
+    setBusy(false)
+    if (error) { setStatus(error.message); return }
+    setMessage('')
+    setStatus('Sent to the GM.')
+  }
+
+  return (
+    <View style={{ backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+      <Text style={{ color: C.text, fontWeight: '700' }}>Message the GM</Text>
+      <TextInput
+        style={[input, { marginTop: 8 }]}
+        value={message}
+        onChangeText={setMessage}
+        maxLength={100}
+        placeholder="Short in-game message"
+        placeholderTextColor={C.lineStrong}
+      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+        <Text style={{ color: C.muted, fontSize: 12 }}>{message.length}/100</Text>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity disabled={busy || !message.trim()} onPress={send} style={[btn(C.brass), { opacity: busy || !message.trim() ? 0.55 : 1, paddingVertical: 8, paddingHorizontal: 14 }]}>
+          <Text style={{ color: '#14110a', fontWeight: '700' }}>{busy ? 'Sending...' : 'Send'}</Text>
+        </TouchableOpacity>
+      </View>
+      {!!status && <Text style={{ color: status === 'Sent to the GM.' ? C.moss : C.wax, marginTop: 8 }}>{status}</Text>}
+    </View>
+  )
 }
 
 function remainingMinutes(timestamp) {
@@ -381,6 +426,7 @@ function HuntPanel({ hunt, hasCharacter, busy, error, requestElimination, respon
 
   const cloakMinutes = remainingMinutes(hunt.hidden_until)
   const pending = hunt.incoming_claim
+  const awaitingTarget = !hunt.target
 
   return (
     <ScrollView style={{ flex: 1, padding: 16 }}>
@@ -406,15 +452,17 @@ function HuntPanel({ hunt, hasCharacter, busy, error, requestElimination, respon
       <View style={{ backgroundColor: C.panel, borderColor: C.brassDim, borderWidth: 1, borderRadius: 12, padding: 18 }}>
         <Text style={{ color: C.muted, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Your target</Text>
         <Text style={{ color: C.brass, fontFamily: 'serif', fontSize: 28, marginTop: 5 }}>{hunt.target?.character_name ?? 'Signal pending'}</Text>
-        <Text style={{ color: C.text, fontSize: 17, marginTop: 14 }}>{proximityText(hunt.target?.proximity)}</Text>
+        <Text style={{ color: C.text, fontSize: 17, marginTop: 14 }}>
+          {awaitingTarget ? 'Waiting for the GM to assign your next target.' : proximityText(hunt.target?.proximity)}
+        </Text>
         <Text style={{ color: C.muted, marginTop: 8 }}>{hunt.alive_count} traveller(s) remain</Text>
         <TouchableOpacity
-          disabled={busy || !!hunt.outgoing_claim}
+          disabled={busy || !!hunt.outgoing_claim || awaitingTarget}
           onPress={requestElimination}
-          style={[btn(C.brass), { marginTop: 18, opacity: busy || hunt.outgoing_claim ? 0.55 : 1 }]}
+          style={[btn(C.brass), { marginTop: 18, opacity: busy || hunt.outgoing_claim || awaitingTarget ? 0.55 : 1 }]}
         >
           <Text style={{ color: '#14110a', fontWeight: '700' }}>
-            {hunt.outgoing_claim ? 'Waiting for target confirmation' : 'Claim elimination'}
+            {awaitingTarget ? 'Awaiting GM assignment' : hunt.outgoing_claim ? 'Waiting for target confirmation' : 'Claim elimination'}
           </Text>
         </TouchableOpacity>
         {!!error && <Text style={{ color: C.wax, marginTop: 10 }}>{error}</Text>}

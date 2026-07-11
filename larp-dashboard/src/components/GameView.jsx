@@ -135,7 +135,8 @@ export default function GameView({ gameId, session, onBack }) {
         }
         if (payload.new?.type?.startsWith('hunt_')
             || payload.new?.type?.startsWith('elimination_')
-            || payload.new?.type === 'eliminated') refetchHunt()
+            || payload.new?.type === 'eliminated'
+            || payload.new?.type === 'zone_boundary_exit') refetchHunt()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
         if (payload.eventType === 'DELETE') {
@@ -200,7 +201,8 @@ export default function GameView({ gameId, session, onBack }) {
       const { error } = await supabase.from('zones').update({
         name: draft.name, trigger_mode: draft.trigger_mode, dwell_seconds: draft.dwell_seconds,
         exit_buffer_m: draft.exit_buffer_m, one_shot: draft.one_shot, active: draft.active,
-        radius_m: draft.radius_m, payload: draft.payload,
+        radius_m: draft.radius_m, payload: draft.payload, zone_type: draft.zone_type,
+        warning_distance_m: draft.warning_distance_m,
       }).eq('id', draft.id)
       if (error) return reportAction(error)
     } else {
@@ -208,6 +210,7 @@ export default function GameView({ gameId, session, onBack }) {
         game_id: gameId, name: draft.name, shape: draft.shape, geog: draft.geog,
         radius_m: draft.radius_m, trigger_mode: draft.trigger_mode, dwell_seconds: draft.dwell_seconds,
         exit_buffer_m: draft.exit_buffer_m, one_shot: draft.one_shot, active: draft.active, payload: draft.payload,
+        zone_type: draft.zone_type, warning_distance_m: draft.warning_distance_m,
       })
       if (error) return reportAction(error)
     }
@@ -354,6 +357,18 @@ export default function GameView({ gameId, session, onBack }) {
     return reportAction(null)
   }
 
+  async function assignNextTarget(profileId) {
+    const denied = requireGm()
+    if (denied) return denied
+    const { data, error } = await supabase.rpc('gm_assign_next_target', {
+      g: gameId,
+      hunter_id: profileId,
+    })
+    if (error) return reportAction(error)
+    setHunt(data)
+    return reportAction(null)
+  }
+
   function copyCode() {
     navigator.clipboard?.writeText(game.join_code)
     setCopied(true); setTimeout(() => setCopied(false), 1400)
@@ -418,6 +433,7 @@ export default function GameView({ gameId, session, onBack }) {
             eliminatePlayer={eliminateHuntPlayer}
             restorePlayer={restoreHuntPlayer}
             saveChain={saveHuntChain}
+            assignNextTarget={assignNextTarget}
             refresh={refetchHunt}
           />
         )}

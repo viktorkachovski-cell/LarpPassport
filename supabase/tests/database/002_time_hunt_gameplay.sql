@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(56);
+select extensions.plan(62);
 
 select extensions.has_table('private', 'hunt_rounds', 'hunt rounds are private');
 select extensions.has_table('private', 'hunt_players', 'target assignments are private');
@@ -28,11 +28,12 @@ select extensions.is(
        'get_hunt_status', 'get_hunt_admin', 'start_hunt', 'reset_hunt',
        'request_elimination', 'respond_elimination',
        'gm_resolve_elimination', 'gm_eliminate_player',
-       'gm_restore_player', 'gm_set_hunt_chain'
+       'gm_restore_player', 'gm_set_hunt_chain',
+       'gm_assign_next_target', 'send_gm_message'
      )
      and has_function_privilege('authenticated', function.oid, 'EXECUTE')),
-  10,
-  'authenticated users can execute the ten hunt RPCs'
+  12,
+  'authenticated users can execute the twelve hunt RPCs'
 );
 select extensions.is(
   (select count(*)::integer
@@ -43,7 +44,8 @@ select extensions.is(
        'get_hunt_status', 'get_hunt_admin', 'start_hunt', 'reset_hunt',
        'request_elimination', 'respond_elimination',
        'gm_resolve_elimination', 'gm_eliminate_player',
-       'gm_restore_player', 'gm_set_hunt_chain'
+       'gm_restore_player', 'gm_set_hunt_chain',
+       'gm_assign_next_target', 'send_gm_message'
      )
      and has_function_privilege('anon', function.oid, 'EXECUTE')),
   0,
@@ -59,7 +61,8 @@ select extensions.ok(
         'get_hunt_status', 'get_hunt_admin', 'start_hunt', 'reset_hunt',
         'request_elimination', 'respond_elimination',
         'gm_resolve_elimination', 'gm_eliminate_player',
-        'gm_restore_player', 'gm_set_hunt_chain'
+        'gm_restore_player', 'gm_set_hunt_chain',
+        'gm_assign_next_target', 'send_gm_message'
       )
       and (
         not function.prosecdef
@@ -163,6 +166,49 @@ values
     'Chrononaut Three'
   );
 
+select set_config(
+  'request.jwt.claim.sub',
+  '62000000-0000-0000-0000-000000000002',
+  true
+);
+select extensions.is(
+  public.send_gm_message(
+    '71000000-0000-0000-0000-000000000001',
+    'Need a GM ruling'
+  )->>'message',
+  'Need a GM ruling',
+  'player can send a short message to the GM'
+);
+select extensions.throws_ok(
+  $$
+    select public.send_gm_message(
+      '71000000-0000-0000-0000-000000000001',
+      repeat('x', 101)
+    )
+  $$,
+  '22023',
+  'message must contain between 1 and 100 characters',
+  'player messages are limited to 100 characters'
+);
+reset role;
+select extensions.is(
+  (select count(*)::integer
+   from public.game_events
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and profile_id = '62000000-0000-0000-0000-000000000002'
+     and type = 'player_message'
+     and payload->>'message' = 'Need a GM ruling'),
+  1,
+  'player message is recorded for the GM event stream'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '61000000-0000-0000-0000-000000000001',
+  true
+);
+
 select public.start_hunt('71000000-0000-0000-0000-000000000001');
 
 select extensions.is(
@@ -255,6 +301,13 @@ select extensions.ok(
   public.get_hunt_status('71000000-0000-0000-0000-000000000001')
     #>> '{target,character_name}' is not null,
   'player sees their target character'
+);
+select extensions.is(
+  (public.get_hunt_status(
+    '71000000-0000-0000-0000-000000000001'
+  )->>'alive_count')::integer,
+  3,
+  'player sees how many travellers remain alive'
 );
 select extensions.ok(
   not public.get_hunt_status('71000000-0000-0000-0000-000000000001')
@@ -406,6 +459,33 @@ select extensions.is(
   'eliminated',
   'confirmed target becomes eliminated'
 );
+select extensions.is(
+  (select count(*)::integer
+   from private.hunt_players
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and profile_id = '62000000-0000-0000-0000-000000000002'
+     and target_profile_id is null
+     and pending_target_profile_id = current_setting('test.inherited_target')::uuid),
+  1,
+  'confirmed non-final kill waits for GM target assignment'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '61000000-0000-0000-0000-000000000001',
+  true
+);
+select extensions.is(
+  public.gm_assign_next_target(
+    '71000000-0000-0000-0000-000000000001',
+    '62000000-0000-0000-0000-000000000002'
+  )->>'phase',
+  'active',
+  'GM assigns the inherited target after confirmation'
+);
+reset role;
+
 select extensions.is(
   (select target_profile_id::text
    from private.hunt_players

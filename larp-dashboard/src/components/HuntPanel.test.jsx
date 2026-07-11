@@ -20,6 +20,7 @@ const characters = [
 
 function recoveryProps() {
   return {
+    assignNextTarget: vi.fn().mockResolvedValue(null),
     eliminatePlayer: vi.fn().mockResolvedValue(null),
     resolveClaim: vi.fn().mockResolvedValue(null),
     restorePlayer: vi.fn().mockResolvedValue(null),
@@ -154,5 +155,38 @@ describe('HuntPanel', () => {
     fireEvent.click(downButtons[0])
     fireEvent.click(screen.getByRole('button', { name: 'Apply chain' }))
     await waitFor(() => expect(recovery.saveChain).toHaveBeenCalledWith(['player-2', 'player-1']))
+  })
+
+  it('requires the GM to assign a target after a confirmed non-final kill', async () => {
+    const recovery = recoveryProps()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(
+      <HuntPanel
+        hunt={{
+          phase: 'active',
+          players: [
+            {
+              character_name: 'Ariadne', profile_id: 'player-1', state: 'alive',
+              target_name: null, target_profile_id: null, username: 'ariadne',
+            },
+            {
+              character_name: 'Chronos', profile_id: 'player-2', state: 'alive',
+              target_name: 'Ariadne', target_profile_id: 'player-1', username: 'chronos',
+            },
+          ],
+          claims: [],
+        }}
+        members={members}
+        characters={characters}
+        startHunt={vi.fn()}
+        resetHunt={vi.fn()}
+        refresh={vi.fn()}
+        {...recovery}
+      />,
+    )
+
+    expect(screen.getByText('Awaiting GM assignment')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Assign target' }))
+    await waitFor(() => expect(recovery.assignNextTarget).toHaveBeenCalledWith('player-1'))
   })
 })

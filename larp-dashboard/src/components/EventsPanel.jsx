@@ -27,6 +27,10 @@ export default function EventsPanel({ events, members, usernameOf, zoneNameOf, c
     if (e.type === 'hunt_finished') return `was notified that ${e.payload?.winner ?? 'a traveller'} won the hunt`
     if (e.type === 'hunt_player_restored') return 'was notified that the GM restored a traveller'
     if (e.type === 'hunt_chain_changed') return 'received a corrected target assignment from the GM'
+    if (e.type === 'hunt_target_assigned') return 'received their next target from the GM'
+    if (e.type === 'player_message') return `sent the GM: “${e.payload?.message ?? ''}”`
+    if (e.type === 'zone_boundary_warning') return `neared the boundary of ${zoneNameOf(e.zone_id)}`
+    if (e.type === 'zone_boundary_exit') return `left ${zoneNameOf(e.zone_id)}; any active claim was forfeited`
     return e.type
   }
 

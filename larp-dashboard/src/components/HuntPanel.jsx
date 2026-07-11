@@ -32,6 +32,7 @@ export default function HuntPanel({
   eliminatePlayer,
   restorePlayer,
   saveChain,
+  assignNextTarget,
   refresh,
 }) {
   const [busy, setBusy] = useState(false)
@@ -100,6 +101,11 @@ export default function HuntPanel({
     run(() => saveChain(chainOrder), () => setEditingChain(false))
   }
 
+  function assignTarget(player) {
+    if (!window.confirm(`Assign the inherited target to ${player.character_name}?`)) return
+    run(() => assignNextTarget(player.profile_id))
+  }
+
   if (!hunt) return <div className="panel-pad"><p className="hint">Loading hunt state...</p></div>
 
   if (hunt.phase === 'not_started') return (
@@ -126,6 +132,7 @@ export default function HuntPanel({
 
   const alive = hunt.players?.filter((player) => player.state === 'alive') ?? []
   const pending = hunt.claims?.filter((claim) => claim.status === 'pending') ?? []
+  const assignmentPending = alive.some((player) => !player.target_profile_id)
   const playerById = new Map((hunt.players ?? []).map((player) => [player.profile_id, player]))
 
   return (
@@ -181,12 +188,15 @@ export default function HuntPanel({
             <tr key={player.profile_id}>
               <td><b>{player.character_name}</b><div className="hint">{player.username}</div></td>
               <td><span className={`badge-pill ${player.state === 'alive' ? 'on' : 'off'}`}>{player.state}</span></td>
-              <td>{player.target_name ?? '-'}</td>
+              <td>{player.target_name ?? (hunt.phase === 'active' && player.state === 'alive' ? 'Awaiting GM assignment' : '-')}</td>
               <td className="hint">{player.state === 'alive' ? cloakLabel(player.hidden_until) : '-'}</td>
               <td className="hint">{player.eliminated_at ? timeAgo(player.eliminated_at) : '-'}</td>
               <td>
                 {hunt.phase === 'active' && player.state === 'alive' && alive.length > 1 && (
-                  <button className="danger" disabled={busy} onClick={() => forceEliminate(player)}>Eliminate</button>
+                  <button className="danger" disabled={busy || assignmentPending} onClick={() => forceEliminate(player)}>Eliminate</button>
+                )}
+                {hunt.phase === 'active' && player.state === 'alive' && !player.target_profile_id && (
+                  <button className="primary" disabled={busy} onClick={() => assignTarget(player)}>Assign target</button>
                 )}
                 {player.state === 'eliminated' && (
                   <button className="ghost" disabled={busy} onClick={() => restore(player)}>Restore</button>

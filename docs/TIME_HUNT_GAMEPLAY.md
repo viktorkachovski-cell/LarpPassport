@@ -31,13 +31,16 @@ The GM is an observer and never receives a target.
    join with the code.
 4. Confirm every participant is listed as a player rather than a GM.
 5. Ask every player to create their non-NPC character.
-6. Ask players to open **Sharing**, grant foreground and background location
+6. On the dashboard map, draw a circle or polygon, set **Purpose** to **Time
+   anomaly play area**, and choose the edge-warning distance. Only one play area
+   can exist per game; ordinary event zones remain available separately.
+7. Ask players to open **Sharing**, grant foreground and background location
    permission, and enable sharing.
-7. Confirm recent player markers appear on the GM map.
-8. Open the dashboard's **Hunt** tab. Readiness must show at least two players
+8. Confirm recent player markers appear inside the play area on the GM map.
+9. Open the dashboard's **Hunt** tab. Readiness must show at least two players
    and a character for every player.
-9. Press **Start hunt** and confirm the prompt.
-10. Ask players to open their **Hunt** tab and verify that each sees a target.
+10. Press **Start hunt** and confirm the prompt.
+11. Ask players to open their **Hunt** tab and verify that each sees a target.
 
 Starting the hunt automatically sets the game to `active`, forces location
 visibility to `gm_only`, creates a random circular target chain, and locks the
@@ -72,6 +75,25 @@ The displayed approximate distance is rounded to 10 metres. A missing location
 shows **waiting for location**; a position older than two minutes shows
 **stale**.
 
+### Message The GM
+
+The **Events** tab contains a short message field. A player can send a message
+of 1-100 characters to the GM event stream. Messages are visible to the sender
+and GMs, but not to other players. A three-second server cooldown limits
+accidental repeated sends.
+
+### Time Anomaly Boundary
+
+When a player enters the configured edge-warning band, the app warns that they
+are nearing the anomaly boundary. Leaving the play area rejects any pending
+elimination claim made by that player and creates a player-visible, pending GM
+breach event. Remaining outside does not repeat the breach until the player
+returns to safety and approaches the edge again.
+
+GPS can drift, so a boundary exit does not automatically eliminate the player.
+The GM confirms or dismisses the breach and can use **Eliminate** when the live
+ruling is that the player forfeited the game.
+
 ### Resolve An Elimination
 
 1. Resolve the live mock battle according to the game's safety rules.
@@ -91,7 +113,8 @@ For a non-final elimination, the server completes all changes atomically:
 
 - The defeated player is marked eliminated.
 - Their current location is deleted and location sharing is revoked.
-- The winner inherits the defeated player's target.
+- The winner waits without a target until the GM assigns the defeated player's
+  former target. No further kill claim can start while assignment is pending.
 - The winner receives a ten-minute temporal cloak.
 - The player hunting the cloaked winner sees a masked signal until it expires.
 
@@ -111,7 +134,10 @@ not be shown to active players.
 - **Force confirm** and **Force reject** resolve a pending claim when the GM's
   live ruling must override or replace the player's response.
 - **Eliminate** applies a GM-confirmed kill even when no usable player claim
-  exists, then performs the normal target inheritance and privacy cleanup.
+  exists, then performs the normal privacy cleanup and waits for target assignment.
+- **Assign target** releases the defeated player's former target to the winner
+  after a non-final kill. The GM may instead use **Edit target chain** to make a
+  different complete assignment.
 - **Restore** brings an eliminated traveller back and safely reinserts them into
   the circular chain. Restoring the finished game's loser reopens the round.
 - **Edit target chain** lets the GM order every living traveller. Each row
@@ -146,6 +172,9 @@ Location visibility remains GM-only unless the GM changes it after reset.
 | Target says waiting for location | Both hunter and target must enable sharing and grant background location permission. |
 | Target signal is stale | Open the app on both phones, confirm GPS/mobile data, and wait for a new ping. |
 | Claim remains pending | The target should open Hunt and press Refresh; claims require internet access. |
+| Winner says awaiting GM assignment | The GM must use **Assign target** or save a complete chain before another claim can begin. |
+| Boundary warning appears | Move back toward the safe interior before crossing the anomaly edge. |
+| Boundary exit is pending | Review GPS and the live ruling; confirm/dismiss the event and eliminate through Hunt only when appropriate. |
 | Player rejects by mistake | The hunter submits another claim after the live result is reconfirmed. |
 | Player app stops sharing | Re-enable Sharing unless that player was eliminated. |
 | Chain cannot continue | The GM should record the current state, reset the hunt, verify the roster, and restart. |
@@ -191,8 +220,9 @@ npx expo export --platform android --output-dir dist-test
 
 The database tests are transactional and roll their fixtures back. The hunt
 suite covers assignment secrecy, roster locks, anonymous confirmation,
-rejection, target inheritance, cloak behavior, location revocation, final
-winner resolution, and GM adjudication/recovery operations.
+rejection, GM target assignment, cloak behavior, location revocation, final
+winner resolution, player messaging, play-area warnings, claim forfeiture, and
+GM adjudication/recovery operations.
 
 ## Native Testing And Distribution
 

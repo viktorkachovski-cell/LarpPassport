@@ -131,6 +131,10 @@ function notificationTitle(type) {
   if (type === 'hunt_finished') return 'The hunt is over'
   if (type === 'hunt_player_restored') return 'Traveller restored'
   if (type === 'hunt_chain_changed') return 'Target chain corrected'
+  if (type === 'hunt_target_assigned') return 'New target assigned'
+  if (type === 'zone_boundary_warning') return 'Time anomaly boundary warning'
+  if (type === 'zone_boundary_exit') return 'You left the time anomaly'
+  if (type === 'player_message') return 'Message sent to GM'
   return 'New passport event'
 }
 

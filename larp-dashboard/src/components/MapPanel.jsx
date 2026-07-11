@@ -17,7 +17,10 @@ const MAP_STYLE = {
 }
 
 const EMPTY_FC = { type: 'FeatureCollection', features: [] }
-const NEW_ZONE = { name: '', trigger_mode: 'gm_confirm', dwell_seconds: 0, exit_buffer_m: 15, one_shot: false, active: true, message: '' }
+const NEW_ZONE = {
+  name: '', zone_type: 'event', warning_distance_m: 50, trigger_mode: 'gm_confirm',
+  dwell_seconds: 0, exit_buffer_m: 15, one_shot: false, active: true, message: '',
+}
 
 export default function MapPanel({
   zones, positions, members, characters, factions, pendingEvents,
@@ -168,7 +171,8 @@ export default function MapPanel({
       id: z.id, shape: z.shape, name: z.name, trigger_mode: z.trigger_mode,
       dwell_seconds: z.dwell_seconds, exit_buffer_m: z.exit_buffer_m,
       one_shot: z.one_shot, active: z.active, radius_m: z.radius_m ?? undefined,
-      message: z.payload?.message ?? '',
+      message: z.payload?.message ?? '', zone_type: z.zone_type ?? 'event',
+      warning_distance_m: z.warning_distance_m ?? 50,
     })
   }
 
@@ -178,10 +182,12 @@ export default function MapPanel({
     const base = {
       id: editing.id,
       name: editing.name.trim() || 'Unnamed zone',
-      trigger_mode: editing.trigger_mode,
-      dwell_seconds: Number(editing.dwell_seconds) || 0,
+      zone_type: editing.zone_type,
+      warning_distance_m: Math.max(5, Number(editing.warning_distance_m) || 50),
+      trigger_mode: editing.zone_type === 'play_area' ? 'silent' : editing.trigger_mode,
+      dwell_seconds: editing.zone_type === 'play_area' ? 0 : Number(editing.dwell_seconds) || 0,
       exit_buffer_m: Number(editing.exit_buffer_m) || 0,
-      one_shot: !!editing.one_shot,
+      one_shot: editing.zone_type === 'play_area' ? false : !!editing.one_shot,
       active: !!editing.active,
       radius_m: editing.shape === 'circle' ? Math.max(1, Number(editing.radius_m) || 1) : null,
       payload: editing.message?.trim() ? { message: editing.message.trim() } : {},
@@ -350,7 +356,7 @@ export default function MapPanel({
             <div key={z.id} className={`zone-row ${z.id === selectedId ? 'selected' : ''}`} onClick={() => selectAndFly(z)}>
               <span className={`dot ${z.active ? '' : 'inactive'}`} />
               <span>{z.name}</span>
-              <span className="meta">{z.trigger_mode === 'gm_confirm' ? 'confirm' : z.trigger_mode}{z.shape === 'circle' ? ` · ${Math.round(z.radius_m)}m` : ''}</span>
+              <span className="meta">{z.zone_type === 'play_area' ? 'time anomaly' : z.trigger_mode === 'gm_confirm' ? 'confirm' : z.trigger_mode}{z.shape === 'circle' ? ` · ${Math.round(z.radius_m)}m` : ''}</span>
             </div>
           ))}
           {zones.length === 0 && !draw && <p className="hint">No zones yet. Draw one to trigger events when players arrive.</p>}
@@ -361,15 +367,28 @@ export default function MapPanel({
             <h3>{editing.id ? 'Edit zone' : 'New zone'}</h3>
             <div className="field"><label>Name</label>
               <input style={{ width: '100%' }} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></div>
-            <div className="field"><label>When a player enters</label>
-              <select style={{ width: '100%' }} value={editing.trigger_mode} onChange={(e) => setEditing({ ...editing, trigger_mode: e.target.value })}>
-                <option value="auto">Notify the player automatically</option>
-                <option value="gm_confirm">Ask a GM to confirm first</option>
-                <option value="silent">Log silently for GMs</option>
+            <div className="field"><label>Purpose</label>
+              <select style={{ width: '100%' }} value={editing.zone_type} onChange={(e) => setEditing({ ...editing, zone_type: e.target.value })}>
+                <option value="event">Event trigger zone</option>
+                <option value="play_area">Time anomaly play area</option>
               </select></div>
+            {editing.zone_type === 'event' && (
+              <div className="field"><label>When a player enters</label>
+                <select style={{ width: '100%' }} value={editing.trigger_mode} onChange={(e) => setEditing({ ...editing, trigger_mode: e.target.value })}>
+                  <option value="auto">Notify the player automatically</option>
+                  <option value="gm_confirm">Ask a GM to confirm first</option>
+                  <option value="silent">Log silently for GMs</option>
+                </select></div>
+            )}
             <div className="row">
-              <div className="field" style={{ flex: 1 }}><label>Dwell (s)</label>
-                <input type="number" min="0" style={{ width: '100%' }} value={editing.dwell_seconds} onChange={(e) => setEditing({ ...editing, dwell_seconds: e.target.value })} /></div>
+              {editing.zone_type === 'event' && (
+                <div className="field" style={{ flex: 1 }}><label>Dwell (s)</label>
+                  <input type="number" min="0" style={{ width: '100%' }} value={editing.dwell_seconds} onChange={(e) => setEditing({ ...editing, dwell_seconds: e.target.value })} /></div>
+              )}
+              {editing.zone_type === 'play_area' && (
+                <div className="field" style={{ flex: 1 }}><label>Edge warning (m)</label>
+                  <input type="number" min="5" max="5000" style={{ width: '100%' }} value={editing.warning_distance_m} onChange={(e) => setEditing({ ...editing, warning_distance_m: e.target.value })} /></div>
+              )}
               <div className="field" style={{ flex: 1 }}><label>Exit buffer (m)</label>
                 <input type="number" min="0" style={{ width: '100%' }} value={editing.exit_buffer_m} onChange={(e) => setEditing({ ...editing, exit_buffer_m: e.target.value })} /></div>
               {editing.shape === 'circle' && (
@@ -378,11 +397,11 @@ export default function MapPanel({
               )}
             </div>
             <div className="row mb">
-              <label style={{ margin: 0 }}><input type="checkbox" checked={editing.one_shot} onChange={(e) => setEditing({ ...editing, one_shot: e.target.checked })} /> One-shot per player</label>
+              {editing.zone_type === 'event' && <label style={{ margin: 0 }}><input type="checkbox" checked={editing.one_shot} onChange={(e) => setEditing({ ...editing, one_shot: e.target.checked })} /> One-shot per player</label>}
               <label style={{ margin: 0 }}><input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} /> Active</label>
             </div>
-            <div className="field"><label>Message to the player (payload)</label>
-              <textarea rows="2" style={{ width: '100%' }} value={editing.message} onChange={(e) => setEditing({ ...editing, message: e.target.value })} /></div>
+            {editing.zone_type === 'event' && <div className="field"><label>Message to the player (payload)</label>
+              <textarea rows="2" style={{ width: '100%' }} value={editing.message} onChange={(e) => setEditing({ ...editing, message: e.target.value })} /></div>}
             <div className="row">
               <button className="primary" onClick={submitEditor}>{editing.id ? 'Save zone' : 'Create zone'}</button>
               <button className="ghost" onClick={() => { setEditing(null); setSelectedId(null) }}>Close</button>
@@ -397,7 +416,7 @@ export default function MapPanel({
           {pendingEvents.map((ev) => (
             <div key={ev.id} className="pending-card">
               <div className="who">{usernameOf(ev.profile_id)}</div>
-              <div className="what">entered {zoneNameOf(ev.zone_id)} · {timeAgo(ev.created_at)}</div>
+              <div className="what">{ev.type === 'zone_boundary_exit' ? 'left' : 'entered'} {zoneNameOf(ev.zone_id)} · {timeAgo(ev.created_at)}</div>
               <div className="actions">
                 <button className="primary" onClick={() => confirmEvent(ev)}>Confirm</button>
                 <button className="ghost" onClick={() => dismissEvent(ev)}>Dismiss</button>
