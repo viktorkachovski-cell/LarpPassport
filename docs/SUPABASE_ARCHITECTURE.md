@@ -110,6 +110,16 @@ It verifies schema/RLS/grants, Auth profile creation, GM membership, join flow,
 zone privacy, consent, character text limits, idempotent pings, PostGIS zone
 state, and event emission.
 
+### Hosted Auth URL
+
+The fresh project requires one platform setting that is not database-managed.
+In Supabase Dashboard, open **Authentication > URL Configuration**, set **Site
+URL** to `https://larp-passport.vercel.app`, and add that same URL to **Redirect
+URLs**. Email confirmation is enabled, so this prevents successful confirmation
+links from ending on the default `http://localhost:3000` page. Until this is
+changed, confirmation still verifies the user, who can return to the app and
+sign in manually.
+
 ## Local And Device Testing
 
 Use hosted Supabase while developing the native app. This means the phone does
@@ -125,6 +135,10 @@ npx expo start --tunnel
 restricted networks. On a trusted same-Wi-Fi network, regular `npx expo start`
 is faster. For a native development build, use `npm run android` with Android
 Studio/emulator or a USB-connected device.
+
+The EAS `development`, `preview`, and `production` environments are configured
+with `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and
+`EXPO_PUBLIC_SENTRY_DSN`. Local Expo uses the ignored `.env.local` file.
 
 Run the dashboard locally with:
 
