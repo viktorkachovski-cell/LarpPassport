@@ -1,2 +1,0 @@
-export const SUPABASE_URL = 'https://ondotybaijthxsodstts.supabase.co'
-export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9uZG90eWJhaWp0aHhzb2RzdHRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMTc4OTksImV4cCI6MjA5NjY5Mzg5OX0.rA-l_gzYE4FUcqSZ3f8rztvjrDZE8tNxGkPBwtanrrE'

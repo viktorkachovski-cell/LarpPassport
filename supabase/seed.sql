@@ -1,0 +1,1 @@
+-- Intentionally empty. Development fixtures belong in transactional database tests.
