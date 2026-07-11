@@ -123,9 +123,9 @@ npx supabase db reset
 npx supabase test db supabase/tests/database
 ```
 
-The hosted `Passport` rebuild is project `ufcnxkowpkwayczbfnzy`. The previous
-`larp-passport` project remains a rollback target until both clients pass the
-cutover smoke test.
+The hosted production project is `Passport` (`ufcnxkowpkwayczbfnzy`). The
+production dashboard is <https://larp-passport.vercel.app>. Database migrations
+and both clients are currently aligned to this project.
 
 Current hosted test coverage is transactional and leaves no fixtures behind.
 It verifies schema/RLS/grants, Auth profile creation, GM membership, join flow,
@@ -153,13 +153,14 @@ not need access to a backend running on the laptop.
 ```powershell
 cd larp-passport\mobile
 npm install
-npx expo start --tunnel
+npm run android
 ```
 
-`--tunnel` is the easiest option when the phone and laptop are on different or
-restricted networks. On a trusted same-Wi-Fi network, regular `npx expo start`
-is faster. For a native development build, use `npm run android` with Android
-Studio/emulator or a USB-connected device.
+Use `npm run android` with Android Studio/emulator or a USB-connected device for
+full location testing. Expo Go on Android does not support the foreground and
+background services required here. `npx expo start --tunnel` is useful only
+with a compatible development client or for a limited UI/authentication smoke
+test; it does not validate background sharing.
 
 The EAS `development`, `preview`, and `production` environments are configured
 with `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and
@@ -176,14 +177,17 @@ npm run dev -- --host
 If a temporary public dashboard URL is needed, prefer a Vercel preview deploy.
 It is closer to production and does not expose a laptop port directly.
 
-## Cutover And Rollback
+## Deployment And Rollback
 
-1. Configure Vercel Preview and a mobile `.env.local` with the new Supabase URL
-   and publishable key.
-2. Register two test users and verify GM create/edit, player join, character
-   update, consent, map position, zone event, and realtime refresh.
-3. Set the same Vercel variables for Production and redeploy the verified
-   artifact. Build a mobile test binary with the new Expo variables.
-4. Keep the old Supabase project untouched until the smoke test is complete.
-5. Roll back by restoring the old client URL/key and redeploying; no data merge
-   is required because the project never went live.
+1. Apply versioned Supabase migrations before deploying clients that depend on
+   new RPCs or columns.
+2. Run both pgTAP suites, dashboard tests/build, and an Android Expo export.
+3. Push the tested revision to GitHub and deploy that exact revision to Vercel.
+4. Build the mobile preview/production binary with the corresponding Expo
+   environment variables.
+5. For a dashboard-only regression, use Vercel rollback. For a database change,
+   create a forward corrective migration rather than editing or deleting an
+   applied migration.
+
+See [`TIME_HUNT_GAMEPLAY.md`](TIME_HUNT_GAMEPLAY.md) for the first-game runbook,
+field checklist, and hunt-specific recovery procedures.
