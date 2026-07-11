@@ -201,7 +201,8 @@ export default function MapPanel({
   async function removeZone() {
     if (!editing?.id) return
     if (!window.confirm(`Delete zone "${editing.name}"?`)) return
-    await deleteZone(editing.id)
+    const err = await deleteZone(editing.id)
+    if (err) { setSaveError(err.message); return }
     setEditing(null)
     setSelectedId(null)
   }

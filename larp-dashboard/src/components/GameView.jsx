@@ -19,44 +19,82 @@ export default function GameView({ gameId, session, onBack }) {
   const [tab, setTab] = useState('map')
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [actionError, setActionError] = useState('')
+
+  const isGm = !!game && (
+    game.gm_id === uid || members.some((m) => m.profile_id === uid && m.role === 'gm')
+  )
+
+  const reportAction = useCallback((error) => {
+    setActionError(error?.message ?? '')
+    return error ?? null
+  }, [])
+
+  function requireGm() {
+    if (isGm) return null
+    return reportAction(new Error('Only a GM can change this game.'))
+  }
 
   const refetchZones = useCallback(async () => {
-    const { data } = await supabase.from('zones_view').select('*').eq('game_id', gameId)
+    const { data, error } = await supabase.from('zones_view').select('*').eq('game_id', gameId)
+    if (error) return reportAction(error)
     setZones(data ?? [])
-  }, [gameId])
+    return null
+  }, [gameId, reportAction])
 
   const refetchMembers = useCallback(async () => {
-    const { data } = await supabase.from('game_players').select('*, profile:profiles(username)').eq('game_id', gameId)
+    const { data, error } = await supabase.from('game_players').select('*, profile:profiles(username)').eq('game_id', gameId)
+    if (error) return reportAction(error)
     setMembers(data ?? [])
-  }, [gameId])
+    return null
+  }, [gameId, reportAction])
 
   useEffect(() => {
     let alive = true
+
     async function load() {
-      const [g, z, pos, chars, mem, fac, ev] = await Promise.all([
+      const [g, mem] = await Promise.all([
         supabase.from('games').select('*').eq('id', gameId).single(),
+        supabase.from('game_players').select('*, profile:profiles(username)').eq('game_id', gameId),
+      ])
+      if (!alive) return
+      const accessFailure = [g, mem].find((result) => result.error)
+      if (accessFailure) { setLoadError(accessFailure.error.message); return }
+
+      setGame(g.data)
+      setMembers(mem.data ?? [])
+      const canManage = g.data.gm_id === uid
+        || (mem.data ?? []).some((member) => member.profile_id === uid && member.role === 'gm')
+      if (!canManage) return
+
+      const [z, pos, chars, fac, ev] = await Promise.all([
         supabase.from('zones_view').select('*').eq('game_id', gameId),
         supabase.from('player_positions_view').select('*').eq('game_id', gameId),
         supabase.from('characters').select('*').eq('game_id', gameId),
-        supabase.from('game_players').select('*, profile:profiles(username)').eq('game_id', gameId),
         supabase.from('factions').select('*').eq('game_id', gameId),
         supabase.from('game_events').select('*').eq('game_id', gameId).order('seq', { ascending: false }).limit(200),
       ])
       if (!alive) return
-      if (g.error) { setLoadError(g.error.message); return }
-      setGame(g.data)
+      const failed = [z, pos, chars, fac, ev].find((result) => result.error)
+      if (failed) { setLoadError(failed.error.message); return }
       setZones(z.data ?? [])
       const posMap = {}
       for (const p of pos.data ?? []) posMap[p.profile_id] = p
       setPositions(posMap)
       setCharacters(chars.data ?? [])
-      setMembers(mem.data ?? [])
       setFactions(fac.data ?? [])
       setEvents(ev.data ?? [])
     }
+
     load()
 
-    const ch = supabase
+    return () => { alive = false }
+  }, [gameId, uid, refetchZones, refetchMembers])
+
+  useEffect(() => {
+    if (!isGm) return undefined
+
+    const channel = supabase
       .channel(`game-${gameId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'player_positions', filter: `game_id=eq.${gameId}` }, (payload) => {
         const row = payload.new
@@ -100,8 +138,8 @@ export default function GameView({ gameId, session, onBack }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players', filter: `game_id=eq.${gameId}` }, refetchMembers)
       .subscribe()
 
-    return () => { alive = false; supabase.removeChannel(ch) }
-  }, [gameId, refetchZones, refetchMembers])
+    return () => { supabase.removeChannel(channel) }
+  }, [gameId, isGm, refetchZones, refetchMembers])
 
   const usernameOf = useCallback((profileId) => {
     const m = members.find((x) => x.profile_id === profileId)
@@ -113,85 +151,122 @@ export default function GameView({ gameId, session, onBack }) {
   const pendingEvents = useMemo(() => events.filter((e) => e.status === 'pending'), [events])
 
   async function updateGame(patch) {
+    const denied = requireGm()
+    if (denied) return denied
     const { data, error } = await supabase.from('games').update(patch).eq('id', gameId).select().single()
-    if (!error && data) setGame(data)
-    return error
+    if (error) return reportAction(error)
+    setGame(data)
+    return reportAction(null)
   }
 
   async function confirmEvent(ev) {
+    const denied = requireGm()
+    if (denied) return denied
     const patch = { status: 'confirmed', player_visible: true, resolved_at: new Date().toISOString(), resolved_by: uid }
-    setEvents((prev) => prev.map((e) => (e.id === ev.id ? { ...e, ...patch } : e)))
-    await supabase.from('game_events').update(patch).eq('id', ev.id)
+    const { data, error } = await supabase.from('game_events').update(patch).eq('id', ev.id).select().single()
+    if (error) return reportAction(error)
+    setEvents((prev) => prev.map((e) => (e.id === ev.id ? data : e)))
+    return reportAction(null)
   }
 
   async function dismissEvent(ev) {
+    const denied = requireGm()
+    if (denied) return denied
     const patch = { status: 'dismissed', resolved_at: new Date().toISOString(), resolved_by: uid }
-    setEvents((prev) => prev.map((e) => (e.id === ev.id ? { ...e, ...patch } : e)))
-    await supabase.from('game_events').update(patch).eq('id', ev.id)
+    const { data, error } = await supabase.from('game_events').update(patch).eq('id', ev.id).select().single()
+    if (error) return reportAction(error)
+    setEvents((prev) => prev.map((e) => (e.id === ev.id ? data : e)))
+    return reportAction(null)
   }
 
   async function saveZone(draft) {
+    const denied = requireGm()
+    if (denied) return denied
     if (draft.id) {
       const { error } = await supabase.from('zones').update({
         name: draft.name, trigger_mode: draft.trigger_mode, dwell_seconds: draft.dwell_seconds,
         exit_buffer_m: draft.exit_buffer_m, one_shot: draft.one_shot, active: draft.active,
         radius_m: draft.radius_m, payload: draft.payload,
       }).eq('id', draft.id)
-      if (error) return error
+      if (error) return reportAction(error)
     } else {
       const { error } = await supabase.from('zones').insert({
         game_id: gameId, name: draft.name, shape: draft.shape, geog: draft.geog,
         radius_m: draft.radius_m, trigger_mode: draft.trigger_mode, dwell_seconds: draft.dwell_seconds,
         exit_buffer_m: draft.exit_buffer_m, one_shot: draft.one_shot, active: draft.active, payload: draft.payload,
       })
-      if (error) return error
+      if (error) return reportAction(error)
     }
-    await refetchZones()
-    return null
+    const error = await refetchZones()
+    return reportAction(error)
   }
 
   async function deleteZone(id) {
-    await supabase.from('zones').delete().eq('id', id)
-    await refetchZones()
+    const denied = requireGm()
+    if (denied) return denied
+    const { error } = await supabase.from('zones').delete().eq('id', id)
+    if (error) return reportAction(error)
+    const refreshError = await refetchZones()
+    return reportAction(refreshError)
   }
 
   async function saveCharacter(id, patch) {
+    const denied = requireGm()
+    if (denied) return denied
     const { error } = await supabase.from('characters').update(patch).eq('id', id)
-    return error
+    return reportAction(error)
   }
 
   async function addNpc(name) {
+    const denied = requireGm()
+    if (denied) return denied
     const { error } = await supabase.from('characters').insert({ game_id: gameId, user_id: uid, name, is_npc: true })
-    return error
+    return reportAction(error)
   }
 
   async function deleteCharacter(id) {
-    await supabase.from('characters').delete().eq('id', id)
+    const denied = requireGm()
+    if (denied) return denied
+    const { error } = await supabase.from('characters').delete().eq('id', id)
+    return reportAction(error)
   }
 
   async function addFaction(name, color) {
+    const denied = requireGm()
+    if (denied) return denied
     const { data, error } = await supabase.from('factions').insert({ game_id: gameId, name, color }).select().single()
-    if (!error && data) setFactions((prev) => [...prev, data])
-    return error
+    if (error) return reportAction(error)
+    setFactions((prev) => [...prev, data])
+    return reportAction(null)
   }
 
   async function broadcast(targetProfileIds, message) {
+    const denied = requireGm()
+    if (denied) return denied
     const rows = targetProfileIds.map((pid) => ({
       game_id: gameId, profile_id: pid, type: 'gm_note', status: 'confirmed', player_visible: true,
       payload: { message },
     }))
     const { error } = await supabase.from('game_events').insert(rows)
-    return error
+    return reportAction(error)
   }
 
   async function setMemberRole(profileId, role) {
-    await supabase.from('game_players').update({ role }).eq('game_id', gameId).eq('profile_id', profileId)
-    await refetchMembers()
+    const denied = requireGm()
+    if (denied) return denied
+    const { error } = await supabase.from('game_players').update({ role }).eq('game_id', gameId).eq('profile_id', profileId)
+    if (error) return reportAction(error)
+    const refreshError = await refetchMembers()
+    return reportAction(refreshError)
   }
 
   async function removeMember(profileId) {
-    await supabase.from('game_players').delete().eq('game_id', gameId).eq('profile_id', profileId)
-    await refetchMembers()
+    const denied = requireGm()
+    if (denied) return denied
+    const { error } = await supabase.from('game_players').delete().eq('game_id', gameId).eq('profile_id', profileId)
+    if (error) return reportAction(error)
+    const refreshError = await refetchMembers()
+    return reportAction(refreshError)
   }
 
   function copyCode() {
@@ -202,7 +277,15 @@ export default function GameView({ gameId, session, onBack }) {
   if (loadError) return <div className="center-screen"><p className="error">{loadError}</p><button onClick={onBack}>Back</button></div>
   if (!game) return <div className="center-screen"><p className="hint">Loading game…</p></div>
 
-  const isGm = members.some((m) => m.profile_id === uid && m.role === 'gm') || game.gm_id === uid
+  if (!isGm) return (
+    <div className="center-screen">
+      <div className="card access-card">
+        <h2 className="display">GM access required</h2>
+        <p className="hint">This dashboard controls the live game. Players should use the LARP Passport mobile app.</p>
+        <button onClick={onBack}>Back to games</button>
+      </div>
+    </div>
+  )
 
   return (
     <div className="game-shell">
@@ -232,6 +315,12 @@ export default function GameView({ gameId, session, onBack }) {
           </button>
         ))}
       </div>
+      {actionError && (
+        <div className="action-error" role="alert">
+          <span>{actionError}</span>
+          <button className="ghost" onClick={() => setActionError('')}>Dismiss</button>
+        </div>
+      )}
       <div className={`tab-body ${tab === 'map' ? 'no-scroll' : ''}`}>
         <div style={{ display: tab === 'map' ? 'block' : 'none', height: '100%' }}>
           <MapPanel
@@ -255,7 +344,6 @@ export default function GameView({ gameId, session, onBack }) {
             setMemberRole={setMemberRole} removeMember={removeMember} updateGame={updateGame} />
         )}
       </div>
-      {!isGm && <div style={{ padding: 8, textAlign: 'center' }} className="hint">You are not a GM of this game — the console is read-only for you.</div>}
     </div>
   )
 }

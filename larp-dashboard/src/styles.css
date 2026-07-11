@@ -82,6 +82,14 @@ label { color: var(--muted); font-size: 12px; display: block; margin-bottom: 4px
 .error { color: var(--wax); font-size: 13px; margin-top: 10px; }
 .notice { color: var(--moss); font-size: 13px; margin-top: 10px; }
 .hint { color: var(--muted); font-size: 12px; }
+.access-card { text-align: center; }
+.access-card h2 { color: var(--brass); margin-bottom: 8px; }
+.access-card button { margin-top: 12px; }
+.action-error {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 8px 16px; color: var(--wax); background: rgba(194, 94, 76, 0.1);
+  border-bottom: 1px solid rgba(194, 94, 76, 0.35);
+}
 
 .topbar {
   display: flex;

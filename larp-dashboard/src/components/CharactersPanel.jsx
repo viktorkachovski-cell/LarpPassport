@@ -68,6 +68,12 @@ export default function CharactersPanel({ game, characters, members, factions, u
     if (err) setError(err.message); else setFacName('')
   }
 
+  async function removeNpc(c) {
+    setError('')
+    const err = await deleteCharacter(c.id)
+    if (err) setError(`${c.name}: ${err.message}`)
+  }
+
   return (
     <div className="panel-pad">
       <table className="grid">
@@ -105,7 +111,7 @@ export default function CharactersPanel({ game, characters, members, factions, u
                     <div className="row">
                       <button className="primary" disabled={!isDirty(c)} onClick={() => save(c)}>Save</button>
                       <button className="ghost" onClick={() => showAudit(c)}>History</button>
-                      {c.is_npc && <button className="danger" onClick={() => deleteCharacter(c.id)}>×</button>}
+                      {c.is_npc && <button className="danger" onClick={() => removeNpc(c)}>×</button>}
                     </div>
                   </td>
                 </tr>
