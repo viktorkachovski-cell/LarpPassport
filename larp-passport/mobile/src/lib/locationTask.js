@@ -158,7 +158,7 @@ async function startUpdates(mode) {
     foregroundService: {
       notificationTitle: 'LARP Passport is sharing your location',
       notificationBody: 'Your game masters can see where you are. Stop sharing any time in the app.',
-      notificationColor: '#c9a227',
+      notificationColor: '#47D6F0',
       killServiceOnDestroy: false,
     },
   })

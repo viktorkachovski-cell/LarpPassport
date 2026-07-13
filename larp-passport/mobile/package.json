@@ -7,6 +7,9 @@
     "android": "expo run:android"
   },
   "dependencies": {
+    "@expo-google-fonts/chakra-petch": "^0.4.1",
+    "@expo-google-fonts/ibm-plex-mono": "^0.4.1",
+    "@expo-google-fonts/ibm-plex-sans": "^0.4.1",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@sentry/react-native": "~6.14.0",
     "@supabase/supabase-js": "^2.47.0",
