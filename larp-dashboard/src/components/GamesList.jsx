@@ -34,18 +34,21 @@ export default function GamesList({ session, onOpen }) {
   return (
     <div className="center-screen" style={{ justifyContent: 'flex-start', paddingTop: 60 }}>
       <div className="brand">
-        <h1 className="display">LARP Passport</h1>
-        <p>Your games</p>
+        <span className="brand-kicker">TEMPORAL FIELD AUTHORITY</span>
+        <h1 className="display">DEPLOYMENT REGISTRY</h1>
+        <p>Open an operation or authorize a new timeline.</p>
       </div>
       <div className="games-list">
+        <div className="registry-heading"><span>ASSIGNED OPERATIONS</span><b>{String(games.length).padStart(2, '0')}</b></div>
         {games.map((g) => (
-          <div key={g.id} className="game-card" onClick={() => onOpen(g.id)}>
-            <div>
-              <div className="name">{g.name}</div>
-              <div className="sub">{g.status} · code {g.join_code}</div>
-            </div>
-            <button className="ghost">Open</button>
-          </div>
+          <button key={g.id} type="button" className="game-card" onClick={() => onOpen(g.id)}>
+            <span className="game-card-mark">//</span>
+            <span className="game-card-copy">
+              <span className="name">{g.name}</span>
+              <span className={`sub game-status-${g.status}`}>{g.status} · code {g.join_code}</span>
+            </span>
+            <span className="game-card-action">OPEN</span>
+          </button>
         ))}
         {games.length === 0 && <p className="hint" style={{ textAlign: 'center' }}>No games yet. Create your first one below.</p>}
         <div className="row mt">

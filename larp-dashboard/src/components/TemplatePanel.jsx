@@ -38,7 +38,7 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
   return (
     <div className="panel-pad">
       <p className="hint mb">Stats every character in this game will have. Players can only edit fields you mark editable; number fields are clamped to min/max for players.</p>
-      {hasCharacters && <p className="hint mb" style={{ color: 'var(--brass)' }}>Characters already exist — renaming a key orphans its stored values. Add new keys instead of renaming when possible.</p>}
+      {hasCharacters && <p className="hint mb" style={{ color: 'var(--amber)' }}>Characters already exist — renaming a key orphans its stored values. Add new keys instead of renaming when possible.</p>}
       <table className="grid">
         <thead>
           <tr><th>Key</th><th>Label</th><th>Type</th><th>Default</th><th>Min</th><th>Max</th><th>Player editable</th><th></th></tr>

@@ -10,6 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource/chakra-petch": "^5.2.7",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
     "@sentry/react": "^10.64.0",
     "@supabase/supabase-js": "^2.47.0",
     "maplibre-gl": "^4.7.1",
@@ -21,7 +24,7 @@
     "@testing-library/react": "^16.3.0",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^25.0.1",
-    "vitest": "^3.2.6",
-    "vite": "^6.4.3"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
   }
 }

@@ -390,27 +390,32 @@ export default function GameView({ gameId, session, onBack }) {
   return (
     <div className="game-shell">
       <div className="topbar">
-        <button className="ghost" onClick={onBack}>←</button>
+        <button className="ghost back-control" onClick={onBack} aria-label="Back to games">←</button>
         <span className="title display">{game.name}</span>
         <button className="code-chip" onClick={copyCode} title="Copy join code">{copied ? 'COPIED' : game.join_code}</button>
         <span className="spacer" />
-        <label style={{ margin: 0 }}>Status</label>
-        <select value={game.status} onChange={(e) => updateGame({ status: e.target.value })}>
-          <option value="draft">draft</option>
-          <option value="active">active</option>
-          <option value="finished">finished</option>
-        </select>
-        <label style={{ margin: 0 }}>Positions visible to</label>
-        <select value={game.location_visibility} onChange={(e) => updateGame({ location_visibility: e.target.value })}>
-          <option value="gm_only">GMs only</option>
-          <option value="faction">same faction</option>
-          <option value="all">everyone</option>
-        </select>
+        <div className="topbar-control">
+          <span className="control-label">STATUS</span>
+          <select className={`status-select status-${game.status}`} aria-label="Game status" value={game.status} onChange={(e) => updateGame({ status: e.target.value })}>
+            <option value="draft">DRAFT</option>
+            <option value="active">ACTIVE</option>
+            <option value="finished">FINISHED</option>
+          </select>
+        </div>
+        <div className="topbar-control">
+          <span className="control-label">POSITIONS</span>
+          <select aria-label="Position visibility" value={game.location_visibility} onChange={(e) => updateGame({ location_visibility: e.target.value })}>
+            <option value="gm_only">GMs only</option>
+            <option value="faction">Same faction</option>
+            <option value="all">Everyone</option>
+          </select>
+        </div>
+        <span className="gm-chip">GM</span>
       </div>
       <div className="tabs">
         {['hunt', 'map', 'characters', 'template', 'events', 'players'].map((t) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-            {t[0].toUpperCase() + t.slice(1)}
+            {t.toUpperCase()}
             {t === 'events' && pendingEvents.length > 0 && <span className="badge">{pendingEvents.length}</span>}
           </button>
         ))}
@@ -452,7 +457,7 @@ export default function GameView({ gameId, session, onBack }) {
         {tab === 'template' && <TemplatePanel game={game} hasCharacters={characters.length > 0} updateGame={updateGame} />}
         {tab === 'events' && (
           <EventsPanel events={events} members={members} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
-            confirmEvent={confirmEvent} dismissEvent={dismissEvent} broadcast={broadcast} />
+            confirmEvent={confirmEvent} dismissEvent={dismissEvent} broadcast={broadcast} onOpenHunt={() => setTab('hunt')} />
         )}
         {tab === 'players' && (
           <PlayersPanel members={members} positions={positions} uid={uid} game={game}

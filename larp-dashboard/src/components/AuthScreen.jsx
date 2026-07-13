@@ -30,10 +30,16 @@ export default function AuthScreen() {
   return (
     <div className="center-screen">
       <div className="brand">
-        <h1 className="display">LARP Passport</h1>
-        <p>GM console</p>
+        <span className="brand-mark" aria-hidden="true"><span /></span>
+        <span className="brand-kicker">TEMPORAL FIELD AUTHORITY</span>
+        <h1 className="display">LARP PASSPORT</h1>
+        <p>GM COMMAND CONSOLE // SECURE UPLINK</p>
       </div>
-      <div className="card">
+      <div className="card auth-card">
+        <div className="card-heading">
+          <span className="micro-label">{mode === 'signin' ? 'COMMAND RE-ENTRY' : 'NEW COMMAND ID'}</span>
+          <h2>{mode === 'signin' ? 'Authenticate' : 'Create GM account'}</h2>
+        </div>
         {mode === 'signup' && (
           <div className="field">
             <label>Username</label>
@@ -56,9 +62,9 @@ export default function AuthScreen() {
         {notice && <p className="notice">{notice}</p>}
         <p className="hint" style={{ marginTop: 14, textAlign: 'center' }}>
           {mode === 'signin' ? (
-            <>New here? <a href="#" onClick={(e) => { e.preventDefault(); setMode('signup') }} style={{ color: 'var(--brass)' }}>Create an account</a></>
+            <>New here? <button type="button" className="text-button" onClick={() => setMode('signup')}>Create an account</button></>
           ) : (
-            <>Have an account? <a href="#" onClick={(e) => { e.preventDefault(); setMode('signin') }} style={{ color: 'var(--brass)' }}>Sign in</a></>
+            <>Have an account? <button type="button" className="text-button" onClick={() => setMode('signin')}>Sign in</button></>
           )}
         </p>
       </div>
