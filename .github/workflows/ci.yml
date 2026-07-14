@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call: # lets release.yml reuse this exact gate
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dashboard:
+    name: Dashboard (test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: larp-dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: larp-dashboard/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  mobile:
+    name: Mobile (doctor + tests + export)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: larp-passport/mobile
+    env:
+      # expo export inlines EXPO_PUBLIC_* at bundle time and src/lib/config.js
+      # throws when they are missing. CI only proves the bundle compiles, so
+      # placeholders are correct here — real values come from EAS environments
+      # (production/preview) at release-build time, never from this workflow.
+      EXPO_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+      EXPO_PUBLIC_SENTRY_DSN: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: larp-passport/mobile/package-lock.json
+      - run: npm ci
+      - name: Validate Expo dependency compatibility
+        run: npx expo-doctor@latest
+      - name: Unit tests (location queue)
+        run: npm test
+      - name: Prove the Android bundle exports
+        run: npx expo export --platform android --output-dir dist-test
+
+  database:
+    name: Database (pgTAP suite on local Supabase)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase (Postgres + API only)
+        run: supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
+      - name: Run database tests
+        run: supabase test db supabase/tests/database

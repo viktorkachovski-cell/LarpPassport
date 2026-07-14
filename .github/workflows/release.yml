@@ -1,0 +1,102 @@
+name: Release
+
+# A release is an immutable Git tag like game-2026-v1.0.0. Pushing the tag
+# runs the full CI gate, then (if an EXPO_TOKEN secret exists) builds the
+# production APK on EAS, records commit / migration version / EAS build id /
+# APK checksum, and publishes everything as a GitHub Release.
+on:
+  push:
+    tags:
+      - 'game-*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    name: Full CI gate
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Build APK + record release metadata
+    needs: gate
+    runs-on: ubuntu-latest
+    env:
+      HAS_EXPO_TOKEN: ${{ secrets.EXPO_TOKEN != '' }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Collect release metadata
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          LATEST_MIGRATION=$(ls supabase/migrations | sort | tail -1)
+          APP_VERSION=$(node -p "require('./larp-passport/mobile/app.json').expo.version")
+          {
+            echo "LARP Passport release ${TAG}"
+            echo
+            echo "commit:            ${GITHUB_SHA}"
+            echo "app version:       ${APP_VERSION}"
+            echo "latest migration:  ${LATEST_MIGRATION}"
+            echo "built at:          $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > release-info.txt
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      # eas-cli must run from the directory that contains app.json.
+      - name: Build production APK on EAS
+        if: env.HAS_EXPO_TOKEN == 'true'
+        working-directory: larp-passport/mobile
+        run: |
+          npm ci
+          npx eas-cli@latest build --platform android --profile production \
+            --non-interactive --json --wait > ../../eas-build.json
+          cat ../../eas-build.json
+
+      - name: Download APK and record checksum + build number
+        if: env.HAS_EXPO_TOKEN == 'true'
+        run: |
+          APK_URL=$(node -p "JSON.parse(require('fs').readFileSync('eas-build.json','utf8'))[0].artifacts.buildUrl")
+          BUILD_ID=$(node -p "JSON.parse(require('fs').readFileSync('eas-build.json','utf8'))[0].id")
+          VERSION_CODE=$(node -p "JSON.parse(require('fs').readFileSync('eas-build.json','utf8'))[0].appBuildVersion ?? 'unknown'")
+          curl -sSL "$APK_URL" -o larp-passport.apk
+          {
+            echo "eas build id:      ${BUILD_ID}"
+            echo "android buildNum:  ${VERSION_CODE}"
+            echo "apk sha256:        $(sha256sum larp-passport.apk | cut -d' ' -f1)"
+          } >> release-info.txt
+
+      - name: Note when no EXPO_TOKEN is configured
+        if: env.HAS_EXPO_TOKEN != 'true'
+        run: |
+          {
+            echo
+            echo "NOTE: no EXPO_TOKEN secret configured — APK was not built."
+            echo "Build manually from this exact tag:"
+            echo "  git checkout ${GITHUB_REF_NAME} && cd larp-passport/mobile"
+            echo "  npx eas-cli build --platform android --profile production"
+            echo "then attach the APK and its sha256 to this release."
+          } >> release-info.txt
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') # dispatch runs test the build only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat release-info.txt
+          TAG="${{ steps.meta.outputs.tag }}"
+          ASSETS="release-info.txt"
+          [ -f larp-passport.apk ] && ASSETS="$ASSETS larp-passport.apk"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" $ASSETS --clobber
+            gh release edit "$TAG" --notes-file release-info.txt
+          else
+            gh release create "$TAG" $ASSETS \
+              --title "$TAG" \
+              --notes-file release-info.txt \
+              --verify-tag
+          fi
