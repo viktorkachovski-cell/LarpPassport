@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Animated, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { Alert, Animated, AppState, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
@@ -30,6 +30,23 @@ function countdown(timestamp, now) {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+// Self-ticking countdown. The one-second timer lives HERE, so it re-renders
+// this single <Text> instead of the whole game screen; it also stops itself
+// once the target time has passed.
+function Countdown({ to }) {
+  const [tick, setTick] = useState(() => Date.now())
+  useEffect(() => {
+    if (!to || new Date(to).getTime() <= Date.now()) return undefined
+    const timer = setInterval(() => {
+      const t = Date.now()
+      setTick(t)
+      if (new Date(to).getTime() <= t) clearInterval(timer)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [to])
+  return <Text>{countdown(to, tick)}</Text>
 }
 
 function getPlayerStatus(hunt) {
@@ -68,8 +85,15 @@ export default function GameScreen({ gameId, session, onBack }) {
     return data
   }, [gameId])
 
+  const tabRef = useRef(tab)
+  const realtimeUp = useRef(false)
+  useEffect(() => { tabRef.current = tab }, [tab])
+
+  // Relative timestamps ("5m ago") and the boundary banner only need coarse
+  // time. Live countdowns tick per-second inside <Countdown /> instead of
+  // re-rendering the whole screen every second.
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
+    const timer = setInterval(() => setNow(Date.now()), 30000)
     return () => clearInterval(timer)
   }, [])
 
@@ -121,17 +145,29 @@ export default function GameScreen({ gameId, session, onBack }) {
           || row.type === 'zone_boundary_exit'
         )) loadHunt()
       })
-      .subscribe()
+      .subscribe((status) => {
+        realtimeUp.current = status === 'SUBSCRIBED'
+      })
 
-    const interval = setInterval(() => {
+    // Realtime is the normal update path; polling is the recovery mechanism.
+    // No UI polling while backgrounded (the background location task is a
+    // separate foreground service and is NOT affected by this), and the hunt
+    // reload only runs when the hunt tab is visible or realtime is down.
+    const tick = () => {
+      if (AppState.currentState !== 'active') return
       queueStatus().then(setQueue)
       isSharing().then(setSharing)
-      loadHunt()
-    }, 15000)
+      if (tabRef.current === 'hunt' || !realtimeUp.current) loadHunt()
+    }
+    const interval = setInterval(tick, 45000)
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') tick() // refresh immediately on return to foreground
+    })
 
     return () => {
       alive = false
       clearInterval(interval)
+      appStateSub.remove()
       supabase.removeChannel(channel)
     }
   }, [gameId, uid, loadHunt])
@@ -141,7 +177,7 @@ export default function GameScreen({ gameId, session, onBack }) {
     stopSharing().then(() => setSharing(false)).catch(() => {})
   }, [hunt?.alive, hunt?.participant, sharing])
 
-  async function toggleSharing(next) {
+  const toggleSharing = useCallback(async (next) => {
     setError('')
     try {
       if (next) {
@@ -161,24 +197,24 @@ export default function GameScreen({ gameId, session, onBack }) {
     } catch (toggleError) {
       setError(toggleError.message)
     }
-  }
+  }, [gameId])
 
-  async function sendNow() {
+  const sendNow = useCallback(async () => {
     setError('')
     const result = await flush(gameId)
     if (result?.error) setError(`Send failed: ${result.error}`)
     queueStatus().then(setQueue)
-  }
+  }, [gameId])
 
-  async function requestElimination() {
+  const requestElimination = useCallback(async () => {
     setHuntBusy(true); setHuntError('')
     const { error: claimError } = await supabase.rpc('request_elimination', { g: gameId })
     setHuntBusy(false)
     if (claimError) { setHuntError(claimError.message); return }
     await loadHunt()
-  }
+  }, [gameId, loadHunt])
 
-  function confirmEliminationRequest() {
+  const confirmEliminationRequest = useCallback(() => {
     Alert.alert(
       'Confirm elimination claim?',
       'Only continue after the live mock battle has been resolved.',
@@ -187,19 +223,20 @@ export default function GameScreen({ gameId, session, onBack }) {
         { text: 'Request confirmation', onPress: requestElimination },
       ],
     )
-  }
+  }, [requestElimination])
 
-  async function respondToElimination(confirmed) {
-    if (!hunt?.incoming_claim?.id) return
+  const incomingClaimId = hunt?.incoming_claim?.id
+  const respondToElimination = useCallback(async (confirmed) => {
+    if (!incomingClaimId) return
     setHuntBusy(true); setHuntError('')
     const { data, error: responseError } = await supabase.rpc('respond_elimination', {
-      claim_id: hunt.incoming_claim.id,
+      claim_id: incomingClaimId,
       confirm_elimination: confirmed,
     })
     setHuntBusy(false)
     if (responseError) { setHuntError(responseError.message); return }
     setHunt(data)
-  }
+  }, [incomingClaimId])
 
   const visibleEvents = events.filter((event) => event.player_visible && event.profile_id === uid)
   const latestBoundaryEvent = visibleEvents.find((event) => event.type === 'zone_boundary_warning' || event.type === 'zone_boundary_exit')
@@ -235,7 +272,7 @@ export default function GameScreen({ gameId, session, onBack }) {
       <View style={styles.stateStrip}>
         <StateCell value={hunt?.alive_count ?? '--'} label={phase === 'not_started' ? 'TRAVELLERS JOINED' : 'TRAVELLERS LEFT'} />
         <StateCell value={playerStatus.value} label="YOUR STATUS" color={playerStatus.color} bordered />
-        <StateCell value={countdown(hunt?.hidden_until, now)} label="CLOAK LEFT" color={C.cyan} />
+        <StateCell value={<Countdown to={hunt?.hidden_until} />} label="CLOAK LEFT" color={C.cyan} />
       </View>
 
       <View style={styles.tabs}>
@@ -297,16 +334,17 @@ function LiveDot({ color }) {
   return <Animated.View style={[styles.liveDot, { backgroundColor: color, opacity }]} />
 }
 
-function StateCell({ value, label, color = C.text, bordered = false }) {
+const StateCell = memo(function StateCell({ value, label, color = C.text, bordered = false }) {
+  const isElement = typeof value === 'object' && value !== null
   return (
     <View style={[styles.stateCell, bordered && styles.stateCellBorder]}>
-      <Text style={[styles.stateValue, { color }]} numberOfLines={1}>{String(value)}</Text>
+      <Text style={[styles.stateValue, { color }]} numberOfLines={1}>{isElement ? value : String(value)}</Text>
       <Text style={styles.stateLabel} numberOfLines={1}>{label}</Text>
     </View>
   )
-}
+})
 
-function HuntPanel({ hunt, hasCharacter, busy, error, boundaryWarning, requestElimination, respondToElimination, refresh }) {
+const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, boundaryWarning, requestElimination, respondToElimination, refresh }) {
   function confirmDefeat() {
     Alert.alert(
       'Confirm your elimination?',
@@ -420,7 +458,7 @@ function HuntPanel({ hunt, hasCharacter, busy, error, boundaryWarning, requestEl
       <Text style={styles.hunterWarning}>SOMEONE IS HUNTING YOU. THEIR NAME IS NEVER SHOWN.</Text>
     </ScrollView>
   )
-}
+})
 
 function ProximitySignal({ proximity }) {
   if (!proximity || proximity.state === 'waiting_for_location') {
@@ -504,7 +542,7 @@ function EliminatedState({ aliveCount }) {
   )
 }
 
-function EventsTab({ gameId, events }) {
+const EventsTab = memo(function EventsTab({ gameId, events }) {
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
       <PlayerMessageBox gameId={gameId} />
@@ -525,7 +563,7 @@ function EventsTab({ gameId, events }) {
       })}
     </ScrollView>
   )
-}
+})
 
 function eventMeta(type) {
   if (type === 'zone_boundary_warning' || type === 'zone_boundary_exit') {
@@ -606,7 +644,7 @@ function PlayerMessageBox({ gameId }) {
   )
 }
 
-function SharingTab({ game, phase, sharing, queue, error, toggleSharing, sendNow }) {
+const SharingTab = memo(function SharingTab({ game, phase, sharing, queue, error, toggleSharing, sendNow }) {
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
       <View style={styles.neutralCard}>
@@ -644,18 +682,18 @@ function SharingTab({ game, phase, sharing, queue, error, toggleSharing, sendNow
       <Text style={styles.sharingFootnote}>SHARING STOPS AND LOCATION HISTORY IS DELETED ON ELIMINATION.</Text>
     </ScrollView>
   )
-}
+})
 
-function TelemetryCell({ label, value, color = C.text }) {
+const TelemetryCell = memo(function TelemetryCell({ label, value, color = C.text }) {
   return (
     <View style={styles.telemetryCell}>
       <Text style={[styles.telemetryValue, { color }]} numberOfLines={1}>{String(value)}</Text>
       <Text style={styles.telemetryLabel}>{label}</Text>
     </View>
   )
-}
+})
 
-function CharacterSheet({ character, stats }) {
+const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
   const [draft, setDraft] = useState(null)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -728,7 +766,7 @@ function CharacterSheet({ character, stats }) {
       )}
     </ScrollView>
   )
-}
+})
 
 function CreateCharacter({ game, uid, onCreated }) {
   const stats = game.template?.stats ?? []

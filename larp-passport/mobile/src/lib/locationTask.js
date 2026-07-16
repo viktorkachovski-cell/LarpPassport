@@ -2,16 +2,17 @@ import * as TaskManager from 'expo-task-manager'
 import * as Location from 'expo-location'
 import * as Battery from 'expo-battery'
 import * as Notifications from 'expo-notifications'
+import * as SQLite from 'expo-sqlite'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
+import { createPingStore } from './pingStore'
 
 export const LOCATION_TASK = 'larp-passport-location'
-const QUEUE_KEY = 'larp_ping_queue_v1'
+const LEGACY_QUEUE_KEY = 'larp_ping_queue_v1' // pre-SQLite queue, imported once
 const GAME_KEY = 'larp_active_game_v1'
 const LAST_SENT_KEY = 'larp_last_sent_v1'
 const SEQ_KEY = 'larp_last_event_seq_v1'
 const PROFILE_KEY = 'larp_gps_profile_v1'
-const MAX_QUEUE = 500
 
 // Server-hinted GPS profiles. 'near' = close to an active zone: precise + frequent.
 // 'far' = nothing nearby: coarse positioning, GPS chip mostly asleep, radio wakes ~1/min.
@@ -23,6 +24,42 @@ export const GPS_PROFILES = {
     distanceInterval: 20,
     deferredUpdatesInterval: 90000,
   },
+}
+
+// One store per JS runtime. Android runs a single JS process for the app
+// (foreground UI and the background location task never execute JS
+// concurrently in separate processes), so the store's in-process drain lock
+// plus SQLite transactions cover every enqueue/flush interleaving.
+let storePromise = null
+function getStore() {
+  if (!storePromise) {
+    storePromise = (async () => {
+      const db = await SQLite.openDatabaseAsync('larp_pings.db')
+      await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 3000;')
+      const store = createPingStore({ db })
+      await store.init()
+      await migrateLegacyQueue(store)
+      return store
+    })()
+  }
+  return storePromise
+}
+
+// One-time import of the old AsyncStorage JSON queue so an app update does
+// not drop points that were recorded but not yet sent.
+async function migrateLegacyQueue(store) {
+  try {
+    const raw = await AsyncStorage.getItem(LEGACY_QUEUE_KEY)
+    if (raw == null) return
+    const gameId = await AsyncStorage.getItem(GAME_KEY)
+    const items = JSON.parse(raw)
+    if (gameId && Array.isArray(items) && items.length > 0) {
+      await store.enqueue(gameId, items)
+    }
+    await AsyncStorage.removeItem(LEGACY_QUEUE_KEY)
+  } catch {
+    try { await AsyncStorage.removeItem(LEGACY_QUEUE_KEY) } catch {}
+  }
 }
 
 TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
@@ -40,65 +77,53 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
       ...(battery != null && battery >= 0 ? { battery } : {}),
     }))
     if (pings.length === 0) return
-    await enqueue(pings)
+    const store = await getStore()
+    await store.enqueue(gameId, pings)
     await flush(gameId)
   } catch {
     // never throw from the task — pings stay queued for the next tick
   }
 })
 
-async function readQueue() {
-  try { return JSON.parse((await AsyncStorage.getItem(QUEUE_KEY)) ?? '[]') } catch { return [] }
-}
-
-async function enqueue(pings) {
-  const cur = await readQueue()
-  const next = [...cur, ...pings].slice(-MAX_QUEUE)
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(next))
-}
-
-let flushInFlight = null
-
-// Sends the queue. The server evaluates the recent trail against zones, returns any
-// events we haven't seen (piggyback — no websocket needed in the background), and a
-// GPS profile hint we apply on the fly.
-export function flush(gameId) {
-  // Serialize: the background task, the 15s foreground timer and SEND NOW must
-  // never read-modify-write the queue concurrently.
-  if (flushInFlight) return flushInFlight
-  flushInFlight = doFlush(gameId).finally(() => { flushInFlight = null })
-  return flushInFlight
-}
-
-async function doFlush(gameId) {
-  const cur = await readQueue()
-  if (cur.length === 0) return { accepted: 0, queued: 0 }
-  const lastSeen = Number((await AsyncStorage.getItem(SEQ_KEY)) ?? 0)
-  const { data, error } = await supabase.rpc('ingest_pings', {
-    g: gameId, pings: cur, last_seen_seq: lastSeen,
+// Sends queued points for the active game in claimed batches. The server
+// evaluates the trail against zones, returns any events we haven't seen
+// (piggyback — no websocket needed in the background), and a GPS profile hint
+// we apply on the fly. Only one drain runs at a time; a second flush() call
+// (e.g. "SEND NOW" during a background tick) joins the running drain, which
+// keeps claiming batches until nothing is pending.
+export async function flush(gameId) {
+  if (!gameId) return { accepted: 0, queued: 0 }
+  const store = await getStore()
+  let profileMode = null
+  const result = await store.drain({
+    gameId,
+    send: async (pings) => {
+      const lastSeen = Number((await AsyncStorage.getItem(SEQ_KEY)) ?? 0)
+      const { data, error } = await supabase.rpc('ingest_pings', {
+        g: gameId, pings, last_seen_seq: lastSeen,
+      })
+      if (error) {
+        const wrapped = new Error(error.message)
+        wrapped.code = error.code
+        throw wrapped
+      }
+      return data ?? { accepted: pings.length }
+    },
+    onBatch: async (data) => {
+      await AsyncStorage.setItem(LAST_SENT_KEY, new Date().toISOString())
+      if (Array.isArray(data?.events) && data.events.length > 0) await notifyEvents(data.events)
+      if (data?.profile?.mode) profileMode = data.profile.mode
+    },
   })
-  if (error) {
-    // 22023 means the server rejected the batch itself as invalid; retrying
-    // identical data can never succeed, so drop it rather than jam the queue.
-    // Network/auth errors keep the queue for the next tick.
-    if (error.code === '22023') await AsyncStorage.setItem(QUEUE_KEY, '[]')
-    return {
-      accepted: 0,
-      queued: error.code === '22023' ? 0 : cur.length,
-      error: error.message,
-    }
+  if (result.reason) {
+    // Server said no (game finished / consent revoked / removed from game):
+    // nothing for this game stays on the device.
+    await store.purgeGame(gameId)
+    await handleRejected(result.reason)
+    return { accepted: result.accepted, queued: 0, reason: result.reason }
   }
-  // Remove exactly what was sent; pings enqueued during the request survive.
-  const after = await readQueue()
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(after.slice(cur.length)))
-  await AsyncStorage.setItem(LAST_SENT_KEY, new Date().toISOString())
-  if (data?.reason) {
-    await handleRejected(data.reason)
-    return { ...data, queued: 0 }
-  }
-  if (Array.isArray(data?.events) && data.events.length > 0) await notifyEvents(data.events)
-  if (data?.profile?.mode) await applyProfile(data.profile.mode)
-  return { ...(data ?? { accepted: 0 }), queued: 0 }
+  if (profileMode) await applyProfile(profileMode)
+  return result
 }
 
 const REJECT_MESSAGES = {
@@ -193,10 +218,20 @@ async function startUpdates(mode) {
 }
 
 export async function queueStatus() {
-  const q = await readQueue()
+  const store = await getStore()
+  const gameId = await AsyncStorage.getItem(GAME_KEY)
+  const s = await store.status(gameId ?? undefined)
   const last = await AsyncStorage.getItem(LAST_SENT_KEY)
   const profile = (await AsyncStorage.getItem(PROFILE_KEY)) ?? 'near'
-  return { queued: q.length, lastSent: last, profile }
+  return {
+    queued: s.queued,
+    lastSent: last,
+    profile,
+    // new fields (sync-health surface, additive — nothing existing reads them)
+    oldestPendingAt: s.oldestPendingAt,
+    failed: s.failed,
+    lastError: s.lastError,
+  }
 }
 
 export async function startSharing(gameId) {
@@ -213,7 +248,18 @@ export async function startSharing(gameId) {
   await startUpdates('near')
 }
 
+// Stopping sharing is a consent action: any point recorded for this game that
+// has not reached the server yet is deleted, including in-flight rows (their
+// nack is a no-op after the purge). Previously leftover points survived in
+// AsyncStorage and could even be flushed into a DIFFERENT game joined later.
 export async function stopSharing() {
+  try {
+    const gameId = await AsyncStorage.getItem(GAME_KEY)
+    if (gameId) {
+      const store = await getStore()
+      await store.purgeGame(gameId)
+    }
+  } catch {}
   await AsyncStorage.removeItem(GAME_KEY)
   const started = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)
   if (started) await Location.stopLocationUpdatesAsync(LOCATION_TASK)
