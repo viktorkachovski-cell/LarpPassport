@@ -55,13 +55,21 @@ publishes only `characters`, `game_events`, `game_players`,
 Every app table has RLS enabled. Anonymous users have no app table or RPC
 grants. Authenticated users receive explicit table privileges, then RLS limits
 rows to their game, role, identity, and configured location visibility.
+Profiles are visible only to the user themselves and to members of a shared
+game. The `games.join_code` column is excluded from the member SELECT grant
+(clients must name columns; `select *` on `games` fails) and is served to GMs
+through `gm_get_join_code`.
 
 The callable RPCs are:
 
 - `join_game(code)`: validates/rate-limits the join code and creates membership.
-- `set_location_consent(g, grant_consent)`: records consent and revocation.
-- `ingest_pings(g, pings, last_seen_seq)`: validates up to 500 points/256 KiB,
-  deduplicates retries, updates the latest position, evaluates zones, and
+- `gm_get_join_code(g)`: returns the game's join code to its GMs only.
+- `set_location_consent(g, grant_consent)`: records consent and revocation;
+  revocation also deletes the latest stored position.
+- `ingest_pings(g, pings, last_seen_seq)`: accepts up to 500 points/256 KiB
+  while the game is draft or active, skips and counts invalid points instead
+  of rejecting the batch, deduplicates retries, updates the latest position,
+  evaluates recent points (newest 50 within 10 minutes) against zones, and
   piggybacks visible events.
 - `get_hunt_status(g)`: returns only the caller's safe hunt state, target
   character, coarse proximity, and anonymous incoming claim.
@@ -82,7 +90,7 @@ The callable RPCs are:
 
 These RPCs intentionally use `SECURITY DEFINER` with `search_path = ''` because
 they cross RLS/private-table boundaries. Supabase's security advisor therefore
-reports fifteen expected warnings. Removing definer execution would break these
+reports sixteen expected warnings. Removing definer execution would break these
 API contracts; any new definer RPC needs the same explicit authentication,
 validation, schema qualification, revocation, and test coverage.
 
@@ -100,10 +108,18 @@ unassigned until the GM explicitly releases it or replaces the complete chain.
 Per-game advisory locks serialize simultaneous claims. The final survivor is
 recorded as winner and the game is marked finished.
 
-One zone per game may use `zone_type = 'play_area'`. Background ping evaluation
-uses PostGIS distance-to-edge checks to emit a one-shot warning in the configured
-band. Crossing the boundary rejects the player's pending elimination claim and
-creates a pending GM breach event; it does not auto-eliminate from GPS alone.
+One zone per game may use `zone_type = 'play_area'`. The boundary is evaluated
+only while a hunt round is active. Background ping evaluation uses PostGIS
+distance-to-edge checks to emit a one-shot warning in the configured band.
+Leaving requires having actually been inside and crossing `exit_buffer_m`
+beyond the edge (hysteresis against GPS glitches); it then rejects the
+player's pending elimination claim and creates a pending GM breach event. It
+does not auto-eliminate from GPS alone, and a player whose fixes never entered
+the area is not flagged.
+
+Living participants cannot rename or delete their character while a round is
+active; the hunt UI identifies targets by character name, so those are locked
+alongside the roster. GMs remain able to edit characters at any time.
 
 ## PostGIS Fix
 
@@ -118,11 +134,19 @@ PostGIS is installed in `extensions`, not `public`. Consequently:
 
 ## Retention And Free Tier
 
-Three daily `pg_cron` jobs keep operational data bounded:
+Four daily `pg_cron` jobs keep operational data bounded:
 
 - Raw pings use each game's `purge_after_days` setting, 1-90 days.
 - Latest positions are removed when a game is finished.
 - Join attempts are removed after two days.
+- Events of finished games are removed 14 days after creation.
+
+Deleting an auth user now works even with hunt history: attribution columns
+(`characters.user_id`, `hunt_rounds.started_by`/`winner_id`,
+`hunt_players.eliminated_by`, `hunt_claims.response_by`) are set to null and
+the user's hunt claims are removed. Deleting a GM account still requires
+deleting or handing off their games first, and an account that is actively
+targeted mid-round cannot be deleted until the round ends.
 
 For a hobby deployment below 100 users, Supabase Free plus Vercel Hobby is the
 simplest architecture. Avoid a VPS for now: it adds patching, backups, TLS,
@@ -144,14 +168,18 @@ production dashboard is <https://larp-passport.vercel.app>. Database migrations
 and both clients are currently aligned to this project.
 
 Current hosted test coverage is transactional and leaves no fixtures behind.
-It verifies schema/RLS/grants, Auth profile creation, GM membership, join flow,
-zone privacy, consent, character text limits, idempotent pings, PostGIS zone
-state, and event emission.
-The time-hunt suite adds 62 checks covering secret assignments, roster locks,
-messages, anonymous confirmation, elimination, GM target assignment, cloak,
-location revocation, final-winner completion, and GM recovery. A separate
-10-check PostGIS suite covers safe interior positions, edge warnings, exits,
-claim forfeiture, duplicate suppression, and warning rearming.
+The 42-check architecture suite verifies schema/RLS/grants, Auth profile
+creation, GM membership, join flow, zone privacy, join-code containment,
+profile visibility, consent (including position deletion on revocation),
+draft-game pings, per-point validation, idempotent pings, stale-ping zone
+skipping, PostGIS zone state, and event emission.
+The time-hunt suite adds 66 checks covering secret assignments, roster and
+character locks, messages, anonymous confirmation, elimination, GM target
+assignment, cloak, location revocation, final-winner completion, GM recovery,
+and account deletion with hunt history. A separate 12-check PostGIS suite
+covers safe interior positions, edge warnings, exits with hysteresis, claim
+forfeiture, duplicate suppression, never-entered players, and warning
+rearming.
 
 ### Hosted Auth URL
 

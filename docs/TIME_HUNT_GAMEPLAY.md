@@ -35,7 +35,8 @@ The GM is an observer and never receives a target.
    anomaly play area**, and choose the edge-warning distance. Only one play area
    can exist per game; ordinary event zones remain available separately.
 7. Ask players to open **Sharing**, grant foreground and background location
-   permission, and enable sharing.
+   permission, and enable sharing. Sharing works while the game is still in
+   draft, so markers appear during setup.
 8. Confirm recent player markers appear inside the play area on the GM map.
 9. Open the dashboard's **Hunt** tab. Readiness must show at least two players
    and a character for every player.
@@ -44,8 +45,10 @@ The GM is an observer and never receives a target.
 
 Starting the hunt automatically sets the game to `active`, forces location
 visibility to `gm_only`, creates a random circular target chain, and locks the
-active roster. No player can join, leave, or change role until the hunt is reset
-or completed.
+active roster. No player can join, leave, or change role until the hunt is
+reset or completed. Living participants also cannot rename or delete their
+character while the round is active — hunters identify targets by character
+name. GMs can still edit characters at any time.
 
 ## Player Flow
 
@@ -90,9 +93,15 @@ elimination claim made by that player and creates a player-visible, pending GM
 breach event. Remaining outside does not repeat the breach until the player
 returns to safety and approaches the edge again.
 
-GPS can drift, so a boundary exit does not automatically eliminate the player.
-The GM confirms or dismisses the breach and can use **Eliminate** when the live
-ruling is that the player forfeited the game.
+The boundary is only evaluated while a hunt round is active. A breach requires
+the player to have actually been inside the play area, and a fix must land
+beyond the zone's exit buffer (15 m by default) past the edge before it counts
+as leaving — a single GPS glitch on the line does not forfeit a claim, and a
+player who is still travelling to the site is never flagged.
+
+GPS can still drift, so a boundary exit does not automatically eliminate the
+player. The GM confirms or dismisses the breach and can use **Eliminate** when
+the live ruling is that the player forfeited the game.
 
 ### Resolve An Elimination
 
@@ -146,9 +155,11 @@ not be shown to active players.
 - The GM cannot manually alter the roster, game status, or location visibility
   while a hunt is active. This prevents a partial or broken target chain.
 
-Reset does not automatically restore a previously eliminated player's location
-consent. Before starting another round, those players must enable sharing again.
-Location visibility remains GM-only unless the GM changes it after reset.
+Reset returns the game to draft; players who were still sharing keep sharing,
+because draft games accept pings. Reset does not restore a previously
+eliminated player's location consent — those players must enable sharing again
+before the next round. Location visibility remains GM-only unless the GM
+changes it after reset.
 
 ## Game-Day Checklist
 

@@ -57,21 +57,43 @@ async function enqueue(pings) {
   await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(next))
 }
 
-// Sends the queue. The server evaluates the WHOLE trail against zones, returns any
+let flushInFlight = null
+
+// Sends the queue. The server evaluates the recent trail against zones, returns any
 // events we haven't seen (piggyback — no websocket needed in the background), and a
 // GPS profile hint we apply on the fly.
-export async function flush(gameId) {
+export function flush(gameId) {
+  // Serialize: the background task, the 15s foreground timer and SEND NOW must
+  // never read-modify-write the queue concurrently.
+  if (flushInFlight) return flushInFlight
+  flushInFlight = doFlush(gameId).finally(() => { flushInFlight = null })
+  return flushInFlight
+}
+
+async function doFlush(gameId) {
   const cur = await readQueue()
   if (cur.length === 0) return { accepted: 0, queued: 0 }
   const lastSeen = Number((await AsyncStorage.getItem(SEQ_KEY)) ?? 0)
   const { data, error } = await supabase.rpc('ingest_pings', {
     g: gameId, pings: cur, last_seen_seq: lastSeen,
   })
-  if (error) return { accepted: 0, queued: cur.length, error: error.message }
-  await AsyncStorage.setItem(QUEUE_KEY, '[]')
+  if (error) {
+    // 22023 means the server rejected the batch itself as invalid; retrying
+    // identical data can never succeed, so drop it rather than jam the queue.
+    // Network/auth errors keep the queue for the next tick.
+    if (error.code === '22023') await AsyncStorage.setItem(QUEUE_KEY, '[]')
+    return {
+      accepted: 0,
+      queued: error.code === '22023' ? 0 : cur.length,
+      error: error.message,
+    }
+  }
+  // Remove exactly what was sent; pings enqueued during the request survive.
+  const after = await readQueue()
+  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(after.slice(cur.length)))
   await AsyncStorage.setItem(LAST_SENT_KEY, new Date().toISOString())
   if (data?.reason) {
-    await handleRejected()
+    await handleRejected(data.reason)
     return { ...data, queued: 0 }
   }
   if (Array.isArray(data?.events) && data.events.length > 0) await notifyEvents(data.events)
@@ -79,15 +101,21 @@ export async function flush(gameId) {
   return { ...(data ?? { accepted: 0 }), queued: 0 }
 }
 
-// Server said no (game ended / consent revoked / removed from game):
-// stop burning GPS and tell the player once.
-async function handleRejected() {
+const REJECT_MESSAGES = {
+  game_finished: 'The game has finished, so location sharing stopped.',
+  no_consent: 'Location consent is off for this game, so sharing stopped.',
+  not_member: 'You are no longer a member of this game, so sharing stopped.',
+}
+
+// Server said no (game finished / consent revoked / removed from game):
+// stop burning GPS and tell the player once, with the actual reason.
+async function handleRejected(reason) {
   try {
     await stopSharing()
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Location sharing stopped',
-        body: 'The game is not active any more, or your consent was withdrawn.',
+        body: REJECT_MESSAGES[reason] ?? 'The game is not accepting location pings any more.',
       },
       trigger: null,
     })

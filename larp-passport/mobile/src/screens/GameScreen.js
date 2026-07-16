@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Animated, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
-import { supabase } from '../lib/supabase'
+import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { C, F } from '../lib/theme'
 import { flush, isSharing, markSeenUpTo, notifyEvents, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
 
@@ -77,7 +77,7 @@ export default function GameScreen({ gameId, session, onBack }) {
     let alive = true
     async function load() {
       const [gameResult, characterResult, eventResult] = await Promise.all([
-        supabase.from('games').select('*').eq('id', gameId).single(),
+        supabase.from('games').select(GAME_COLUMNS).eq('id', gameId).single(),
         supabase.from('characters').select('*').eq('game_id', gameId).eq('user_id', uid).eq('is_npc', false).maybeSingle(),
         supabase.from('game_events').select('*').eq('game_id', gameId).order('seq', { ascending: false }).limit(50),
       ])
@@ -628,7 +628,7 @@ function SharingTab({ game, phase, sharing, queue, error, toggleSharing, sendNow
         <Text style={[styles.bodyCopy, styles.sharingDetails]}>
           Position history is deleted automatically after {game.purge_after_days} day{game.purge_after_days === 1 ? '' : 's'}. You can stop at any time.
         </Text>
-        {phase !== 'active' && <Text style={styles.warningCopy}>Pings are accepted only while the GM has made the game active.</Text>}
+        {phase === 'finished' && <Text style={styles.warningCopy}>The game has finished; location pings are no longer accepted.</Text>}
         {!!error && <Text style={styles.errorText}>{error}</Text>}
       </View>
 

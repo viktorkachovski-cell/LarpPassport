@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(62);
+select extensions.plan(66);
 
 select extensions.has_table('private', 'hunt_rounds', 'hunt rounds are private');
 select extensions.has_table('private', 'hunt_players', 'target assignments are private');
@@ -285,6 +285,31 @@ select extensions.throws_ok(
   '55000',
   'an active hunt must remain active and GM-only',
   'active hunt location privacy cannot be weakened'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '62000000-0000-0000-0000-000000000002',
+  true
+);
+select extensions.throws_ok(
+  $$
+    update public.characters
+    set name = 'Renamed Mid Hunt'
+    where id = '72000000-0000-0000-0000-000000000002'
+  $$,
+  '55000',
+  'character names are locked while the hunt is active',
+  'living participants cannot rename their character mid-hunt'
+);
+select extensions.throws_ok(
+  $$
+    delete from public.characters
+    where id = '72000000-0000-0000-0000-000000000002'
+  $$,
+  '55000',
+  'characters cannot be deleted while the hunt is active',
+  'living participants cannot delete their character mid-hunt'
 );
 
 select set_config(
@@ -888,6 +913,29 @@ select extensions.is(
    where id = current_setting('test.gm_confirm_claim')::uuid),
   '61000000-0000-0000-0000-000000000001',
   'GM claim override records the GM as responder'
+);
+
+-- Account deletion must work once a user carries hunt history. Clear the
+-- JWT claim so the cascade runs in the same system context as an admin
+-- deletion.
+select set_config('request.jwt.claim.sub', '', true);
+delete from auth.users
+where id = current_setting('test.final_target')::uuid;
+
+select extensions.is(
+  (select count(*)::integer
+   from public.profiles
+   where id = current_setting('test.final_target')::uuid),
+  0,
+  'an account with hunt history can be deleted'
+);
+select extensions.is(
+  (select count(*)::integer
+   from public.characters
+   where game_id = '71000000-0000-0000-0000-000000000001'
+     and user_id is null),
+  1,
+  'the deleted account character is kept as an unowned record'
 );
 
 select * from extensions.finish();

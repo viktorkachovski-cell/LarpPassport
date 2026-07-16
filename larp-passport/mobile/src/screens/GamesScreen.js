@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { supabase } from '../lib/supabase'
+import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { C, F } from '../lib/theme'
 
 const STATUS_COLORS = { active: C.green, draft: C.amber, finished: C.muted }
@@ -15,7 +15,7 @@ export default function GamesScreen({ onOpen }) {
   useEffect(() => { load() }, [])
 
   async function load() {
-    const { data } = await supabase.from('games').select('*').order('created_at', { ascending: false })
+    const { data } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
     setGames(data ?? [])
   }
 

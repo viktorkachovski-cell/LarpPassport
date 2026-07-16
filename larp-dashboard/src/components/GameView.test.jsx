@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../lib/supabase', () => ({
+  GAME_COLUMNS:
+    'id, gm_id, name, template, location_visibility, status, purge_after_days, created_at',
   supabase: {
     channel: mocks.channel,
     from: mocks.from,
@@ -90,10 +92,11 @@ beforeEach(() => {
   mocks.mutationResults = {}
   mocks.queryResults = {}
   mocks.from.mockImplementation((table) => queryBuilder(table))
-  mocks.rpc.mockResolvedValue({
-    data: { claims: [], phase: 'not_started', players: [] },
-    error: null,
-  })
+  mocks.rpc.mockImplementation((fn) => Promise.resolve(
+    fn === 'gm_get_join_code'
+      ? { data: 'ABCDEFGH', error: null }
+      : { data: { claims: [], phase: 'not_started', players: [] }, error: null },
+  ))
 
   const realtimeChannel = {
     on: vi.fn(),

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { GAME_COLUMNS, supabase } from '../lib/supabase'
 
 const DEFAULT_TEMPLATE = {
   stats: [
@@ -16,7 +16,7 @@ export default function GamesList({ session, onOpen }) {
 
   useEffect(() => { load() }, [])
   async function load() {
-    const { data, error } = await supabase.from('games').select('*').order('created_at', { ascending: false })
+    const { data, error } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
     if (!error) setGames(data ?? [])
   }
 
@@ -25,7 +25,7 @@ export default function GamesList({ session, onOpen }) {
     setBusy(true); setError('')
     const { data, error } = await supabase.from('games')
       .insert({ name: name.trim(), gm_id: session.user.id, status: 'draft', template: DEFAULT_TEMPLATE })
-      .select().single()
+      .select(GAME_COLUMNS).single()
     setBusy(false)
     if (error) { setError(error.message); return }
     onOpen(data.id)
@@ -45,7 +45,7 @@ export default function GamesList({ session, onOpen }) {
             <span className="game-card-mark">//</span>
             <span className="game-card-copy">
               <span className="name">{g.name}</span>
-              <span className={`sub game-status-${g.status}`}>{g.status} · code {g.join_code}</span>
+              <span className={`sub game-status-${g.status}`}>{g.status}</span>
             </span>
             <span className="game-card-action">OPEN</span>
           </button>

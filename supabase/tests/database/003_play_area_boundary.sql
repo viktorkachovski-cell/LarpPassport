@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(10);
+select extensions.plan(12);
 
 select extensions.has_column('public', 'zones', 'zone_type', 'zones support a play-area purpose');
 select extensions.has_column('public', 'zones', 'warning_distance_m', 'zones configure an edge warning distance');
@@ -200,6 +200,52 @@ select extensions.is(
      and type = 'zone_boundary_warning'),
   2,
   'returning to safety rearms the near-edge warning'
+);
+
+-- A single GPS glitch just past the edge but inside the exit buffer must not
+-- count as leaving. The boundary is at 100 m and exit_buffer_m defaults to
+-- 15 m; ~108 m from the center is outside the edge but inside the buffer.
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '82000000-0000-0000-0000-000000000002', true);
+select public.ingest_pings(
+  '91000000-0000-0000-0000-000000000001',
+  jsonb_build_array(jsonb_build_object(
+    'lat', 42.6977, 'lng', 23.32322, 'accuracy', 5,
+    'recorded_at', (now() + interval '3 seconds')::text
+  )),
+  0
+);
+reset role;
+select extensions.is(
+  (select count(*)::integer from public.game_events
+   where game_id = '91000000-0000-0000-0000-000000000001'
+     and profile_id = '82000000-0000-0000-0000-000000000002'
+     and type = 'zone_boundary_exit'),
+  1,
+  'a glitch within the exit buffer does not register a new breach'
+);
+
+-- A player whose first fixes are outside the play area never entered it, so
+-- no breach may be filed against them.
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '83000000-0000-0000-0000-000000000003', true);
+select public.set_location_consent('91000000-0000-0000-0000-000000000001', true);
+select public.ingest_pings(
+  '91000000-0000-0000-0000-000000000001',
+  jsonb_build_array(jsonb_build_object(
+    'lat', 42.6977, 'lng', 23.3250, 'accuracy', 5,
+    'recorded_at', (now() - interval '5 seconds')::text
+  )),
+  0
+);
+reset role;
+select extensions.is(
+  (select count(*)::integer from public.game_events
+   where game_id = '91000000-0000-0000-0000-000000000001'
+     and profile_id = '83000000-0000-0000-0000-000000000003'
+     and type = 'zone_boundary_exit'),
+  0,
+  'a player who never entered the play area is not flagged as breaching'
 );
 
 select * from extensions.finish();

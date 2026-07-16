@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { parseWkbPoint } from '../lib/geo'
 import MapPanel from './MapPanel'
 import CharactersPanel from './CharactersPanel'
@@ -63,7 +63,7 @@ export default function GameView({ gameId, session, onBack }) {
 
     async function load() {
       const [g, mem] = await Promise.all([
-        supabase.from('games').select('*').eq('id', gameId).single(),
+        supabase.from('games').select(GAME_COLUMNS).eq('id', gameId).single(),
         supabase.from('game_players').select('*, profile:profiles(username)').eq('game_id', gameId),
       ])
       if (!alive) return
@@ -76,17 +76,21 @@ export default function GameView({ gameId, session, onBack }) {
         || (mem.data ?? []).some((member) => member.profile_id === uid && member.role === 'gm')
       if (!canManage) return
 
-      const [z, pos, chars, fac, ev, huntState] = await Promise.all([
+      const [z, pos, chars, fac, ev, huntState, joinCode] = await Promise.all([
         supabase.from('zones_view').select('*').eq('game_id', gameId),
         supabase.from('player_positions_view').select('*').eq('game_id', gameId),
         supabase.from('characters').select('*').eq('game_id', gameId),
         supabase.from('factions').select('*').eq('game_id', gameId),
         supabase.from('game_events').select('*').eq('game_id', gameId).order('seq', { ascending: false }).limit(200),
         supabase.rpc('get_hunt_admin', { g: gameId }),
+        supabase.rpc('gm_get_join_code', { g: gameId }),
       ])
       if (!alive) return
       const failed = [z, pos, chars, fac, ev, huntState].find((result) => result.error)
       if (failed) { setLoadError(failed.error.message); return }
+      if (typeof joinCode.data === 'string') {
+        setGame((current) => ({ ...(current ?? g.data), join_code: joinCode.data }))
+      }
       setZones(z.data ?? [])
       const posMap = {}
       for (const p of pos.data ?? []) posMap[p.profile_id] = p
@@ -108,6 +112,17 @@ export default function GameView({ gameId, session, onBack }) {
     const channel = supabase
       .channel(`game-${gameId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'player_positions', filter: `game_id=eq.${gameId}` }, (payload) => {
+        if (payload.eventType === 'DELETE') {
+          const gone = payload.old?.profile_id
+          if (gone) {
+            setPositions((prev) => {
+              const next = { ...prev }
+              delete next[gone]
+              return next
+            })
+          }
+          return
+        }
         const row = payload.new
         if (!row?.profile_id) return
         const pt = parseWkbPoint(row.geog)
@@ -168,9 +183,9 @@ export default function GameView({ gameId, session, onBack }) {
   async function updateGame(patch) {
     const denied = requireGm()
     if (denied) return denied
-    const { data, error } = await supabase.from('games').update(patch).eq('id', gameId).select().single()
+    const { data, error } = await supabase.from('games').update(patch).eq('id', gameId).select(GAME_COLUMNS).single()
     if (error) return reportAction(error)
-    setGame(data)
+    setGame((current) => ({ ...data, join_code: current?.join_code }))
     return reportAction(null)
   }
 
@@ -370,6 +385,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   function copyCode() {
+    if (!game.join_code) return
     navigator.clipboard?.writeText(game.join_code)
     setCopied(true); setTimeout(() => setCopied(false), 1400)
   }
@@ -392,7 +408,7 @@ export default function GameView({ gameId, session, onBack }) {
       <div className="topbar">
         <button className="ghost back-control" onClick={onBack} aria-label="Back to games">←</button>
         <span className="title display">{game.name}</span>
-        <button className="code-chip" onClick={copyCode} title="Copy join code">{copied ? 'COPIED' : game.join_code}</button>
+        <button className="code-chip" onClick={copyCode} title="Copy join code">{copied ? 'COPIED' : game.join_code ?? '········'}</button>
         <span className="spacer" />
         <div className="topbar-control">
           <span className="control-label">STATUS</span>

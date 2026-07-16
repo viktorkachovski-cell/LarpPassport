@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(31);
+select extensions.plan(42);
 
 select extensions.has_schema('private', 'private schema exists');
 select extensions.is(
@@ -129,8 +129,8 @@ select extensions.ok(
 );
 select extensions.is(
   (select count(*)::integer from cron.job where jobname like 'purge-%'),
-  3,
-  'three bounded-retention jobs are scheduled'
+  4,
+  'four bounded-retention jobs are scheduled'
 );
 select extensions.ok(
   (select command like '%game.purge_after_days%'
@@ -166,6 +166,12 @@ values
     '00000000-0000-0000-0000-000000000000',
     'authenticated', 'authenticated', 'player@example.test', '', now(),
     '{"username":"test_player"}'::jsonb, now(), now()
+  ),
+  (
+    '90000000-0000-0000-0000-000000000009',
+    '00000000-0000-0000-0000-000000000000',
+    'authenticated', 'authenticated', 'loner@example.test', '', now(),
+    '{"username":"test_loner"}'::jsonb, now(), now()
   );
 
 select extensions.is(
@@ -235,9 +241,62 @@ select extensions.is(
   'players cannot read GM-only zone geometry'
 );
 
+select extensions.throws_ok(
+  $$select join_code from public.games$$,
+  '42501',
+  null,
+  'players cannot read the join code column'
+);
+select extensions.throws_ok(
+  $$select public.gm_get_join_code('30000000-0000-0000-0000-000000000003')$$,
+  '42501',
+  'GM access required',
+  'players cannot fetch the join code through the GM accessor'
+);
+select extensions.is(
+  (select count(*)::integer from public.profiles),
+  2,
+  'members see exactly the profiles that share a game'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '90000000-0000-0000-0000-000000000009',
+  true
+);
+select extensions.is(
+  (select count(*)::integer from public.profiles),
+  1,
+  'a user without shared games sees only their own profile'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  '20000000-0000-0000-0000-000000000002',
+  true
+);
 select public.set_location_consent(
   '30000000-0000-0000-0000-000000000003',
   true
+);
+
+-- The setup runbook verifies player markers before the hunt starts, so a
+-- draft game must accept pings.
+select extensions.is(
+  (
+    public.ingest_pings(
+      '30000000-0000-0000-0000-000000000003',
+      jsonb_build_array(jsonb_build_object(
+        'lat', 42.0,
+        'lng', 23.0,
+        'accuracy', 5,
+        'recorded_at', (now() - interval '5 minutes')::text
+      )),
+      0
+    )->>'accepted'
+  )::integer,
+  1,
+  'a draft game accepts location pings during setup'
 );
 reset role;
 
@@ -258,6 +317,12 @@ select set_config(
 update public.games
 set status = 'active'
 where id = '30000000-0000-0000-0000-000000000003';
+
+select extensions.is(
+  public.gm_get_join_code('30000000-0000-0000-0000-000000000003'),
+  'A1B2C3D4',
+  'the GM can fetch the join code through the accessor'
+);
 
 insert into public.zones (
   id, game_id, name, geog, radius_m, trigger_mode
@@ -349,6 +414,50 @@ select extensions.is(
   0,
   'duplicate location ping is idempotent'
 );
+
+-- Invalid points are skipped and counted; they never poison the batch.
+select extensions.is(
+  (
+    public.ingest_pings(
+      '30000000-0000-0000-0000-000000000003',
+      jsonb_build_array(
+        jsonb_build_object(
+          'lat', 42.6977,
+          'lng', 23.3219,
+          'accuracy', 5,
+          'recorded_at', current_setting('test.ping_time'),
+          'battery', 80
+        ),
+        jsonb_build_object(
+          'lat', 42.6977,
+          'lng', 23.3219,
+          'accuracy', 5,
+          'recorded_at', (now() + interval '30 minutes')::text
+        )
+      ),
+      0
+    )->>'rejected'
+  )::integer,
+  1,
+  'a point with a skewed future timestamp is rejected individually'
+);
+select extensions.is(
+  (
+    public.ingest_pings(
+      '30000000-0000-0000-0000-000000000003',
+      jsonb_build_array(
+        jsonb_build_object(
+          'lat', 200,
+          'lng', 23.3219,
+          'recorded_at', current_setting('test.ping_time')
+        )
+      ),
+      0
+    )->>'accepted'
+  )::integer,
+  0,
+  'a fully invalid batch returns zero accepted instead of raising'
+);
 reset role;
 
 select extensions.is(
@@ -356,8 +465,8 @@ select extensions.is(
    from private.location_pings
    where game_id = '30000000-0000-0000-0000-000000000003'
      and profile_id = '20000000-0000-0000-0000-000000000002'),
-  1,
-  'raw trail stores one deduplicated ping'
+  2,
+  'raw trail stores the draft ping and one deduplicated active ping'
 );
 select extensions.is(
   (select count(*)::integer
@@ -384,6 +493,67 @@ select extensions.is(
      and type = 'zone_enter'),
   1,
   'automatic zone entry emits one event'
+);
+
+-- Stale points land in the trail but are not evaluated against zones, so a
+-- large offline dump cannot fire historical transitions or blow the API
+-- statement timeout.
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '20000000-0000-0000-0000-000000000002',
+  true
+);
+select public.ingest_pings(
+  '30000000-0000-0000-0000-000000000003',
+  jsonb_build_array(jsonb_build_object(
+    'lat', 42.0,
+    'lng', 23.0,
+    'accuracy', 5,
+    'recorded_at', (now() - interval '20 minutes')::text
+  )),
+  0
+);
+reset role;
+
+select extensions.is(
+  (select count(*)::integer
+   from private.zone_state
+   where zone_id = '40000000-0000-0000-0000-000000000004'
+     and profile_id = '20000000-0000-0000-0000-000000000002'
+     and inside),
+  1,
+  'a stale far-away ping does not change the recorded zone state'
+);
+select extensions.is(
+  (select count(*)::integer
+   from public.game_events
+   where game_id = '30000000-0000-0000-0000-000000000003'
+     and profile_id = '20000000-0000-0000-0000-000000000002'
+     and type = 'zone_exit'),
+  0,
+  'a stale far-away ping does not fire a zone exit'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '20000000-0000-0000-0000-000000000002',
+  true
+);
+select public.set_location_consent(
+  '30000000-0000-0000-0000-000000000003',
+  false
+);
+reset role;
+
+select extensions.is(
+  (select count(*)::integer
+   from public.player_positions
+   where game_id = '30000000-0000-0000-0000-000000000003'
+     and profile_id = '20000000-0000-0000-0000-000000000002'),
+  0,
+  'revoking consent deletes the latest stored position'
 );
 
 select * from extensions.finish();
