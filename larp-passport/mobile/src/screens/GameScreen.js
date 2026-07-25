@@ -201,7 +201,8 @@ export default function GameScreen({ gameId, session, onBack }) {
 
   const sendNow = useCallback(async () => {
     setError('')
-    const result = await flush(gameId)
+    // immediate: an explicit user action bypasses the reconnect jitter gate.
+    const result = await flush(gameId, { immediate: true })
     if (result?.error) setError(`Send failed: ${result.error}`)
     queueStatus().then(setQueue)
   }, [gameId])
