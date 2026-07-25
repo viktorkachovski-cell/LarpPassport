@@ -6,6 +6,7 @@ import * as SQLite from 'expo-sqlite'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
 import { createPingStore } from './pingStore'
+import { createReconnectGate } from './reconnectGate'
 
 export const LOCATION_TASK = 'larp-passport-location'
 const LEGACY_QUEUE_KEY = 'larp_ping_queue_v1' // pre-SQLite queue, imported once
@@ -25,6 +26,11 @@ export const GPS_PROFILES = {
     deferredUpdatesInterval: 90000,
   },
 }
+
+// Decorrelates the first automatic flush after a failure so a field full of
+// players regaining coverage at the same moment does not stampede the server.
+// Manual "SEND NOW" bypasses it — see flush({ immediate }).
+const reconnectGate = createReconnectGate()
 
 // One store per JS runtime. Android runs a single JS process for the app
 // (foreground UI and the background location task never execute JS
@@ -91,9 +97,19 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
 // we apply on the fly. Only one drain runs at a time; a second flush() call
 // (e.g. "SEND NOW" during a background tick) joins the running drain, which
 // keeps claiming batches until nothing is pending.
-export async function flush(gameId) {
+// `immediate` bypasses the reconnect jitter gate. The background location task
+// leaves it false; the in-app "SEND NOW" button sets it, because an explicit
+// user action must never sit behind a randomised delay.
+export async function flush(gameId, { immediate = false } = {}) {
   if (!gameId) return { accepted: 0, queued: 0 }
   const store = await getStore()
+  if (!immediate && reconnectGate.isBlocked()) {
+    // Stand down this tick. Nothing is claimed, so every queued point stays
+    // exactly where it is and the next task tick picks it up.
+    const deferredMs = reconnectGate.remainingMs()
+    const { queued } = await store.status(gameId)
+    return { accepted: 0, queued, deferred: true, deferredMs }
+  }
   let profileMode = null
   const result = await store.drain({
     gameId,
@@ -122,6 +138,10 @@ export async function flush(gameId) {
     await handleRejected(result.reason)
     return { accepted: result.accepted, queued: 0, reason: result.reason }
   }
+  // Arm on any failed send so the next automatic attempt is spread across the
+  // jitter window; clear once a flush demonstrably reaches the server.
+  if (result.error) reconnectGate.armAfterFailure()
+  else reconnectGate.clear()
   if (profileMode) await applyProfile(profileMode)
   return result
 }
