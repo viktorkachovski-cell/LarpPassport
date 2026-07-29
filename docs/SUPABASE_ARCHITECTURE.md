@@ -5,7 +5,7 @@ PostgreSQL **17.6**. The previous `larp-passport` project
 (`ondotybaijthxsodstts`) remains a rollback target until both clients pass the
 cutover smoke test.
 
-*Last verified against the live database: 2026-07-25.*
+*Last verified against the live database: 2026-07-29.*
 
 ## Overview
 
@@ -113,16 +113,24 @@ definer RPC must replicate the full pattern: explicit authentication check,
 input validation, fully schema-qualified references, explicit `revoke`/`grant`
 of execute, and database test coverage.
 
+New `postgres`-owned functions are closed by default: `PUBLIC`, `anon`, and
+`authenticated` receive no implicit `EXECUTE`. A migration must grant each API
+entry point deliberately. Existing RPC grants are unchanged.
+
 ### Security Advisor Baseline
 
 The expected advisor output is **17 warnings**:
 
 - **16 ×** `authenticated_security_definer_function_executable` — one per RPC
-  above. Intentional and expected.
+  above. Intentional and expected. The nine GM/admin or hunt-state mutation RPCs
+  have medium residual impact if an authorization regression is introduced; the
+  seven member/player-scoped RPCs are low residual severity after their current
+  identity, membership, input-bound, and rate-limit checks.
 - **1 ×** `auth_leaked_password_protection` — currently disabled. This is a
-  genuine open item, not an accepted tradeoff; it is a dashboard toggle
-  (Authentication → Password strength) and is worth enabling, especially since
-  email confirmation is off.
+  medium-severity open item, not an accepted tradeoff. Supabase only offers the
+  control on paid plans, while this project is on Free; enabling it therefore
+  requires an explicit plan/cost decision. It is worth enabling if the project
+  upgrades, especially since email confirmation is off.
 
 Treat **any deviation from this set** as the signal — a new warning name, or a
 definer function that is not in the list above. A raw count alone is no longer
@@ -141,6 +149,43 @@ PostGIS is installed in `extensions`, not `public`. Consequently:
 - The old ineffective `spatial_ref_sys` write trigger is unnecessary.
 - No event trigger is needed to repair RLS after the fact. Migrations enable
   RLS and create policies in the same change that creates each table.
+
+### `spatial_ref_sys` and the "RLS not enabled" advisor warning
+
+This warning belongs to the previous project (`ondotybaijthxsodstts`), not the
+active project. State verified on 2026-07-29:
+
+| | previous `ondotybaijthxsodstts` | active `ufcnxkowpkwayczbfnzy` |
+| --- | --- | --- |
+| Location | `public.spatial_ref_sys` | `extensions.spatial_ref_sys` |
+| RLS | disabled | disabled |
+| Effective `anon` / `authenticated` access | SELECT, **INSERT, UPDATE, DELETE** | SELECT only |
+| Advisor warning | fires | does not fire |
+
+On the previous project the exposure is worse than the lint title alone
+suggests: anonymous callers hold write privileges on the table, so the Data API
+can be used to corrupt or delete SRID definitions and break geometry operations
+in that project.
+
+It cannot be repaired safely by the project `postgres` role:
+
+- `alter table ... enable row level security` requires ownership, but the table
+  is owned by `supabase_admin`.
+- The API-role grants were issued by `supabase_admin` without grant option, so
+  `postgres` cannot revoke them.
+- Moving PostGIS into `extensions` requires a destructive extension rebuild
+  that can cascade through geography columns.
+
+Do not attempt those changes on a rollback environment. Decommission the
+previous project only after explicitly confirming that rollback is no longer
+needed. As of this verification it is still active and contains two Auth users,
+one game, two memberships, one character, one player position, and thirteen
+events; those rows may be test data, but that cannot be assumed from database
+state alone.
+
+The active project is protected on two independent axes: the table is outside
+the API-exposed `public` schema, and API roles have read-only effective access.
+The latter protection does not depend on the Data API's exposed-schema setting.
 
 ### Known: `zones_geog_idx` is not used by any current query
 
