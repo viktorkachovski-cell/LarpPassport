@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import HuntPanel from './HuntPanel'
 
@@ -188,5 +188,43 @@ describe('HuntPanel', () => {
     expect(screen.getByText('Awaiting GM assignment')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Assign target' }))
     await waitFor(() => expect(recovery.assignNextTarget).toHaveBeenCalledWith('player-1'))
+  })
+
+  it('keeps a ruling outcome visible until dismissed and blocks double submission', async () => {
+    const recovery = recoveryProps()
+    let resolveClaim
+    recovery.resolveClaim = vi.fn(() => new Promise((resolve) => { resolveClaim = resolve }))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(
+      <HuntPanel
+        hunt={{
+          phase: 'active',
+          players: [
+            { character_name: 'Ariadne', profile_id: 'player-1', state: 'alive', target_name: 'Chronos', target_profile_id: 'player-2', username: 'ariadne' },
+            { character_name: 'Chronos', profile_id: 'player-2', state: 'alive', target_name: 'Ariadne', target_profile_id: 'player-1', username: 'chronos' },
+          ],
+          claims: [{ hunter_name: 'Ariadne', id: 'claim-1', requested_at: new Date().toISOString(), status: 'pending', victim_name: 'Chronos' }],
+        }}
+        members={members}
+        characters={characters}
+        startHunt={vi.fn()}
+        resetHunt={vi.fn()}
+        refresh={vi.fn()}
+        {...recovery}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Force confirm' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Force confirm' }))
+    expect(recovery.resolveClaim).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Force confirm' }).disabled).toBe(true)
+
+    await act(async () => resolveClaim(null))
+    expect(await screen.findByRole('status')).toBeTruthy()
+    expect(screen.getByText('Claim confirmed: Chronos is eliminated.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss message' }))
+    expect(screen.queryByText('Claim confirmed: Chronos is eliminated.')).toBeNull()
+    expect(recovery.resolveClaim).toHaveBeenCalledOnce()
   })
 })

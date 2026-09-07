@@ -34,6 +34,8 @@ export default function MapPanel({
   const [draw, setDraw] = useState(null) // {type:'circle',center,radiusM} | {type:'polygon',points,cursor}
   const [editing, setEditing] = useState(null) // zone editor form state
   const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveOutcome, setSaveOutcome] = useState('')
   const [tick, setTick] = useState(0)
   const playerMarkers = useRef(new Map())
   const zoneMarkers = useRef([])
@@ -183,8 +185,8 @@ export default function MapPanel({
   }
 
   async function submitEditor() {
-    if (!editing) return
-    setSaveError('')
+    if (!editing || saving) return
+    setSaveError(''); setSaveOutcome('')
     const base = {
       id: editing.id,
       name: editing.name.trim() || 'Unnamed zone',
@@ -204,19 +206,27 @@ export default function MapPanel({
         ? pointEwkt(editing.center.lng, editing.center.lat)
         : polygonEwkt(editing.points)
     }
-    const err = await saveZone(base)
-    if (err) { setSaveError(err.message); return }
-    setEditing(null)
-    setSelectedId(null)
+    setSaving(true)
+    try {
+      const err = await saveZone(base)
+      if (err) { setSaveError(err.message); return }
+      setSaveOutcome(`Zone "${base.name}" ${editing.id ? 'saved' : 'created'}.`)
+      setEditing(null)
+      setSelectedId(null)
+    } catch (err) { setSaveError(err.message) } finally { setSaving(false) }
   }
 
   async function removeZone() {
-    if (!editing?.id) return
+    if (!editing?.id || saving) return
     if (!window.confirm(`Delete zone "${editing.name}"?`)) return
-    const err = await deleteZone(editing.id)
-    if (err) { setSaveError(err.message); return }
-    setEditing(null)
-    setSelectedId(null)
+    setSaving(true); setSaveError(''); setSaveOutcome('')
+    try {
+      const err = await deleteZone(editing.id)
+      if (err) { setSaveError(err.message); return }
+      setSaveOutcome(`Zone "${editing.name}" deleted.`)
+      setEditing(null)
+      setSelectedId(null)
+    } catch (err) { setSaveError(err.message) } finally { setSaving(false) }
   }
 
   // ---- zones layer + labels ----
@@ -366,6 +376,12 @@ export default function MapPanel({
             </div>
           ))}
           {zones.length === 0 && !draw && <p className="hint">No zones yet. Draw one to trigger events when players arrive.</p>}
+          {saveOutcome && (
+            <div className="outcome outcome-ok" role="status">
+              <span>{saveOutcome}</span>
+              <button type="button" className="ghost" onClick={() => setSaveOutcome('')} aria-label="Dismiss message">Dismiss</button>
+            </div>
+          )}
         </div>
 
         {editing && (
@@ -409,11 +425,11 @@ export default function MapPanel({
             {editing.zone_type === 'event' && <div className="field"><label>Message to the player (payload)</label>
               <textarea rows="2" style={{ width: '100%' }} value={editing.message} onChange={(e) => setEditing({ ...editing, message: e.target.value })} /></div>}
             <div className="row">
-              <button className="primary" onClick={submitEditor}>{editing.id ? 'Save zone' : 'Create zone'}</button>
-              <button className="ghost" onClick={() => { setEditing(null); setSelectedId(null) }}>Close</button>
-              {editing.id && <button className="danger" onClick={removeZone}>Delete</button>}
+              <button className="primary" disabled={saving} onClick={submitEditor}>{saving ? 'Saving…' : editing.id ? 'Save zone' : 'Create zone'}</button>
+              <button className="ghost" disabled={saving} onClick={() => { setEditing(null); setSelectedId(null) }}>Close</button>
+              {editing.id && <button className="danger" disabled={saving} onClick={removeZone}>Delete</button>}
             </div>
-            {saveError && <p className="error">{saveError}</p>}
+            {saveError && <p className="error" role="alert">{saveError}</p>}
           </div>
         )}
 

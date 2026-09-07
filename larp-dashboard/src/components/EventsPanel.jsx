@@ -5,7 +5,11 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
   const [filter, setFilter] = useState('all')
   const [target, setTarget] = useState('all')
   const [message, setMessage] = useState('')
-  const [sendState, setSendState] = useState('')
+  // Outcomes stay visible until dismissed or superseded by the next action.
+  const [sendState, setSendState] = useState(null) // { tone, text }
+  const [sending, setSending] = useState(false)
+  const [decision, setDecision] = useState(null) // { tone, text }
+  const [busyEvent, setBusyEvent] = useState(null)
 
   const shown = useMemo(
     () => filter === 'pending' ? pendingEvents : events,
@@ -35,15 +39,41 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
   }
 
   async function send() {
-    if (!message.trim()) return
+    if (!message.trim() || sending) return
     const players = members.filter((member) => member.role === 'player').map((member) => member.profile_id)
     const targets = target === 'all' ? players : [target]
-    if (targets.length === 0) { setSendState('No players to message yet.'); return }
-    const error = await broadcast(targets, message.trim())
-    setSendState(error ? error.message : `Sent to ${targets.length} player${targets.length === 1 ? '' : 's'}.`)
-    if (!error) setMessage('')
-    setTimeout(() => setSendState(''), 2500)
+    if (targets.length === 0) { setSendState({ tone: 'error', text: 'No players to message yet.' }); return }
+    setSending(true); setSendState(null)
+    try {
+      const error = await broadcast(targets, message.trim())
+      if (error) { setSendState({ tone: 'error', text: `Not sent: ${error.message}` }); return }
+      setSendState({ tone: 'ok', text: `Sent to ${targets.length} player${targets.length === 1 ? '' : 's'}.` })
+      setMessage('')
+    } catch (error) {
+      setSendState({ tone: 'error', text: `Not sent: ${error.message}` })
+    } finally { setSending(false) }
   }
+
+  async function decide(event, action) {
+    if (busyEvent) return
+    setBusyEvent(event.id); setDecision(null)
+    const who = event.profile_id ? usernameOf(event.profile_id) : 'System'
+    const what = event.type === 'zone_boundary_exit' ? 'breach' : 'event'
+    try {
+      const error = await (action === 'confirm' ? confirmEvent(event) : dismissEvent(event))
+      if (error) { setDecision({ tone: 'error', text: `Could not ${action} the ${what} for ${who}: ${error.message}` }); return }
+      setDecision({ tone: 'ok', text: action === 'confirm' ? `${what === 'breach' ? 'Breach' : 'Event'} confirmed for ${who}.` : `${what === 'breach' ? 'Breach' : 'Event'} dismissed for ${who}.` })
+    } catch (error) {
+      setDecision({ tone: 'error', text: `Could not ${action} the ${what} for ${who}: ${error.message}` })
+    } finally { setBusyEvent(null) }
+  }
+
+  const outcome = (state, clear) => state && (
+    <div className={`outcome ${state.tone === 'error' ? 'outcome-error' : 'outcome-ok'}`} role={state.tone === 'error' ? 'alert' : 'status'}>
+      <span>{state.text}</span>
+      <button type="button" className="ghost" onClick={clear} aria-label="Dismiss message">Dismiss</button>
+    </div>
+  )
 
   return (
     <div className="panel-pad events-panel">
@@ -61,10 +91,12 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
           </select>
           <input placeholder="Message players - appears in their app instantly" value={message}
             onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} />
-          <button className="primary" disabled={!message.trim()} onClick={send}>Send broadcast</button>
+          <button className="primary" disabled={!message.trim() || sending} onClick={send}>{sending ? 'Sending…' : 'Send broadcast'}</button>
         </div>
-        {sendState && <span className="notice inline-notice">{sendState}</span>}
+        {outcome(sendState, () => setSendState(null))}
       </section>
+
+      {outcome(decision, () => setDecision(null))}
 
       <div className="event-toolbar">
         <div><span className="micro-label">EVENT STREAM</span><h2>Timeline activity</h2></div>
@@ -92,8 +124,8 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
               {event.payload?.message && event.type === 'zone_enter' && <p>Player message: "{event.payload.message}"</p>}
               {event.status === 'pending' && (
                 <div className="event-actions">
-                  <button className="primary" onClick={() => confirmEvent(event)}>{breach ? 'Confirm breach' : 'Confirm'}</button>
-                  <button className="ghost" onClick={() => dismissEvent(event)}>Dismiss</button>
+                  <button className="primary" disabled={busyEvent === event.id} onClick={() => decide(event, 'confirm')}>{breach ? 'Confirm breach' : 'Confirm'}</button>
+                  <button className="ghost" disabled={busyEvent === event.id} onClick={() => decide(event, 'dismiss')}>Dismiss</button>
                   {breach && <button className="danger" onClick={() => onOpenHunt?.()}>Eliminate via Hunt</button>}
                 </div>
               )}

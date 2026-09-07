@@ -36,7 +36,9 @@ export default function HuntPanel({
   refresh,
 }) {
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
+  // Outcome of the last consequential action. It stays until the GM dismisses
+  // it or starts another action; dismissing it changes no game state.
+  const [outcome, setOutcome] = useState(null) // { tone: 'error' | 'ok', text }
   const [editingChain, setEditingChain] = useState(false)
   const [chainOrder, setChainOrder] = useState([])
   const players = members.filter((member) => member.role === 'player')
@@ -45,38 +47,47 @@ export default function HuntPanel({
   )
   const ready = players.length >= 2 && players.every((player) => readyCharacters.has(player.profile_id))
 
-  async function run(action, onSuccess) {
-    setBusy(true); setMessage('')
-    const error = await action()
-    setBusy(false)
-    setMessage(error ? error.message : '')
-    if (!error) onSuccess?.()
+  async function run(action, { onSuccess, success } = {}) {
+    if (busy) return
+    setBusy(true); setOutcome(null)
+    try {
+      const error = await action()
+      if (error) { setOutcome({ tone: 'error', text: error.message }); return }
+      if (success) setOutcome({ tone: 'ok', text: success })
+      onSuccess?.()
+    } catch (error) {
+      setOutcome({ tone: 'error', text: error.message })
+    } finally { setBusy(false) }
   }
 
   function begin() {
     if (!window.confirm(`Start the hunt with ${players.length} players? The roster and GM-only location privacy will be locked.`)) return
-    run(startHunt)
+    run(startHunt, { success: 'Hunt started. Every player has a secret target.' })
   }
 
   function reset() {
     if (!window.confirm('Reset this hunt? Assignments, claims, and the current winner will be cleared.')) return
-    run(resetHunt)
+    run(resetHunt, { success: 'Hunt reset. Assignments, claims and the winner were cleared.' })
   }
 
   function forceClaim(claim, confirmed) {
     const action = confirmed ? 'confirm' : 'reject'
     if (!window.confirm(`Force ${action} this claim? This GM decision overrides the player response.`)) return
-    run(() => resolveClaim(claim.id, confirmed))
+    run(() => resolveClaim(claim.id, confirmed), {
+      success: confirmed
+        ? `Claim confirmed: ${claim.victim_name} is eliminated.`
+        : `Claim rejected: ${claim.victim_name} stays in the hunt.`,
+    })
   }
 
   function forceEliminate(player) {
     if (!window.confirm(`Eliminate ${player.character_name} and repair the target chain?`)) return
-    run(() => eliminatePlayer(player.profile_id))
+    run(() => eliminatePlayer(player.profile_id), { success: `${player.character_name} eliminated. The target chain was repaired.` })
   }
 
   function restore(player) {
     if (!window.confirm(`Restore ${player.character_name} to the hunt? Their location consent will remain off until they enable it.`)) return
-    run(() => restorePlayer(player.profile_id))
+    run(() => restorePlayer(player.profile_id), { success: `${player.character_name} restored to the hunt.` })
   }
 
   function editChain() {
@@ -98,13 +109,20 @@ export default function HuntPanel({
 
   function applyChain() {
     if (!window.confirm('Apply this complete target order? Pending claims will be rejected.')) return
-    run(() => saveChain(chainOrder), () => setEditingChain(false))
+    run(() => saveChain(chainOrder), { onSuccess: () => setEditingChain(false), success: 'Target chain applied. Stale pending claims were rejected.' })
   }
 
   function assignTarget(player) {
     if (!window.confirm(`Assign the inherited target to ${player.character_name}?`)) return
-    run(() => assignNextTarget(player.profile_id))
+    run(() => assignNextTarget(player.profile_id), { success: `Target assigned to ${player.character_name}.` })
   }
+
+  const outcomeBox = outcome && (
+    <div className={`outcome ${outcome.tone === 'error' ? 'outcome-error' : 'outcome-ok'}`} role={outcome.tone === 'error' ? 'alert' : 'status'}>
+      <span>{outcome.text}</span>
+      <button type="button" className="ghost" onClick={() => setOutcome(null)} aria-label="Dismiss message">Dismiss</button>
+    </div>
+  )
 
   if (!hunt) return <div className="panel-pad hunt-panel"><p className="hint">Loading hunt state...</p></div>
 
@@ -122,7 +140,7 @@ export default function HuntPanel({
           <span className={`badge-pill ${readyCharacters.size >= players.length ? 'on' : 'off'}`}>{readyCharacters.size} CHARACTERS {readyCharacters.size >= players.length ? '✓' : ''}</span>
         </div>
         {!ready && <p className="error mt">At least two players are required, and every player needs a non-NPC character.</p>}
-        {message && <p className="error mt">{message}</p>}
+        {outcomeBox}
         <div className="row mt">
           <button className="primary" disabled={!ready || busy} onClick={begin}>{busy ? 'Starting...' : 'Start hunt'}</button>
           <button className="ghost" disabled={busy} onClick={() => run(refresh)}>Refresh readiness</button>
@@ -148,7 +166,7 @@ export default function HuntPanel({
         <button className="ghost" disabled={busy} onClick={() => run(refresh)}>Refresh</button>
         <button className="danger" disabled={busy} onClick={reset}>Reset hunt</button>
       </div>
-      {message && <p className="error mb">{message}</p>}
+      {outcomeBox}
 
       {hunt.phase === 'finished' && hunt.winner && (
         <div className="winner-banner">

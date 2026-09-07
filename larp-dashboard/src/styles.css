@@ -155,6 +155,33 @@ label { display: block; margin-bottom: 5px; color: var(--muted); font-family: va
 .access-card { text-align: center; }
 .access-card h2 { margin-bottom: 8px; color: var(--cyan); }
 .access-card button { margin-top: 12px; }
+.outcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13.5px;
+}
+.outcome-ok { color: var(--green); border-color: var(--green-border); background: rgba(63, 214, 143, 0.06); }
+.outcome-error { color: var(--red); border-color: var(--red-border); background: rgba(255, 84, 73, 0.08); }
+.outcome button { min-height: 30px; padding-block: 3px; flex: none; }
+.pending-decisions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 16px;
+  color: var(--amber);
+  background: rgba(255, 176, 32, 0.08);
+  border-bottom: 1px solid var(--amber-border);
+  font-size: 13.5px;
+}
+.pending-decisions b { font-family: var(--font-display); letter-spacing: 0.04em; }
+.pending-decisions .row { gap: 8px; }
 .action-error {
   display: flex;
   align-items: center;

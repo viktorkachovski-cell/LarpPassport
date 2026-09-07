@@ -213,7 +213,10 @@ export default function GameScreen({ gameId, session, onBack }) {
     stopSharing(gameId).then(() => setSharing(false)).catch(() => {})
   }, [gameId, hunt?.alive, hunt?.participant, sharing])
 
+  const [sharingBusy, setSharingBusy] = useState(false)
   const toggleSharing = useCallback(async (next) => {
+    if (sharingBusy) return
+    setSharingBusy(true)
     setError('')
     try {
       await updateLocationConsent({
@@ -226,8 +229,8 @@ export default function GameScreen({ gameId, session, onBack }) {
       setSharing(next)
     } catch (toggleError) {
       setError(toggleError.message)
-    }
-  }, [gameId])
+    } finally { setSharingBusy(false) }
+  }, [gameId, sharingBusy])
 
   const sendNow = useCallback(async () => {
     setError('')
@@ -239,14 +242,20 @@ export default function GameScreen({ gameId, session, onBack }) {
     } catch (error) { setError(error.message) }
   }, [gameId])
 
+  // Outcome of the player's last hunt action. Stays until dismissed or the
+  // next action; dismissing it never touches server state.
+  const [huntOutcome, setHuntOutcome] = useState('')
+  const huntBusyRef = useRef(false)
   const requestElimination = useCallback(async () => {
-    setHuntBusy(true); setHuntError('')
+    if (huntBusyRef.current) return
+    huntBusyRef.current = true
+    setHuntBusy(true); setHuntError(''); setHuntOutcome('')
     try {
     const { error: claimError } = await supabase.rpc('request_elimination', { g: gameId })
-    setHuntBusy(false)
     if (claimError) { setHuntError(claimError.message); return }
+    setHuntOutcome('Claim sent. Your target must confirm it.')
     await loadHunt()
-    } catch (error) { setHuntError(error.message) } finally { setHuntBusy(false) }
+    } catch (error) { setHuntError(error.message) } finally { huntBusyRef.current = false; setHuntBusy(false) }
   }, [gameId, loadHunt])
 
   const confirmEliminationRequest = useCallback(() => {
@@ -262,17 +271,18 @@ export default function GameScreen({ gameId, session, onBack }) {
 
   const incomingClaimId = hunt?.incoming_claim?.id
   const respondToElimination = useCallback(async (confirmed) => {
-    if (!incomingClaimId) return
-    setHuntBusy(true); setHuntError('')
+    if (!incomingClaimId || huntBusyRef.current) return
+    huntBusyRef.current = true
+    setHuntBusy(true); setHuntError(''); setHuntOutcome('')
     try {
     const { data, error: responseError } = await supabase.rpc('respond_elimination', {
       claim_id: incomingClaimId,
       confirm_elimination: confirmed,
     })
-    setHuntBusy(false)
     if (responseError) { setHuntError(responseError.message); return }
     setHunt(data)
-    } catch (error) { setHuntError(error.message) } finally { setHuntBusy(false) }
+    setHuntOutcome(confirmed ? 'Elimination confirmed.' : 'Claim not confirmed. You stay in the hunt; the GM can still overrule.')
+    } catch (error) { setHuntError(error.message) } finally { huntBusyRef.current = false; setHuntBusy(false) }
   }, [incomingClaimId])
 
   const visibleEvents = events.filter((event) => event.player_visible && event.profile_id === uid)
@@ -321,6 +331,15 @@ export default function GameScreen({ gameId, session, onBack }) {
         <StateCell value={<Countdown to={hunt?.hidden_until} />} label="CLOAK LEFT" color={C.cyan} />
       </View>
 
+      {!!hunt?.incoming_claim && tab !== 'hunt' && (
+        <View style={styles.decisionBanner} accessibilityLiveRegion="polite">
+          <Text style={styles.decisionText}>1 decision waiting: a hunter claims they defeated you.</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setTab('hunt')} style={styles.decisionButton}>
+            <Text style={styles.decisionButtonText}>OPEN HUNT</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.tabs}>
         {[['hunt', 'HUNT'], ['sheet', 'CHARACTER'], ['events', 'EVENTS'], ['share', 'SHARING']].map(([key, label]) => (
           <TouchableOpacity key={key} onPress={() => setTab(key)} style={[styles.tab, tab === key && styles.activeTab]}>
@@ -335,6 +354,8 @@ export default function GameScreen({ gameId, session, onBack }) {
           hasCharacter={character !== null}
           busy={huntBusy}
           error={huntError}
+          outcome={huntOutcome}
+          dismissOutcome={() => setHuntOutcome('')}
           boundaryWarning={boundaryWarning}
           requestElimination={confirmEliminationRequest}
           respondToElimination={respondToElimination}
@@ -358,6 +379,7 @@ export default function GameScreen({ gameId, session, onBack }) {
           permission={permission}
           queue={queue}
           error={error}
+          sharingBusy={sharingBusy}
           toggleSharing={toggleSharing}
           sendNow={sendNow}
         />
@@ -417,7 +439,7 @@ const StateCell = memo(function StateCell({ value, label, color = C.text, border
   )
 })
 
-const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, boundaryWarning, requestElimination, respondToElimination, refresh }) {
+const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, outcome, dismissOutcome, boundaryWarning, requestElimination, respondToElimination, refresh }) {
   function confirmDefeat() {
     Alert.alert(
       'Confirm your elimination?',
@@ -525,7 +547,8 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, bou
           <Text style={styles.claimCaption}>
             {claimPending ? 'TARGET RESPONSE PENDING' : 'CLAIM ONLY AFTER THE LIVE BATTLE IS RESOLVED\nYOUR TARGET MUST CONFIRM // YOU STAY ANONYMOUS'}
           </Text>
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
+          {!!error && <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text>}
+          {!!outcome && <OutcomeNote text={outcome} onDismiss={dismissOutcome} />}
         </View>
       </View>
       <Text style={styles.hunterWarning}>SOMEONE IS HUNTING YOU. THEIR NAME IS NEVER SHOWN.</Text>
@@ -714,12 +737,12 @@ function PlayerMessageBox({ gameId }) {
         </TouchableOpacity>
       </View>
       <Text style={styles.privateCaption}>ONLY YOU AND THE GMS SEE THIS // 3s COOLDOWN</Text>
-      {!!status && <Text style={[styles.messageStatus, { color: status === 'Sent to the GM.' ? C.green : C.red }]}>{status}</Text>}
+      {!!status && <OutcomeNote text={status} tone={status === 'Sent to the GM.' ? 'ok' : 'error'} onDismiss={() => setStatus('')} />}
     </View>
   )
 }
 
-const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, queue, error, toggleSharing, sendNow }) {
+const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, queue, error, sharingBusy, toggleSharing, sendNow }) {
   const status = describeSharing({
     sharing, permission, lastFixAt: queue.lastFixAt, queued: queue.queued ?? 0, failed: queue.failed ?? 0, lastError: queue.lastError,
   })
@@ -734,6 +757,7 @@ const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, 
           </View>
           <Switch
             value={sharing}
+            disabled={sharingBusy}
             onValueChange={toggleSharing}
             trackColor={{ true: C.cyan, false: C.lineStrong }}
             thumbColor={sharing ? C.ink : C.muted}
@@ -785,6 +809,7 @@ const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
   const [draft, setDraft] = useState(null)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
   const fields = character.fields ?? {}
   const editable = stats.filter((stat) => stat.player_editable)
   const locked = stats.filter((stat) => !stat.player_editable)
@@ -793,7 +818,8 @@ const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
   const dirty = draft && Object.keys(draft).some((key) => String(draft[key]) !== String(fields[key] ?? ''))
 
   async function save() {
-    setError(''); setSaved(false)
+    if (busy) return
+    setBusy(true); setError(''); setSaved(false)
     try {
     const next = { ...fields }
     for (const stat of editable) {
@@ -805,8 +831,7 @@ const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
     if (saveError) { setError(saveError.message); return }
     setDraft(null)
     setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
-    } catch (error) { setError(error.message) }
+    } catch (error) { setError(error.message) } finally { setBusy(false) }
   }
 
   return (
@@ -847,11 +872,11 @@ const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
               />
             </View>
           ))}
-          <TouchableOpacity disabled={!dirty} onPress={save} style={[styles.cyanButton, !dirty && styles.disabled]}>
-            <Text style={styles.filledButtonText}>SAVE CHANGES</Text>
+          <TouchableOpacity disabled={!dirty || busy} onPress={save} style={[styles.cyanButton, (!dirty || busy) && styles.disabled]}>
+            <Text style={styles.filledButtonText}>{busy ? 'SAVING...' : 'SAVE CHANGES'}</Text>
           </TouchableOpacity>
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
-          {saved && <Text style={styles.successText}>Changes synchronized.</Text>}
+          {!!error && <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text>}
+          {saved && <OutcomeNote text="Changes saved." onDismiss={() => setSaved(false)} />}
         </View>
       )}
     </ScrollView>
@@ -916,6 +941,20 @@ function Field({ label, style, ...props }) {
     <View style={styles.field}>
       <Text style={styles.inputLabel}>{label}</Text>
       <TextInput style={[styles.input, style]} placeholderTextColor={C.lineStrong} {...props} />
+    </View>
+  )
+}
+
+// Consequential outcome that stays until the player dismisses it. Dismissing
+// only clears local state; it never confirms, resolves or acknowledges anything
+// on the server.
+function OutcomeNote({ text, tone = 'ok', onDismiss }) {
+  return (
+    <View style={[styles.outcomeNote, tone === 'error' && styles.outcomeNoteError]} accessibilityLiveRegion="polite">
+      <Text style={[styles.outcomeText, tone === 'error' && styles.errorText, tone === 'error' && styles.outcomeErrorText]}>{text}</Text>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Dismiss message" onPress={onDismiss} style={styles.outcomeDismiss}>
+        <Text style={styles.outcomeDismissText}>DISMISS</Text>
+      </TouchableOpacity>
     </View>
   )
 }
@@ -1018,10 +1057,19 @@ const styles = StyleSheet.create({
   filledButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 13.5, letterSpacing: 1.05, textAlign: 'center' },
   disabledButtonText: { color: C.muted, fontFamily: F.displayBold, fontSize: 12.5, letterSpacing: 0.7, textAlign: 'center' },
   disabled: { opacity: 0.55 },
+  outcomeNote: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(63,214,143,0.08)', borderColor: C.greenBorder, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, marginTop: 12 },
+  outcomeNoteError: { backgroundColor: 'rgba(255,84,73,0.08)', borderColor: C.redBorder },
+  outcomeText: { flex: 1, color: C.green, fontFamily: F.bodyMedium, fontSize: 13, lineHeight: 19 },
+  outcomeErrorText: { marginTop: 0 },
+  outcomeDismiss: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 },
+  outcomeDismissText: { color: C.text, fontFamily: F.displaySemiBold, fontSize: 12, letterSpacing: 0.8 },
+  decisionBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,176,32,0.10)', borderTopColor: C.amberBorder, borderTopWidth: 1, borderBottomColor: C.amberBorder, borderBottomWidth: 1, paddingHorizontal: 13, paddingVertical: 8 },
+  decisionText: { flex: 1, color: C.amber, fontFamily: F.bodyMedium, fontSize: 13.5, lineHeight: 19 },
+  decisionButton: { minHeight: 44, justifyContent: 'center', backgroundColor: C.amber, borderRadius: 6, paddingHorizontal: 12 },
+  decisionButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 12.5, letterSpacing: 0.8 },
   claimCaption: { color: C.muted, fontFamily: F.mono, fontSize: 8.5, lineHeight: 14, letterSpacing: 0.35, textAlign: 'center', marginTop: 8 },
   hunterWarning: { color: C.muted, fontFamily: F.mono, fontSize: 8.5, lineHeight: 14, letterSpacing: 0.65, textAlign: 'center', marginTop: 13 },
   errorText: { color: C.red, fontFamily: F.bodyMedium, fontSize: 12.5, lineHeight: 18, marginTop: 10 },
-  successText: { color: C.green, fontFamily: F.bodyMedium, fontSize: 12.5, marginTop: 9 },
   resultIcon: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 17 },
   winnerIcon: { borderColor: C.cyan },
   otherIcon: { borderColor: C.lineStrong },
@@ -1046,7 +1094,6 @@ const styles = StyleSheet.create({
   smallCyanButton: { backgroundColor: C.cyan, borderRadius: 5, paddingHorizontal: 17, paddingVertical: 8 },
   smallCyanButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 11.5, letterSpacing: 0.8 },
   privateCaption: { color: C.muted, fontFamily: F.mono, fontSize: 8, letterSpacing: 0.65, marginTop: 9 },
-  messageStatus: { fontFamily: F.bodyMedium, fontSize: 12.5, marginTop: 8 },
   eventCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 9 },
   eventTopRow: { flexDirection: 'row', alignItems: 'center' },
   eventTag: { flex: 1, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.35 },

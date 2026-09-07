@@ -6,12 +6,14 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
   const [stats, setStats] = useState((game.template?.stats ?? []).map((s) => ({ ...s })))
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   const patch = (i, p) => setStats((prev) => prev.map((s, j) => (j === i ? { ...s, ...p } : s)))
   const remove = (i) => setStats((prev) => prev.filter((_, j) => j !== i))
   const add = () => setStats((prev) => [...prev, { key: '', label: '', type: 'number', default: 0, min: 0, max: 10, player_editable: false }])
 
   async function save() {
+    if (busy) return
     setError(''); setSaved(false)
     const keys = new Set()
     const cleaned = []
@@ -30,9 +32,12 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
       }
       cleaned.push(out)
     }
-    const err = await updateGame({ template: { stats: cleaned } })
-    if (err) setError(err.message)
-    else { setSaved(true); setTimeout(() => setSaved(false), 1600) }
+    setBusy(true)
+    try {
+      const err = await updateGame({ template: { stats: cleaned } })
+      if (err) setError(err.message)
+      else setSaved(true)
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
 
   return (
@@ -65,10 +70,15 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
       </table>
       <div className="row mt">
         <button onClick={add}>Add stat</button>
-        <button className="primary" onClick={save}>Save template</button>
-        {saved && <span className="notice" style={{ margin: 0 }}>Saved</span>}
+        <button className="primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save template'}</button>
       </div>
-      {error && <p className="error">{error}</p>}
+      {saved && (
+        <div className="outcome outcome-ok" role="status">
+          <span>Template saved.</span>
+          <button type="button" className="ghost" onClick={() => setSaved(false)} aria-label="Dismiss message">Dismiss</button>
+        </div>
+      )}
+      {error && <p className="error" role="alert">{error}</p>}
     </div>
   )
 }

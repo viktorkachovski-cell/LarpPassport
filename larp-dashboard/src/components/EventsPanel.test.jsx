@@ -25,7 +25,7 @@ function props(overrides = {}) {
 afterEach(cleanup)
 
 describe('EventsPanel', () => {
-  it('provides the complete GM adjudication flow for a pending boundary breach', () => {
+  it('provides the complete GM adjudication flow for a pending boundary breach', async () => {
     const event = {
       created_at: new Date().toISOString(),
       id: 'event-1',
@@ -42,12 +42,31 @@ describe('EventsPanel', () => {
     expect(screen.getByText(/Northern anomaly/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm breach' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Eliminate via Hunt' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm breach' }))
+    await waitFor(() => expect(panelProps.confirmEvent).toHaveBeenCalledWith(event))
+    expect(panelProps.confirmEvent).toHaveBeenCalledOnce()
+    expect(await screen.findByText('Breach confirmed for ariadne.')).toBeTruthy()
 
-    expect(panelProps.confirmEvent).toHaveBeenCalledWith(event)
-    expect(panelProps.dismissEvent).toHaveBeenCalledWith(event)
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss', exact: true }))
+    await waitFor(() => expect(panelProps.dismissEvent).toHaveBeenCalledWith(event))
+    expect(await screen.findByText('Breach dismissed for ariadne.')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminate via Hunt' }))
     expect(panelProps.onOpenHunt).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss message' }))
+    expect(screen.queryByText('Breach dismissed for ariadne.')).toBeNull()
+    expect(panelProps.dismissEvent).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a failed broadcast visible with the draft intact', async () => {
+    const panelProps = props({ broadcast: vi.fn().mockResolvedValue(new Error('permission denied')) })
+    render(<EventsPanel {...panelProps} />)
+    fireEvent.change(screen.getByPlaceholderText(/appears in their app instantly/), { target: { value: 'Regroup.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send broadcast' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('permission denied')
+    expect(screen.getByPlaceholderText(/appears in their app instantly/).value).toBe('Regroup.')
   })
 
   it('broadcasts a GM message only to player profiles', async () => {

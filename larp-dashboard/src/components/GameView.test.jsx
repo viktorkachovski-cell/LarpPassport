@@ -261,6 +261,34 @@ describe('GameView authoritative recovery', () => {
     await screen.findByText('Server updated just now')
   })
 
+  it('lists pending GM decisions from authoritative state above the tabs', async () => {
+    mocks.queryResults.games = { data: game(), error: null }
+    mocks.queryResults.game_events_pending = { data: [
+      { id: 'breach', seq: 3, status: 'pending', type: 'zone_boundary_exit' },
+      { id: 'trigger', seq: 2, status: 'pending', type: 'zone_enter' },
+    ], error: null }
+    mocks.rpc.mockImplementation((fn) => Promise.resolve(
+      fn === 'gm_get_join_code'
+        ? { data: 'ABCDEFGH', error: null }
+        : { data: {
+          phase: 'active',
+          players: [{ profile_id: 'p1', state: 'alive', target_profile_id: null }, { profile_id: 'p2', state: 'alive', target_profile_id: 'p1' }],
+          claims: [{ id: 'c1', status: 'pending' }, { id: 'c2', status: 'confirmed' }],
+        }, error: null },
+    ))
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    const region = await screen.findByRole('region', { name: 'Pending decisions' })
+    expect(region.textContent).toContain('4 DECISIONS WAITING')
+    expect(region.textContent).toContain('1 elimination claim to rule on')
+    expect(region.textContent).toContain('1 player waiting for a target assignment')
+    expect(region.textContent).toContain('1 boundary breach to review')
+    expect(region.textContent).toContain('1 zone trigger to confirm')
+    fireEvent.click(screen.getByRole('button', { name: 'Open Events' }))
+    expect(screen.getByText(/Events panel/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open Events' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open Hunt' })).toBeTruthy()
+  })
+
   it('ignores an older snapshot that finishes after a newer refresh', async () => {
     let resolveOld
     mocks.queryResults.games = new Promise((resolve) => { resolveOld = resolve })

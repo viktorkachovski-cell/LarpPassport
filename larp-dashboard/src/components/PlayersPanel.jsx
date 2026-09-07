@@ -1,7 +1,27 @@
+import { useState } from 'react'
 import { timeAgo } from '../lib/geo'
 
 export default function PlayersPanel({ members, positions, uid, game, setMemberRole, removeMember, updateGame }) {
   const gmCount = members.filter((m) => m.role === 'gm').length
+  const [busy, setBusy] = useState(null)
+  const [outcome, setOutcome] = useState(null)
+
+  async function act(profileId, label, action) {
+    if (busy) return
+    setBusy(profileId); setOutcome(null)
+    try {
+      const error = await action()
+      setOutcome(error ? { tone: 'error', text: `${label} failed: ${error.message}` } : { tone: 'ok', text: `${label}.` })
+    } catch (error) {
+      setOutcome({ tone: 'error', text: `${label} failed: ${error.message}` })
+    } finally { setBusy(null) }
+  }
+
+  function remove(m) {
+    const name = m.profile?.username ?? 'this member'
+    if (!window.confirm(`Remove ${name} from the game? They will need the join code to come back.`)) return
+    act(m.profile_id, `Removed ${name}`, () => removeMember(m.profile_id))
+  }
 
   const consentActive = (m) =>
     m.sharing_enabled && m.location_consent_at &&
@@ -21,8 +41,8 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
             <tr key={m.profile_id}>
               <td>{m.profile?.username}{m.profile_id === uid && <span className="hint"> (you)</span>}</td>
               <td>
-                <select value={m.role} disabled={m.profile_id === uid && m.role === 'gm' && gmCount === 1}
-                  onChange={(e) => setMemberRole(m.profile_id, e.target.value)}>
+                <select value={m.role} disabled={busy === m.profile_id || (m.profile_id === uid && m.role === 'gm' && gmCount === 1)}
+                  onChange={(e) => act(m.profile_id, `Role of ${m.profile?.username ?? 'member'} set to ${e.target.value === 'gm' ? 'GM' : 'player'}`, () => setMemberRole(m.profile_id, e.target.value))}>
                   <option value="player">player</option>
                   <option value="gm">GM</option>
                 </select>
@@ -34,11 +54,17 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
               </td>
               <td className="hint">{timeAgo(positions[m.profile_id]?.recorded_at)}</td>
               <td className="hint">{positions[m.profile_id]?.battery_pct != null ? Math.round(positions[m.profile_id].battery_pct) + '%' : '—'}</td>
-              <td>{m.profile_id !== uid && <button className="danger" onClick={() => removeMember(m.profile_id)}>Remove</button>}</td>
+              <td>{m.profile_id !== uid && <button className="danger" disabled={busy === m.profile_id} onClick={() => remove(m)}>Remove</button>}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {outcome && (
+        <div className={`outcome ${outcome.tone === 'error' ? 'outcome-error' : 'outcome-ok'}`} role={outcome.tone === 'error' ? 'alert' : 'status'}>
+          <span>{outcome.text}</span>
+          <button type="button" className="ghost" onClick={() => setOutcome(null)} aria-label="Dismiss message">Dismiss</button>
+        </div>
+      )}
       {members.length <= 1 && <p className="hint mt">Just you so far. Share the join code with your players.</p>}
     </div>
   )

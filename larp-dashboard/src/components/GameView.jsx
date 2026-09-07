@@ -257,6 +257,24 @@ export default function GameView({ gameId, session, onBack }) {
 
   const zoneNameOf = useCallback((zoneId) => zones.find((z) => z.id === zoneId)?.name ?? 'a zone', [zones])
 
+  // Pending GM decisions, derived from authoritative state only: the hunt
+  // admin snapshot and the fully paginated pending-event query, never the
+  // capped history page.
+  const decisions = useMemo(() => {
+    const items = []
+    const pendingClaims = (hunt?.claims ?? []).filter((claim) => claim.status === 'pending').length
+    const awaiting = hunt?.phase === 'active'
+      ? (hunt.players ?? []).filter((player) => player.state === 'alive' && !player.target_profile_id).length
+      : 0
+    const breaches = pendingEvents.filter((event) => event.type === 'zone_boundary_exit').length
+    const triggers = pendingEvents.length - breaches
+    if (pendingClaims) items.push({ key: 'claims', tab: 'hunt', text: `${pendingClaims} elimination claim${pendingClaims === 1 ? '' : 's'} to rule on` })
+    if (awaiting) items.push({ key: 'assign', tab: 'hunt', text: `${awaiting} player${awaiting === 1 ? '' : 's'} waiting for a target assignment` })
+    if (breaches) items.push({ key: 'breach', tab: 'events', text: `${breaches} boundary breach${breaches === 1 ? '' : 'es'} to review` })
+    if (triggers) items.push({ key: 'trigger', tab: 'events', text: `${triggers} zone trigger${triggers === 1 ? '' : 's'} to confirm` })
+    return items
+  }, [hunt, pendingEvents])
+
   const history = useMemo(() => [...new Map([...olderEvents, ...events].map((e) => [e.id, e])).values()].sort((a, b) => b.seq - a.seq), [events, olderEvents])
   async function loadOlder() {
     if (historyBusy || !history.length) return
@@ -542,6 +560,21 @@ export default function GameView({ gameId, session, onBack }) {
         <button className="ghost" onClick={refetchHunt}>Refresh</button><span className="gm-chip">GM</span>
       </div>
       <SyncStatus sync={sync} realtime={realtime} online={online} onRetry={refetchHunt} />
+      {decisions.length > 0 && (
+        <div className="pending-decisions" role="region" aria-label="Pending decisions" aria-live="polite">
+          <b>{decisions.length} DECISION{decisions.length === 1 ? '' : 'S'} WAITING</b>
+          {['hunt', 'events'].map((target) => {
+            const items = decisions.filter((item) => item.tab === target)
+            if (items.length === 0) return null
+            return (
+              <span key={target} className="row">
+                <span>{items.map((item) => item.text).join(' · ')}</span>
+                {tab !== target && <button type="button" className="ghost" onClick={() => setTab(target)}>Open {target === 'hunt' ? 'Hunt' : 'Events'}</button>}
+              </span>
+            )
+          })}
+        </div>
+      )}
       <div className="tabs">
         {['hunt', 'map', 'characters', 'template', 'events', 'players'].map((t) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => {

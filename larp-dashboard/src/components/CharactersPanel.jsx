@@ -11,6 +11,8 @@ export default function CharactersPanel({ game, characters, members, factions, u
   const [auditFor, setAuditFor] = useState(null)
   const [audit, setAudit] = useState([])
   const [error, setError] = useState('')
+  const [saved, setSaved] = useState('')
+  const [busy, setBusy] = useState(null) // character id or 'npc' | 'faction'
 
   const draftOf = (c) => drafts[c.id] ?? { name: c.name, faction_id: c.faction_id ?? '', fields: { ...(c.fields ?? {}) } }
   const isDirty = (c) => {
@@ -22,7 +24,8 @@ export default function CharactersPanel({ game, characters, members, factions, u
   const patchField = (c, key, value) => patchDraft(c, { fields: { ...draftOf(c).fields, [key]: value } })
 
   async function save(c) {
-    setError('')
+    if (busy) return
+    setError(''); setSaved('')
     const d = draftOf(c)
     const fields = { ...d.fields }
     for (const s of stats) {
@@ -31,9 +34,13 @@ export default function CharactersPanel({ game, characters, members, factions, u
         fields[s.key] = Number.isFinite(n) ? n : (s.default ?? 0)
       }
     }
-    const err = await saveCharacter(c.id, { name: d.name.trim() || c.name, faction_id: d.faction_id || null, fields })
-    if (err) { setError(`${c.name}: ${err.message}`); return }
-    setDrafts((prev) => { const n = { ...prev }; delete n[c.id]; return n })
+    setBusy(c.id)
+    try {
+      const err = await saveCharacter(c.id, { name: d.name.trim() || c.name, faction_id: d.faction_id || null, fields })
+      if (err) { setError(`${c.name}: ${err.message}`); return }
+      setDrafts((prev) => { const n = { ...prev }; delete n[c.id]; return n })
+      setSaved(`Saved ${d.name.trim() || c.name}.`)
+    } catch (err) { setError(`${c.name}: ${err.message}`) } finally { setBusy(null) }
   }
 
   async function showAudit(c) {
@@ -57,21 +64,31 @@ export default function CharactersPanel({ game, characters, members, factions, u
   }
 
   async function createNpc() {
-    if (!npcName.trim()) return
-    const err = await addNpc(npcName.trim())
-    if (err) setError(err.message); else setNpcName('')
+    if (!npcName.trim() || busy) return
+    setBusy('npc'); setError(''); setSaved('')
+    try {
+      const err = await addNpc(npcName.trim())
+      if (err) setError(err.message); else { setSaved(`NPC ${npcName.trim()} added.`); setNpcName('') }
+    } catch (err) { setError(err.message) } finally { setBusy(null) }
   }
 
   async function createFaction() {
-    if (!facName.trim()) return
-    const err = await addFaction(facName.trim(), facColor)
-    if (err) setError(err.message); else setFacName('')
+    if (!facName.trim() || busy) return
+    setBusy('faction'); setError(''); setSaved('')
+    try {
+      const err = await addFaction(facName.trim(), facColor)
+      if (err) setError(err.message); else { setSaved(`Faction ${facName.trim()} added.`); setFacName('') }
+    } catch (err) { setError(err.message) } finally { setBusy(null) }
   }
 
   async function removeNpc(c) {
-    setError('')
-    const err = await deleteCharacter(c.id)
-    if (err) setError(`${c.name}: ${err.message}`)
+    if (busy) return
+    if (!window.confirm(`Delete NPC "${c.name}"?`)) return
+    setBusy(c.id); setError(''); setSaved('')
+    try {
+      const err = await deleteCharacter(c.id)
+      if (err) setError(`${c.name}: ${err.message}`); else setSaved(`NPC ${c.name} deleted.`)
+    } catch (err) { setError(`${c.name}: ${err.message}`) } finally { setBusy(null) }
   }
 
   return (
@@ -109,9 +126,9 @@ export default function CharactersPanel({ game, characters, members, factions, u
                   ))}
                   <td>
                     <div className="row">
-                      <button className="primary" disabled={!isDirty(c)} onClick={() => save(c)}>Save</button>
+                      <button className="primary" disabled={!isDirty(c) || busy === c.id} onClick={() => save(c)}>{busy === c.id ? 'Saving…' : 'Save'}</button>
                       <button className="ghost" onClick={() => showAudit(c)}>History</button>
-                      {c.is_npc && <button className="danger" onClick={() => removeNpc(c)}>×</button>}
+                      {c.is_npc && <button className="danger" disabled={busy === c.id} onClick={() => removeNpc(c)}>×</button>}
                     </div>
                   </td>
                 </tr>
@@ -136,7 +153,7 @@ export default function CharactersPanel({ game, characters, members, factions, u
 
       <div className="row mt">
         <input placeholder="NPC name" value={npcName} onChange={(e) => setNpcName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNpc()} />
-        <button onClick={createNpc}>Add NPC</button>
+        <button disabled={busy === 'npc'} onClick={createNpc}>Add NPC</button>
       </div>
 
       <h3 className="mt" style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--muted)' }}>Factions</h3>
@@ -146,9 +163,15 @@ export default function CharactersPanel({ game, characters, members, factions, u
         ))}
         <input placeholder="New faction" value={facName} onChange={(e) => setFacName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createFaction()} />
         <input type="color" value={facColor} onChange={(e) => setFacColor(e.target.value)} style={{ width: 44, padding: 2 }} />
-        <button onClick={createFaction}>Add faction</button>
+        <button disabled={busy === 'faction'} onClick={createFaction}>Add faction</button>
       </div>
-      {error && <p className="error">{error}</p>}
+      {saved && (
+        <div className="outcome outcome-ok" role="status">
+          <span>{saved}</span>
+          <button type="button" className="ghost" onClick={() => setSaved('')} aria-label="Dismiss message">Dismiss</button>
+        </div>
+      )}
+      {error && <p className="error" role="alert">{error}</p>}
     </div>
   )
 }
