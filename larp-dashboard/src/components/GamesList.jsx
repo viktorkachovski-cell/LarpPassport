@@ -77,13 +77,13 @@ export default function GamesList({ session, onOpen }) {
         {!loading && !error && games.length === 0 && <p className="hint" style={{ textAlign: 'center' }}>No games yet. Create your first one below.</p>}
         <button onClick={load} disabled={loading}>{loading ? 'Loading games...' : 'Refresh games'}</button>
         <div className="row mt">
-          <input placeholder="New game name" value={name} onChange={(e) => setName(e.target.value)}
+          <input aria-label="New game name" placeholder="New game name" value={name} onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && createGame()} style={{ flex: 1 }} />
-          <button className="primary" onClick={createGame} disabled={busy}>Create game</button>
+          <button className="primary" onClick={createGame} disabled={busy || !name.trim()}>{busy ? 'Creating…' : 'Create game'}</button>
         </div>
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error" role="alert">{error}</p>}
         <p className="hint mt" style={{ textAlign: 'center' }}>
-          <a href="#" onClick={(e) => { e.preventDefault(); supabase.auth.signOut() }} style={{ color: 'var(--muted)' }}>Sign out</a>
+          <button type="button" className="text-button" onClick={() => supabase.auth.signOut()} style={{ color: 'var(--muted)' }}>Sign out</button>
         </p>
       </div>
     </div>

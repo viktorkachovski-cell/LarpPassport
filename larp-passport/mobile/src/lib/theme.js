@@ -3,7 +3,7 @@ export const C = {
   panel: '#131A26',
   panel2: '#1B2434',
   line: '#34435C',
-  lineStrong: '#4A5C7C',
+  lineStrong: '#5B6F93', // 3.4:1 on panel: input and button boundaries
   text: '#EDF2FA',
   muted: '#9DACC4',
   cyan: '#47D6F0',

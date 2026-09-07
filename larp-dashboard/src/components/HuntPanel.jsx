@@ -191,8 +191,8 @@ export default function HuntPanel({
               <div className="chain-order-row" key={profileId}>
                 <span className="chain-index">{String(index + 1).padStart(2, '0')}</span>
                 <span className="chain-route"><b>{player?.character_name}</b> targets <b>{next?.character_name}</b></span>
-                <button className="ghost" disabled={busy || index === 0} onClick={() => moveChain(index, -1)}>Up</button>
-                <button className="ghost" disabled={busy || index === chainOrder.length - 1} onClick={() => moveChain(index, 1)}>Down</button>
+                <button className="ghost" aria-label={`Move ${player?.character_name ?? 'player'} up`} disabled={busy || index === 0} onClick={() => moveChain(index, -1)}>Up</button>
+                <button className="ghost" aria-label={`Move ${player?.character_name ?? 'player'} down`} disabled={busy || index === chainOrder.length - 1} onClick={() => moveChain(index, 1)}>Down</button>
               </div>
             )
           })}
@@ -212,7 +212,7 @@ export default function HuntPanel({
               <button className="ghost" disabled={busy} onClick={editChain}>Edit target chain</button>
             )}
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="Target chain table" tabIndex={0}>
             <table className="grid hunt-grid">
               <thead><tr><th>Traveller</th><th>State</th><th>Targets</th><th>Signal</th><th>Eliminated</th><th>GM action</th></tr></thead>
               <tbody>
@@ -228,13 +228,13 @@ export default function HuntPanel({
                       <td className="hint">{player.eliminated_at ? timeAgo(player.eliminated_at) : '-'}</td>
                       <td className="action-cell">
                         {hunt.phase === 'active' && player.state === 'alive' && alive.length > 1 && (
-                          <button className="danger" disabled={busy || assignmentPending} onClick={() => forceEliminate(player)}>Eliminate</button>
+                          <button className="danger" aria-label={`Eliminate ${player.character_name}`} disabled={busy || assignmentPending} onClick={() => forceEliminate(player)}>Eliminate</button>
                         )}
                         {awaitingAssignment && (
-                          <button className="primary" disabled={busy} onClick={() => assignTarget(player)}>Assign target</button>
+                          <button className="primary" aria-label={`Assign target to ${player.character_name}`} disabled={busy} onClick={() => assignTarget(player)}>Assign target</button>
                         )}
                         {player.state === 'eliminated' && (
-                          <button className="ghost" disabled={busy} onClick={() => restore(player)}>Restore</button>
+                          <button className="ghost" aria-label={`Restore ${player.character_name}`} disabled={busy} onClick={() => restore(player)}>Restore</button>
                         )}
                       </td>
                     </tr>

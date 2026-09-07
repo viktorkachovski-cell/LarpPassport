@@ -369,11 +369,11 @@ export default function MapPanel({
             </p>
           )}
           {zones.map((z) => (
-            <div key={z.id} className={`zone-row ${z.id === selectedId ? 'selected' : ''}`} onClick={() => selectAndFly(z)}>
-              <span className={`dot ${z.active ? '' : 'inactive'}`} />
-              <span>{z.name}</span>
+            <button type="button" key={z.id} className={`zone-row ${z.id === selectedId ? 'selected' : ''}`} aria-pressed={z.id === selectedId} onClick={() => selectAndFly(z)}>
+              <span className={`dot ${z.active ? '' : 'inactive'}`} aria-hidden="true" />
+              <span>{z.name}{z.active ? '' : ' (inactive)'}</span>
               <span className="meta">{z.zone_type === 'play_area' ? 'time anomaly' : z.trigger_mode === 'gm_confirm' ? 'confirm' : z.trigger_mode}{z.shape === 'circle' ? ` · ${Math.round(z.radius_m)}m` : ''}</span>
-            </div>
+            </button>
           ))}
           {zones.length === 0 && !draw && <p className="hint">No zones yet. Draw one to trigger events when players arrive.</p>}
           {saveOutcome && (
@@ -387,16 +387,16 @@ export default function MapPanel({
         {editing && (
           <div className="side-section">
             <h3>{editing.id ? 'Edit zone' : 'New zone'}</h3>
-            <div className="field"><label>Name</label>
-              <input style={{ width: '100%' }} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></div>
-            <div className="field"><label>Purpose</label>
-              <select style={{ width: '100%' }} value={editing.zone_type} onChange={(e) => setEditing({ ...editing, zone_type: e.target.value })}>
+            <div className="field"><label htmlFor="zone-name">Name</label>
+              <input id="zone-name" style={{ width: '100%' }} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></div>
+            <div className="field"><label htmlFor="zone-purpose">Purpose</label>
+              <select id="zone-purpose" style={{ width: '100%' }} value={editing.zone_type} onChange={(e) => setEditing({ ...editing, zone_type: e.target.value })}>
                 <option value="event">Event trigger zone</option>
                 <option value="play_area">Time anomaly play area</option>
               </select></div>
             {editing.zone_type === 'event' && (
-              <div className="field"><label>When a player enters</label>
-                <select style={{ width: '100%' }} value={editing.trigger_mode} onChange={(e) => setEditing({ ...editing, trigger_mode: e.target.value })}>
+              <div className="field"><label htmlFor="zone-trigger">When a player enters</label>
+                <select id="zone-trigger" style={{ width: '100%' }} value={editing.trigger_mode} onChange={(e) => setEditing({ ...editing, trigger_mode: e.target.value })}>
                   <option value="auto">Notify the player automatically</option>
                   <option value="gm_confirm">Ask a GM to confirm first</option>
                   <option value="silent">Log silently for GMs</option>
@@ -404,26 +404,26 @@ export default function MapPanel({
             )}
             <div className="row">
               {editing.zone_type === 'event' && (
-                <div className="field" style={{ flex: 1 }}><label>Dwell (s)</label>
-                  <input type="number" min="0" style={{ width: '100%' }} value={editing.dwell_seconds} onChange={(e) => setEditing({ ...editing, dwell_seconds: e.target.value })} /></div>
+                <div className="field" style={{ flex: 1 }}><label htmlFor="zone-dwell">Dwell (s)</label>
+                  <input id="zone-dwell" type="number" min="0" style={{ width: '100%' }} value={editing.dwell_seconds} onChange={(e) => setEditing({ ...editing, dwell_seconds: e.target.value })} /></div>
               )}
               {editing.zone_type === 'play_area' && (
-                <div className="field" style={{ flex: 1 }}><label>Edge warning (m)</label>
-                  <input type="number" min="5" max="5000" style={{ width: '100%' }} value={editing.warning_distance_m} onChange={(e) => setEditing({ ...editing, warning_distance_m: e.target.value })} /></div>
+                <div className="field" style={{ flex: 1 }}><label htmlFor="zone-warning">Edge warning (m)</label>
+                  <input id="zone-warning" type="number" min="5" max="5000" style={{ width: '100%' }} value={editing.warning_distance_m} onChange={(e) => setEditing({ ...editing, warning_distance_m: e.target.value })} /></div>
               )}
-              <div className="field" style={{ flex: 1 }}><label>Exit buffer (m)</label>
-                <input type="number" min="0" style={{ width: '100%' }} value={editing.exit_buffer_m} onChange={(e) => setEditing({ ...editing, exit_buffer_m: e.target.value })} /></div>
+              <div className="field" style={{ flex: 1 }}><label htmlFor="zone-exit-buffer">Exit buffer (m)</label>
+                <input id="zone-exit-buffer" type="number" min="0" style={{ width: '100%' }} value={editing.exit_buffer_m} onChange={(e) => setEditing({ ...editing, exit_buffer_m: e.target.value })} /></div>
               {editing.shape === 'circle' && (
-                <div className="field" style={{ flex: 1 }}><label>Radius (m)</label>
-                  <input type="number" min="1" style={{ width: '100%' }} value={editing.radius_m} onChange={(e) => setEditing({ ...editing, radius_m: e.target.value })} /></div>
+                <div className="field" style={{ flex: 1 }}><label htmlFor="zone-radius">Radius (m)</label>
+                  <input id="zone-radius" type="number" min="1" style={{ width: '100%' }} value={editing.radius_m} onChange={(e) => setEditing({ ...editing, radius_m: e.target.value })} /></div>
               )}
             </div>
             <div className="row mb">
-              {editing.zone_type === 'event' && <label style={{ margin: 0 }}><input type="checkbox" checked={editing.one_shot} onChange={(e) => setEditing({ ...editing, one_shot: e.target.checked })} /> One-shot per player</label>}
-              <label style={{ margin: 0 }}><input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} /> Active</label>
+              {editing.zone_type === 'event' && <label className="inline"><input type="checkbox" checked={editing.one_shot} onChange={(e) => setEditing({ ...editing, one_shot: e.target.checked })} /> One-shot per player</label>}
+              <label className="inline"><input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} /> Active</label>
             </div>
-            {editing.zone_type === 'event' && <div className="field"><label>Message to the player (payload)</label>
-              <textarea rows="2" style={{ width: '100%' }} value={editing.message} onChange={(e) => setEditing({ ...editing, message: e.target.value })} /></div>}
+            {editing.zone_type === 'event' && <div className="field"><label htmlFor="zone-message">Message to the player (payload)</label>
+              <textarea id="zone-message" rows="2" style={{ width: '100%' }} value={editing.message} onChange={(e) => setEditing({ ...editing, message: e.target.value })} /></div>}
             <div className="row">
               <button className="primary" disabled={saving} onClick={submitEditor}>{saving ? 'Saving…' : editing.id ? 'Save zone' : 'Create zone'}</button>
               <button className="ghost" disabled={saving} onClick={() => { setEditing(null); setSelectedId(null) }}>Close</button>
@@ -440,8 +440,8 @@ export default function MapPanel({
               <div className="who">{usernameOf(ev.profile_id)}</div>
               <div className="what">{ev.type === 'zone_boundary_exit' ? 'left' : 'entered'} {zoneNameOf(ev.zone_id)} · {timeAgo(ev.created_at)}</div>
               <div className="actions">
-                <button className="primary" onClick={() => confirmEvent(ev)}>Confirm</button>
-                <button className="ghost" onClick={() => dismissEvent(ev)}>Dismiss</button>
+                <button className="primary" aria-label={`Confirm event for ${usernameOf(ev.profile_id)}`} onClick={() => confirmEvent(ev)}>Confirm</button>
+                <button className="ghost" aria-label={`Dismiss event for ${usernameOf(ev.profile_id)}`} onClick={() => dismissEvent(ev)}>Dismiss</button>
               </div>
             </div>
           ))}

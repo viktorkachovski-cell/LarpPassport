@@ -143,15 +143,15 @@ describe('HuntPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Force reject' }))
     await waitFor(() => expect(recovery.resolveClaim).toHaveBeenCalledWith('claim-1', false))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Kairos' }))
     await waitFor(() => expect(recovery.restorePlayer).toHaveBeenCalledWith('player-3'))
 
-    const eliminateButtons = screen.getAllByRole('button', { name: 'Eliminate' })
+    const eliminateButtons = screen.getAllByRole('button', { name: /^Eliminate / })
     fireEvent.click(eliminateButtons[0])
     await waitFor(() => expect(recovery.eliminatePlayer).toHaveBeenCalled())
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit target chain' }))
-    const downButtons = screen.getAllByRole('button', { name: 'Down' })
+    const downButtons = screen.getAllByRole('button', { name: /^Move .* down$/ })
     fireEvent.click(downButtons[0])
     fireEvent.click(screen.getByRole('button', { name: 'Apply chain' }))
     await waitFor(() => expect(recovery.saveChain).toHaveBeenCalledWith(['player-2', 'player-1']))
@@ -186,7 +186,7 @@ describe('HuntPanel', () => {
     )
 
     expect(screen.getByText('Awaiting GM assignment')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Assign target' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Assign target to Ariadne' }))
     await waitFor(() => expect(recovery.assignNextTarget).toHaveBeenCalledWith('player-1'))
   })
 

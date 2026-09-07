@@ -42,24 +42,24 @@ export default function AuthScreen() {
         </div>
         {mode === 'signup' && (
           <div className="field">
-            <label>Username</label>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="gm_morgana" style={{ width: '100%' }} />
+            <label htmlFor="auth-username">Username</label>
+            <input id="auth-username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="gm_morgana" style={{ width: '100%' }} />
           </div>
         )}
         <div className="field">
-          <label>Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: '100%' }} />
+          <label htmlFor="auth-email">Email</label>
+          <input id="auth-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: '100%' }} />
         </div>
         <div className="field">
-          <label>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: '100%' }}
+          <label htmlFor="auth-password">Password</label>
+          <input id="auth-password" type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: '100%' }}
             onKeyDown={(e) => e.key === 'Enter' && submit()} />
         </div>
         <button className="primary" style={{ width: '100%' }} disabled={busy} onClick={submit}>
-          {mode === 'signin' ? 'Sign in' : 'Create account'}
+          {busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Create account'}
         </button>
-        {error && <p className="error">{error}</p>}
-        {notice && <p className="notice">{notice}</p>}
+        {error && <p className="error" role="alert">{error}</p>}
+        {notice && <p className="notice" role="status">{notice}</p>}
         <p className="hint" style={{ marginTop: 14, textAlign: 'center' }}>
           {mode === 'signin' ? (
             <>New here? <button type="button" className="text-button" onClick={() => setMode('signup')}>Create an account</button></>

@@ -129,9 +129,9 @@ describe('GameView access and mutation errors', () => {
       mocks.queryResults.games = { data: game(), error: null }
       render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
       await screen.findByText('Test game')
-      fireEvent.click(screen.getByRole('button', { name: 'MAP', exact: true }))
+      fireEvent.click(screen.getByRole('tab', { name: 'MAP', exact: true }))
       await screen.findByText('The map could not load. Check your connection and reload to try again.')
-      fireEvent.click(screen.getByRole('button', { name: 'HUNT', exact: true }))
+      fireEvent.click(screen.getByRole('tab', { name: 'HUNT', exact: true }))
       expect(screen.getByText('Hunt panel')).toBeTruthy()
     } finally {
       consoleError.mockRestore()
@@ -143,9 +143,9 @@ describe('GameView access and mutation errors', () => {
     render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
     await screen.findByText('Test game')
     expect(screen.queryByText('Map panel')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'MAP', exact: true }))
+    fireEvent.click(screen.getByRole('tab', { name: 'MAP', exact: true }))
     await screen.findByText('Map panel')
-    fireEvent.click(screen.getByRole('button', { name: 'HUNT', exact: true }))
+    fireEvent.click(screen.getByRole('tab', { name: 'HUNT', exact: true }))
     expect(screen.getByText('Map panel')).toBeTruthy()
   })
 
@@ -213,7 +213,7 @@ describe('GameView authoritative recovery', () => {
     mocks.queryResults.game_events_pending = { data: [{ id: 'old-pending', seq: 1, status: 'pending' }], error: null }
     render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
     await screen.findByText('Hunt panel')
-    fireEvent.click(screen.getByRole('button', { name: /EVENTS/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /EVENTS/ }))
     expect(await screen.findByText('old-pending')).toBeTruthy()
   })
 

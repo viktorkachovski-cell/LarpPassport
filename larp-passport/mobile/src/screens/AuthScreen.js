@@ -44,8 +44,8 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View pointerEvents="none" style={styles.scanLineOne} />
-      <View pointerEvents="none" style={styles.scanLineTwo} />
+      <View pointerEvents="none" importantForAccessibility="no" style={styles.scanLineOne} />
+      <View pointerEvents="none" importantForAccessibility="no" style={styles.scanLineTwo} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
       <ScrollView contentContainerStyle={styles.keyboard} keyboardShouldPersistTaps="handled">
         <View style={styles.identityBlock}>
@@ -67,13 +67,13 @@ export default function AuthScreen() {
           <Field label="EMAIL" value={email} onChangeText={setEmail} placeholder="agent@example.com" autoCapitalize="none" keyboardType="email-address" />
           <Field label="ACCESS PHRASE" value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
 
-          <TouchableOpacity disabled={busy} onPress={submit} style={[styles.primaryButton, busy && styles.disabled]}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={submit} style={[styles.primaryButton, busy && styles.disabled]}>
             <Text style={styles.primaryButtonText}>{busy ? 'CONNECTING...' : signingIn ? 'ENTER TIMELINE' : 'REGISTER AGENT'}</Text>
           </TouchableOpacity>
-          {!!error && <Text style={styles.error}>{error}</Text>}
-          {!!notice && <Text style={styles.notice}>{notice}</Text>}
+          {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
+          {!!notice && <Text style={styles.notice} accessibilityLiveRegion="polite">{notice}</Text>}
 
-          <TouchableOpacity onPress={switchMode} style={styles.modeButton}>
+          <TouchableOpacity accessibilityRole="button" onPress={switchMode} style={styles.modeButton}>
             <Text style={styles.modeCopy}>{signingIn ? 'NO FIELD ID? ' : 'ALREADY REGISTERED? '}<Text style={styles.modeLink}>{signingIn ? 'CREATE ONE' : 'SIGN IN'}</Text></Text>
           </TouchableOpacity>
         </View>
@@ -88,7 +88,7 @@ function Field({ label, ...props }) {
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput style={styles.input} placeholderTextColor={C.lineStrong} {...props} />
+      <TextInput style={styles.input} accessibilityLabel={label} placeholderTextColor={C.muted} {...props} />
     </View>
   )
 }

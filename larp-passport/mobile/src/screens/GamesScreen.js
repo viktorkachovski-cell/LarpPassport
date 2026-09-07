@@ -63,18 +63,21 @@ export default function GamesScreen({ onOpen }) {
         <View style={styles.joinRow}>
           <TextInput
             style={styles.codeInput}
+            accessibilityLabel="Game join code"
             autoCapitalize="characters"
+            autoCorrect={false}
             maxLength={8}
             value={code}
             onChangeText={setCode}
+            onSubmitEditing={join}
             placeholder="GAME CODE"
-            placeholderTextColor={C.lineStrong}
+            placeholderTextColor={C.muted}
           />
-          <TouchableOpacity disabled={busy || !code.trim()} onPress={join} style={[styles.joinButton, (busy || !code.trim()) && styles.disabled]}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy || !code.trim() }} disabled={busy || !code.trim()} onPress={join} style={[styles.joinButton, (busy || !code.trim()) && styles.disabled]}>
             <Text style={styles.joinButtonText}>{busy ? '...' : 'JOIN'}</Text>
           </TouchableOpacity>
         </View>
-        {!!error && <Text style={styles.error}>{error}</Text>}
+        {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
       </View>
 
       <View style={styles.sectionHeader}>
@@ -90,7 +93,7 @@ export default function GamesScreen({ onOpen }) {
         renderItem={({ item }) => {
           const color = STATUS_COLORS[item.status] ?? C.muted
           return (
-            <TouchableOpacity onPress={() => onOpen(item)} style={styles.gameCard}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${item.name}, ${item.status ?? 'unknown'}`} onPress={() => onOpen(item)} style={styles.gameCard}>
               <View style={styles.gameIndex}><Text style={styles.gameIndexText}>//</Text></View>
               <View style={styles.gameBody}>
                 <Text style={styles.gameName} numberOfLines={1}>{item.name}</Text>
@@ -101,7 +104,7 @@ export default function GamesScreen({ onOpen }) {
           )
         }}
       />
-      <TouchableOpacity onPress={async () => {
+      <TouchableOpacity accessibilityRole="button" onPress={async () => {
         try { await stopSharing(); const { error } = await supabase.auth.signOut(); if (error) throw error }
         catch (error) { setError(error.message) }
       }} style={styles.signout}>

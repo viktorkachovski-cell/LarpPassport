@@ -539,7 +539,7 @@ export default function GameView({ gameId, session, onBack }) {
       <div className="topbar">
         <button className="ghost back-control" onClick={onBack} aria-label="Back to games">←</button>
         <span className="title display">{game.name}</span>
-        <button className="code-chip" onClick={copyCode} title="Copy join code">{copied ? 'COPIED' : game.join_code ?? '········'}</button>
+        <button className="code-chip" onClick={copyCode} title="Copy join code" aria-label={game.join_code ? `Join code ${game.join_code.split('').join(' ')}, copy to clipboard` : 'Join code not loaded'} aria-live="polite">{copied ? 'COPIED' : game.join_code ?? '········'}</button>
         <span className="spacer" />
         <div className="topbar-control">
           <span className="control-label">STATUS</span>
@@ -575,14 +575,14 @@ export default function GameView({ gameId, session, onBack }) {
           })}
         </div>
       )}
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="Game sections">
         {['hunt', 'map', 'characters', 'template', 'events', 'players'].map((t) => (
-          <button key={t} className={tab === t ? 'active' : ''} onClick={() => {
+          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => {
             if (t === 'map') setMapOpened(true)
             setTab(t)
           }}>
             {t.toUpperCase()}
-            {t === 'events' && pendingEvents.length > 0 && <span className="badge">{pendingEvents.length}</span>}
+            {t === 'events' && pendingEvents.length > 0 && <span className="badge" aria-label={`${pendingEvents.length} pending`}>{pendingEvents.length}</span>}
           </button>
         ))}
       </div>

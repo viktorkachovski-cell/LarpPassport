@@ -41,13 +41,13 @@ describe('EventsPanel', () => {
     expect(screen.getByText('BREACH // PENDING')).toBeTruthy()
     expect(screen.getByText(/Northern anomaly/)).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm breach' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm breach' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm breach for ariadne' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm breach for ariadne' }))
     await waitFor(() => expect(panelProps.confirmEvent).toHaveBeenCalledWith(event))
     expect(panelProps.confirmEvent).toHaveBeenCalledOnce()
     expect(await screen.findByText('Breach confirmed for ariadne.')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss event for ariadne' }))
     await waitFor(() => expect(panelProps.dismissEvent).toHaveBeenCalledWith(event))
     expect(await screen.findByText('Breach dismissed for ariadne.')).toBeTruthy()
 

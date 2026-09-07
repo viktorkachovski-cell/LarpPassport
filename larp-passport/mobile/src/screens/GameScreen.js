@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { C, F, S, T } from '../lib/theme'
 import { readGameSnapshot } from '../lib/gameSnapshot'
+import { useReducedMotion } from '../lib/useReducedMotion'
 import { updateLocationConsent } from '../lib/locationConsent'
 import { flush, isSharing, locationPermissionStatus, syncNotifications, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
 import { describeServerSync, describeSharing, formatAge, realtimeStateFromStatus } from '../lib/syncStatus'
@@ -292,9 +293,9 @@ export default function GameScreen({ gameId, session, onBack }) {
 
   if (loadError) return (
     <SafeAreaView style={styles.loading}>
-      <Text style={styles.loadingText}>{loadError}</Text>
-      <TouchableOpacity onPress={() => refreshRef.current()}><Text style={styles.loadingText}>Retry</Text></TouchableOpacity>
-      <TouchableOpacity onPress={onBack}><Text style={styles.loadingText}>Back to games</Text></TouchableOpacity>
+      <Text style={styles.loadingText} accessibilityLiveRegion="polite">{loadError}</Text>
+      <TouchableOpacity accessibilityRole="button" onPress={() => refreshRef.current()} style={styles.loadingAction}><Text style={styles.loadingText}>Retry</Text></TouchableOpacity>
+      <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.loadingAction}><Text style={styles.loadingText}>Back to games</Text></TouchableOpacity>
     </SafeAreaView>
   )
   if (!game || character === undefined) {
@@ -313,11 +314,11 @@ export default function GameScreen({ gameId, session, onBack }) {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity accessibilityLabel="Back to deployments" onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to deployments" onPress={onBack} style={styles.backButton}>
           <Text style={styles.backText}>&lt;</Text>
         </TouchableOpacity>
         <Text style={styles.gameName} numberOfLines={1}>{game.name.toUpperCase()}</Text>
-        <View style={[styles.phaseChip, { borderColor: phaseColor }]}>
+        <View style={[styles.phaseChip, { borderColor: phaseColor }]} accessibilityLabel={`Game ${phaseLabel.toLowerCase()}`}>
           {phase === 'active' && <LiveDot color={C.green} />}
           <Text style={[styles.phaseText, { color: phaseColor }]}>{phaseLabel}</Text>
         </View>
@@ -342,7 +343,7 @@ export default function GameScreen({ gameId, session, onBack }) {
 
       <View style={styles.tabs}>
         {[['hunt', 'HUNT'], ['sheet', 'CHARACTER'], ['events', 'EVENTS'], ['share', 'SHARING']].map(([key, label]) => (
-          <TouchableOpacity key={key} onPress={() => setTab(key)} style={[styles.tab, tab === key && styles.activeTab]}>
+          <TouchableOpacity key={key} accessibilityRole="tab" accessibilityState={{ selected: tab === key }} accessibilityLabel={label.toLowerCase()} onPress={() => setTab(key)} style={[styles.tab, tab === key && styles.activeTab]}>
             <Text style={[styles.tabText, tab === key && styles.activeTabText]}>{label}</Text>
           </TouchableOpacity>
         ))}
@@ -388,19 +389,23 @@ export default function GameScreen({ gameId, session, onBack }) {
   )
 }
 
+// Decorative pulse. Static when reduced motion is on; always hidden from
+// assistive tech because the adjacent text carries the meaning.
 function LiveDot({ color }) {
   const opacity = useRef(new Animated.Value(1)).current
+  const reduced = useReducedMotion()
 
   useEffect(() => {
+    if (reduced) { opacity.setValue(1); return undefined }
     const animation = Animated.loop(Animated.sequence([
       Animated.timing(opacity, { toValue: 0.35, duration: 1000, useNativeDriver: true }),
       Animated.timing(opacity, { toValue: 1, duration: 1000, useNativeDriver: true }),
     ]))
     animation.start()
-    return () => animation.stop()
-  }, [opacity])
+    return () => { animation.stop(); opacity.setValue(1) }
+  }, [opacity, reduced])
 
-  return <Animated.View style={[styles.liveDot, { backgroundColor: color, opacity }]} />
+  return <Animated.View importantForAccessibility="no" accessibilityElementsHidden style={[styles.liveDot, { backgroundColor: color, opacity }]} />
 }
 
 // Self-ticking (10 s) so "12 s ago" stays honest without re-rendering the
@@ -500,18 +505,18 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, out
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
       {!!hunt.incoming_claim && (
-        <View style={styles.claimAlert}>
+        <View style={styles.claimAlert} accessibilityLiveRegion="polite">
           <Text style={styles.redKicker}>! ELIMINATION CLAIMED</Text>
           <Text style={styles.claimTitle}>A hunter claims they defeated you</Text>
           <Text style={styles.bodyCopy}>The hunter remains anonymous. Confirm only after the live battle is resolved.</Text>
-          <TouchableOpacity disabled={busy} onPress={confirmDefeat} style={[styles.redButton, busy && styles.disabled]}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={confirmDefeat} style={[styles.redButton, busy && styles.disabled]}>
             <Text style={styles.filledButtonText}>REVIEW CONFIRMATION</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {boundaryWarning && (
-        <View style={styles.boundaryBanner}>
+        <View style={styles.boundaryBanner} accessibilityLiveRegion="polite">
           <Text style={styles.amberKicker}>! ANOMALY BOUNDARY AHEAD</Text>
           <Text style={styles.boundaryCopy}>Move toward the safe interior. Leaving forfeits any pending claim and alerts the GM.</Text>
         </View>
@@ -539,7 +544,7 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, out
             <ProximitySignal proximity={hunt.target.proximity} />
           )}
 
-          <TouchableOpacity disabled={disabled} onPress={requestElimination} style={[disabled ? styles.disabledClaimButton : styles.claimButton, busy && styles.disabled]}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={requestElimination} style={[disabled ? styles.disabledClaimButton : styles.claimButton, busy && styles.disabled]}>
             <Text style={disabled ? styles.disabledButtonText : styles.filledButtonText}>
               {awaitingTarget ? 'AWAITING GM ASSIGNMENT' : claimPending ? 'WAITING FOR TARGET CONFIRMATION' : 'CLAIM ELIMINATION'}
             </Text>
@@ -724,15 +729,16 @@ function PlayerMessageBox({ gameId }) {
       <Text style={styles.messageTitle}>Message the GM</Text>
       <TextInput
         style={[styles.input, styles.messageInput]}
+        accessibilityLabel="Message to the GM"
         value={message}
         onChangeText={setMessage}
         maxLength={100}
         placeholder="Short in-game message"
-        placeholderTextColor={C.lineStrong}
+        placeholderTextColor={C.muted}
       />
       <View style={styles.messageFooter}>
         <Text style={styles.charCount}>{message.length}/100</Text>
-        <TouchableOpacity disabled={sendDisabled} onPress={send} style={[styles.smallCyanButton, sendDisabled && styles.disabled]}>
+        <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={send} style={[styles.smallCyanButton, sendDisabled && styles.disabled]}>
           <Text style={styles.smallCyanButtonText}>{busy ? 'SENDING...' : 'SEND'}</Text>
         </TouchableOpacity>
       </View>
@@ -756,6 +762,8 @@ const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, 
             <Text style={[styles.sharingState, { color: stateColor }]}>{status.text}</Text>
           </View>
           <Switch
+            accessibilityLabel="Location sharing"
+            accessibilityRole="switch"
             value={sharing}
             disabled={sharingBusy}
             onValueChange={toggleSharing}
@@ -866,13 +874,14 @@ const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
               <Text style={styles.inputLabel}>{String(stat.label || stat.key).toUpperCase()}{stat.type === 'number' && stat.min !== undefined && stat.max !== undefined ? ` // ${stat.min}-${stat.max}` : ''}</Text>
               <TextInput
                 style={styles.input}
+                accessibilityLabel={String(stat.label || stat.key)}
                 keyboardType={stat.type === 'number' ? 'numeric' : 'default'}
                 value={String(valueOf(stat.key) ?? '')}
                 onChangeText={(value) => setDraft({ ...(draft ?? {}), [stat.key]: value })}
               />
             </View>
           ))}
-          <TouchableOpacity disabled={!dirty || busy} onPress={save} style={[styles.cyanButton, (!dirty || busy) && styles.disabled]}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !dirty || busy }} disabled={!dirty || busy} onPress={save} style={[styles.cyanButton, (!dirty || busy) && styles.disabled]}>
             <Text style={styles.filledButtonText}>{busy ? 'SAVING...' : 'SAVE CHANGES'}</Text>
           </TouchableOpacity>
           {!!error && <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text>}
@@ -925,7 +934,7 @@ function CreateCharacter({ game, uid, onCreated }) {
               onChangeText={(value) => setValues({ ...values, [stat.key]: value })}
             />
           ))}
-          <TouchableOpacity disabled={busy} onPress={create} style={[styles.cyanButton, busy && styles.disabled]}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={create} style={[styles.cyanButton, busy && styles.disabled]}>
             <Text style={styles.filledButtonText}>{busy ? 'CREATING...' : 'CREATE CHARACTER'}</Text>
           </TouchableOpacity>
           {!!error && <Text style={styles.errorText}>{error}</Text>}
@@ -940,7 +949,7 @@ function Field({ label, style, ...props }) {
   return (
     <View style={styles.field}>
       <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput style={[styles.input, style]} placeholderTextColor={C.lineStrong} {...props} />
+      <TextInput style={[styles.input, style]} accessibilityLabel={label} placeholderTextColor={C.muted} {...props} />
     </View>
   )
 }
@@ -961,7 +970,7 @@ function OutcomeNote({ text, tone = 'ok', onDismiss }) {
 
 function GhostButton({ label, onPress }) {
   return (
-    <TouchableOpacity onPress={onPress} style={styles.ghostButton}>
+    <TouchableOpacity accessibilityRole="button" onPress={onPress} style={styles.ghostButton}>
       <Text style={styles.ghostButtonText}>{label}</Text>
     </TouchableOpacity>
   )
@@ -981,7 +990,8 @@ function statColor(stat, value) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: C.ink },
-  loading: { flex: 1, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center' },
+  loading: { flex: 1, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  loadingAction: { minHeight: S.touch, justifyContent: 'center', paddingHorizontal: 16 },
   loadingText: { color: C.cyan, fontFamily: F.mono, fontSize: T.label, letterSpacing: 1.4, textAlign: 'center', paddingHorizontal: 20, lineHeight: T.lineLabel },
   header: { minHeight: 55, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, backgroundColor: C.ink },
   backButton: { width: S.touch, minHeight: S.touch, alignItems: 'flex-start', justifyContent: 'center' },

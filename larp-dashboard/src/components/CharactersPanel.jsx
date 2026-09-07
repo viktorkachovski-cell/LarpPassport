@@ -98,7 +98,7 @@ export default function CharactersPanel({ game, characters, members, factions, u
           <tr>
             <th>Character</th><th>Player</th><th>Faction</th>
             {stats.map((s) => <th key={s.key}>{s.label || s.key}</th>)}
-            <th></th>
+            <th><span className="visually-hidden">Actions</span></th>
           </tr>
         </thead>
         <tbody>
@@ -107,10 +107,10 @@ export default function CharactersPanel({ game, characters, members, factions, u
             return (
               <Fragment key={c.id}>
                 <tr>
-                  <td><input type="text" value={d.name} onChange={(e) => patchDraft(c, { name: e.target.value })} /></td>
+                  <td><input type="text" aria-label={`Name for ${c.name}`} value={d.name} onChange={(e) => patchDraft(c, { name: e.target.value })} /></td>
                   <td>{c.is_npc ? <span className="badge-pill">NPC</span> : usernameOf(c.user_id)}</td>
                   <td>
-                    <select value={d.faction_id} onChange={(e) => patchDraft(c, { faction_id: e.target.value })}>
+                    <select aria-label={`Faction for ${c.name}`} value={d.faction_id} onChange={(e) => patchDraft(c, { faction_id: e.target.value })}>
                       <option value="">—</option>
                       {factions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                     </select>
@@ -118,17 +118,17 @@ export default function CharactersPanel({ game, characters, members, factions, u
                   {stats.map((s) => (
                     <td key={s.key}>
                       {s.type === 'number' ? (
-                        <input type="number" min={s.min} max={s.max} value={d.fields[s.key] ?? ''} onChange={(e) => patchField(c, s.key, e.target.value)} />
+                        <input type="number" aria-label={`${s.label || s.key} for ${c.name}`} min={s.min} max={s.max} value={d.fields[s.key] ?? ''} onChange={(e) => patchField(c, s.key, e.target.value)} />
                       ) : (
-                        <input type="text" value={d.fields[s.key] ?? ''} onChange={(e) => patchField(c, s.key, e.target.value)} />
+                        <input type="text" aria-label={`${s.label || s.key} for ${c.name}`} value={d.fields[s.key] ?? ''} onChange={(e) => patchField(c, s.key, e.target.value)} />
                       )}
                     </td>
                   ))}
                   <td>
                     <div className="row">
-                      <button className="primary" disabled={!isDirty(c) || busy === c.id} onClick={() => save(c)}>{busy === c.id ? 'Saving…' : 'Save'}</button>
-                      <button className="ghost" onClick={() => showAudit(c)}>History</button>
-                      {c.is_npc && <button className="danger" disabled={busy === c.id} onClick={() => removeNpc(c)}>×</button>}
+                      <button className="primary" aria-label={`Save ${c.name}`} disabled={!isDirty(c) || busy === c.id} onClick={() => save(c)}>{busy === c.id ? 'Saving…' : 'Save'}</button>
+                      <button className="ghost" aria-label={`History for ${c.name}`} aria-expanded={auditFor === c.id} onClick={() => showAudit(c)}>History</button>
+                      {c.is_npc && <button className="danger" aria-label={`Delete NPC ${c.name}`} disabled={busy === c.id} onClick={() => removeNpc(c)}>×</button>}
                     </div>
                   </td>
                 </tr>
@@ -152,7 +152,7 @@ export default function CharactersPanel({ game, characters, members, factions, u
       {characters.length === 0 && <p className="hint mt">No characters yet. Players create theirs in the app after joining with the game code.</p>}
 
       <div className="row mt">
-        <input placeholder="NPC name" value={npcName} onChange={(e) => setNpcName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNpc()} />
+        <input aria-label="NPC name" placeholder="NPC name" value={npcName} onChange={(e) => setNpcName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createNpc()} />
         <button disabled={busy === 'npc'} onClick={createNpc}>Add NPC</button>
       </div>
 
@@ -161,8 +161,8 @@ export default function CharactersPanel({ game, characters, members, factions, u
         {factions.map((f) => (
           <span key={f.id} className="badge-pill" style={{ borderColor: f.color, color: f.color }}>{f.name}</span>
         ))}
-        <input placeholder="New faction" value={facName} onChange={(e) => setFacName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createFaction()} />
-        <input type="color" value={facColor} onChange={(e) => setFacColor(e.target.value)} style={{ width: 44, padding: 2 }} />
+        <input aria-label="New faction name" placeholder="New faction" value={facName} onChange={(e) => setFacName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createFaction()} />
+        <input type="color" aria-label="New faction color" value={facColor} onChange={(e) => setFacColor(e.target.value)} style={{ width: 44, padding: 2 }} />
         <button disabled={busy === 'faction'} onClick={createFaction}>Add faction</button>
       </div>
       {saved && (

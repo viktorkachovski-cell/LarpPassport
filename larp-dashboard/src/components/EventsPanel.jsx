@@ -89,7 +89,7 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
               <option key={member.profile_id} value={member.profile_id}>{member.profile?.username}</option>
             ))}
           </select>
-          <input placeholder="Message players - appears in their app instantly" value={message}
+          <input aria-label="Message to players" placeholder="Message players - appears in their app instantly" value={message}
             onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} />
           <button className="primary" disabled={!message.trim() || sending} onClick={send}>{sending ? 'Sending…' : 'Send broadcast'}</button>
         </div>
@@ -100,9 +100,9 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
 
       <div className="event-toolbar">
         <div><span className="micro-label">EVENT STREAM</span><h2>Timeline activity</h2></div>
-        <div className="filter-group">
-          <button className={filter === 'all' ? 'primary' : 'ghost'} onClick={() => setFilter('all')}>All</button>
-          <button className={filter === 'pending' ? 'primary' : 'ghost'} onClick={() => setFilter('pending')}>Pending</button>
+        <div className="filter-group" role="group" aria-label="Event filter">
+          <button className={filter === 'all' ? 'primary' : 'ghost'} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
+          <button className={filter === 'pending' ? 'primary' : 'ghost'} aria-pressed={filter === 'pending'} onClick={() => setFilter('pending')}>Pending</button>
         </div>
       </div>
 
@@ -124,8 +124,8 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
               {event.payload?.message && event.type === 'zone_enter' && <p>Player message: "{event.payload.message}"</p>}
               {event.status === 'pending' && (
                 <div className="event-actions">
-                  <button className="primary" disabled={busyEvent === event.id} onClick={() => decide(event, 'confirm')}>{breach ? 'Confirm breach' : 'Confirm'}</button>
-                  <button className="ghost" disabled={busyEvent === event.id} onClick={() => decide(event, 'dismiss')}>Dismiss</button>
+                  <button className="primary" aria-label={`${breach ? 'Confirm breach' : 'Confirm'} for ${actor}`} disabled={busyEvent === event.id} onClick={() => decide(event, 'confirm')}>{breach ? 'Confirm breach' : 'Confirm'}</button>
+                  <button className="ghost" aria-label={`Dismiss event for ${actor}`} disabled={busyEvent === event.id} onClick={() => decide(event, 'dismiss')}>Dismiss</button>
                   {breach && <button className="danger" onClick={() => onOpenHunt?.()}>Eliminate via Hunt</button>}
                 </div>
               )}

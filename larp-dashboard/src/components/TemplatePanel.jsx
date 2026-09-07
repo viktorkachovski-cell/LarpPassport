@@ -46,24 +46,24 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
       {hasCharacters && <p className="hint mb" style={{ color: 'var(--amber)' }}>Characters already exist — renaming a key orphans its stored values. Add new keys instead of renaming when possible.</p>}
       <table className="grid">
         <thead>
-          <tr><th>Key</th><th>Label</th><th>Type</th><th>Default</th><th>Min</th><th>Max</th><th>Player editable</th><th></th></tr>
+          <tr><th>Key</th><th>Label</th><th>Type</th><th>Default</th><th>Min</th><th>Max</th><th>Player editable</th><th><span className="visually-hidden">Actions</span></th></tr>
         </thead>
         <tbody>
           {stats.map((s, i) => (
             <tr key={i}>
-              <td><input type="text" value={s.key} onChange={(e) => patch(i, { key: e.target.value })} placeholder="hp" /></td>
-              <td><input type="text" value={s.label ?? ''} onChange={(e) => patch(i, { label: e.target.value })} placeholder="Hit points" /></td>
+              <td><input type="text" aria-label={`Key for stat ${i + 1}`} value={s.key} onChange={(e) => patch(i, { key: e.target.value })} placeholder="hp" /></td>
+              <td><input type="text" aria-label={`Label for stat ${s.key || i + 1}`} value={s.label ?? ''} onChange={(e) => patch(i, { label: e.target.value })} placeholder="Hit points" /></td>
               <td>
-                <select value={s.type} onChange={(e) => patch(i, { type: e.target.value })}>
+                <select aria-label={`Type for stat ${s.key || i + 1}`} value={s.type} onChange={(e) => patch(i, { type: e.target.value })}>
                   <option value="number">number</option>
                   <option value="text">text</option>
                 </select>
               </td>
-              <td><input type={s.type === 'number' ? 'number' : 'text'} value={s.default ?? ''} onChange={(e) => patch(i, { default: e.target.value })} /></td>
-              <td>{s.type === 'number' ? <input type="number" value={s.min ?? ''} onChange={(e) => patch(i, { min: e.target.value })} /> : '—'}</td>
-              <td>{s.type === 'number' ? <input type="number" value={s.max ?? ''} onChange={(e) => patch(i, { max: e.target.value })} /> : '—'}</td>
-              <td><input type="checkbox" checked={!!s.player_editable} onChange={(e) => patch(i, { player_editable: e.target.checked })} /></td>
-              <td><button className="danger" onClick={() => remove(i)}>×</button></td>
+              <td><input type={s.type === 'number' ? 'number' : 'text'} aria-label={`Default for stat ${s.key || i + 1}`} value={s.default ?? ''} onChange={(e) => patch(i, { default: e.target.value })} /></td>
+              <td>{s.type === 'number' ? <input type="number" aria-label={`Minimum for stat ${s.key || i + 1}`} value={s.min ?? ''} onChange={(e) => patch(i, { min: e.target.value })} /> : '—'}</td>
+              <td>{s.type === 'number' ? <input type="number" aria-label={`Maximum for stat ${s.key || i + 1}`} value={s.max ?? ''} onChange={(e) => patch(i, { max: e.target.value })} /> : '—'}</td>
+              <td><input type="checkbox" aria-label={`Player editable: stat ${s.key || i + 1}`} checked={!!s.player_editable} onChange={(e) => patch(i, { player_editable: e.target.checked })} /></td>
+              <td><button className="danger" aria-label={`Remove stat ${s.key || i + 1}`} onClick={() => remove(i)}>×</button></td>
             </tr>
           ))}
         </tbody>

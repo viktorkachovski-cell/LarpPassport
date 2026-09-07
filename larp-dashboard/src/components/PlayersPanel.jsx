@@ -31,17 +31,17 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
     <div className="panel-pad">
       <p className="hint mb">
         Players join from the app with code <b style={{ color: 'var(--cyan)' }}>{game.join_code}</b>.
-        Location pings older than <input type="number" min="1" style={{ width: 76 }} defaultValue={game.purge_after_days}
+        Location pings older than <input type="number" min="1" max="90" aria-label="Days to keep location pings" style={{ width: 76 }} defaultValue={game.purge_after_days}
           onBlur={(e) => { const v = Number(e.target.value); if (v >= 1 && v !== game.purge_after_days) updateGame({ purge_after_days: v }) }} /> days are deleted automatically.
       </p>
       <table className="grid">
-        <thead><tr><th>Member</th><th>Role</th><th>Location sharing</th><th>Last seen</th><th>Battery</th><th></th></tr></thead>
+        <thead><tr><th>Member</th><th>Role</th><th>Location sharing</th><th>Last seen</th><th>Battery</th><th><span className="visually-hidden">Actions</span></th></tr></thead>
         <tbody>
           {members.map((m) => (
             <tr key={m.profile_id}>
               <td>{m.profile?.username}{m.profile_id === uid && <span className="hint"> (you)</span>}</td>
               <td>
-                <select value={m.role} disabled={busy === m.profile_id || (m.profile_id === uid && m.role === 'gm' && gmCount === 1)}
+                <select aria-label={`Role for ${m.profile?.username ?? 'member'}`} value={m.role} disabled={busy === m.profile_id || (m.profile_id === uid && m.role === 'gm' && gmCount === 1)}
                   onChange={(e) => act(m.profile_id, `Role of ${m.profile?.username ?? 'member'} set to ${e.target.value === 'gm' ? 'GM' : 'player'}`, () => setMemberRole(m.profile_id, e.target.value))}>
                   <option value="player">player</option>
                   <option value="gm">GM</option>
@@ -54,7 +54,7 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
               </td>
               <td className="hint">{timeAgo(positions[m.profile_id]?.recorded_at)}</td>
               <td className="hint">{positions[m.profile_id]?.battery_pct != null ? Math.round(positions[m.profile_id].battery_pct) + '%' : '—'}</td>
-              <td>{m.profile_id !== uid && <button className="danger" disabled={busy === m.profile_id} onClick={() => remove(m)}>Remove</button>}</td>
+              <td>{m.profile_id !== uid && <button className="danger" aria-label={`Remove ${m.profile?.username ?? 'member'}`} disabled={busy === m.profile_id} onClick={() => remove(m)}>Remove</button>}</td>
             </tr>
           ))}
         </tbody>
