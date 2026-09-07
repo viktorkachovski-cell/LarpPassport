@@ -40,7 +40,7 @@ export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime,
   const failedSinceOk = lastErrorAt && (!lastOkAt || new Date(lastErrorAt) > new Date(lastOkAt))
   const network = failedSinceOk && isNetworkFailure(lastError)
   const okAge = formatAge(lastOkAt, now)
-  const live = describeRealtime(realtime)
+  const live = realtime == null ? null : describeRealtime(realtime)
 
   if (!lastOkAt && !lastErrorAt) {
     return { tone: 'checking', text: 'Checking server', detail: 'No successful sync yet', live }
@@ -65,7 +65,7 @@ export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime,
   return {
     tone: ageMs > 3 * 60 * 1000 ? 'warning' : 'ok',
     text: `Server updated ${okAge}`,
-    detail: realtime === 'connected' ? live : `${live} · refreshing periodically`,
+    detail: live == null ? 'Pull down to refresh' : realtime === 'connected' ? live : `${live} · refreshing periodically`,
     live,
   }
 }

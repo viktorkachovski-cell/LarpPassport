@@ -63,6 +63,12 @@ describe('describeServerSync', () => {
     expect(s.detail).toBe('Live updates off · refreshing periodically')
   })
 
+  it('never claims live or periodic refresh for a view without either', () => {
+    const s = describeServerSync({ lastOkAt: at(5), realtime: null, now: T0 })
+    expect(s.detail).toBe('Pull down to refresh')
+    expect(s.live).toBeNull()
+  })
+
   it('recovers to ok once a newer success lands after a failure', () => {
     const s = describeServerSync({ lastOkAt: at(2), lastErrorAt: at(40), lastError: 'boom', realtime: 'connected', now: T0 })
     expect(s.tone).toBe('ok')

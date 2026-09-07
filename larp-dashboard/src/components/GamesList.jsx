@@ -63,7 +63,7 @@ export default function GamesList({ session, onOpen }) {
       </div>
       <div className="games-list">
         <div className="registry-heading"><span>YOUR GAMES</span><b>{String(games.length).padStart(2, '0')}</b></div>
-        <SyncStatus sync={sync} realtime="closed" online={online} onRetry={load} label="Games" />
+        <SyncStatus sync={sync} realtime={null} online={online} onRetry={load} label="Games" />
         {games.map((g) => (
           <button key={g.id} type="button" className="game-card" onClick={() => onOpen(g.id)}>
             <span className="game-card-mark">//</span>

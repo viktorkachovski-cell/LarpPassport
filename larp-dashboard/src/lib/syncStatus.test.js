@@ -38,6 +38,12 @@ describe('syncStatus', () => {
     expect(isNetworkFailure('permission denied')).toBe(false)
   })
 
+  it('never claims live or periodic refresh for a view without either', () => {
+    const s = describeServerSync({ lastOkAt: at(5), realtime: null, now: T0 })
+    expect(s.detail).toBe('Use Refresh to update')
+    expect(s.live).toBeNull()
+  })
+
   it('warns when the last success is old even if nothing failed', () => {
     const s = describeServerSync({ lastOkAt: at(600), realtime: 'closed', now: T0 })
     expect(s.tone).toBe('warning')

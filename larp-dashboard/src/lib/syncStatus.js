@@ -34,11 +34,13 @@ export function describeRealtime(state) {
 }
 
 // online: navigator.onLine hint (false is a strong offline signal; true proves nothing).
+// realtime: socket hint, or null for a view that has no live channel and no
+// periodic refresh (it must not claim either).
 export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime, online = true, now = Date.now() }) {
   const failedSinceOk = lastErrorAt && (!lastOkAt || new Date(lastErrorAt) > new Date(lastOkAt))
   const network = online === false || (failedSinceOk && isNetworkFailure(lastError))
   const okAge = formatAge(lastOkAt, now)
-  const live = describeRealtime(realtime)
+  const live = realtime == null ? null : describeRealtime(realtime)
 
   if (online === false) {
     return {
@@ -71,7 +73,7 @@ export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime,
   return {
     tone: ageMs > 3 * 60 * 1000 ? 'warning' : 'ok',
     text: `Server updated ${okAge}`,
-    detail: realtime === 'connected' ? live : `${live} · refreshing every minute`,
+    detail: live == null ? 'Use Refresh to update' : realtime === 'connected' ? live : `${live} · refreshing every minute`,
     live,
   }
 }

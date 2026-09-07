@@ -120,7 +120,7 @@ function ListSyncStatus({ sync, loading }) {
     const timer = setInterval(() => setTick(Date.now()), 10000)
     return () => clearInterval(timer)
   }, [])
-  const status = describeServerSync({ ...sync, realtime: 'closed', now: tick })
+  const status = describeServerSync({ ...sync, realtime: null, now: tick })
   const color = status.tone === 'ok' ? C.green : status.tone === 'error' ? C.red : status.tone === 'warning' ? C.amber : C.muted
   const text = loading && !sync.lastOkAt ? 'Checking server' : status.text.replace('Server updated', 'Games updated')
   return (
