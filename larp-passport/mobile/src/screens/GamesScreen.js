@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { stopSharing } from '../lib/locationTask'
 import { C, F } from '../lib/theme'
+import { describeServerSync } from '../lib/syncStatus'
 
 const STATUS_COLORS = { active: C.green, draft: C.amber, finished: C.muted }
 
@@ -13,6 +14,9 @@ export default function GamesScreen({ onOpen }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
+  // Last successful / failed games request (U01). Reset per account by the
+  // parent's key, so a second account never inherits the first one's status.
+  const [sync, setSync] = useState({ lastOkAt: null, lastErrorAt: null, lastError: '' })
 
   useEffect(() => { load() }, [])
 
@@ -22,7 +26,11 @@ export default function GamesScreen({ onOpen }) {
       const { data, error } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
       if (error) throw error
       setGames(data ?? [])
-    } catch (error) { setError(error.message) } finally { setLoading(false) }
+      setSync((current) => ({ ...current, lastOkAt: Date.now() }))
+    } catch (error) {
+      setError(error.message)
+      setSync((current) => ({ ...current, lastErrorAt: Date.now(), lastError: error.message }))
+    } finally { setLoading(false) }
   }
 
   async function join() {
@@ -46,7 +54,7 @@ export default function GamesScreen({ onOpen }) {
           <Text style={styles.eyebrow}>TEMPORAL FIELD AUTHORITY</Text>
           <Text style={styles.title}>DEPLOYMENTS</Text>
         </View>
-        <View style={styles.onlineChip}><View style={styles.onlineDot} /><Text style={styles.onlineText}>UPLINK</Text></View>
+        <ListSyncStatus sync={sync} loading={loading} />
       </View>
 
       <View style={styles.joinCard}>
@@ -103,14 +111,29 @@ export default function GamesScreen({ onOpen }) {
   )
 }
 
+function ListSyncStatus({ sync, loading }) {
+  const [tick, setTick] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setTick(Date.now()), 10000)
+    return () => clearInterval(timer)
+  }, [])
+  const status = describeServerSync({ ...sync, realtime: 'closed', now: tick })
+  const color = status.tone === 'ok' ? C.green : status.tone === 'error' ? C.red : status.tone === 'warning' ? C.amber : C.muted
+  const text = loading && !sync.lastOkAt ? 'Checking server' : status.text.replace('Server updated', 'Games updated')
+  return (
+    <View style={styles.syncChip}>
+      <Text style={[styles.syncChipText, { color }]} numberOfLines={2}>{text}</Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.ink, paddingHorizontal: 18 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, paddingBottom: 18 },
   eyebrow: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.65 },
   title: { color: C.text, fontFamily: F.displayBold, fontSize: 25, letterSpacing: 1.6, marginTop: 3 },
-  onlineChip: { flexDirection: 'row', alignItems: 'center', borderColor: C.greenBorder, borderWidth: 1, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5 },
-  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.green, marginRight: 6 },
-  onlineText: { color: C.green, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.2 },
+  syncChip: { maxWidth: '45%', borderColor: C.line, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  syncChipText: { fontFamily: F.bodyMedium, fontSize: 12, textAlign: 'right' },
   joinCard: { backgroundColor: C.panel, borderColor: C.cyanBorder, borderWidth: 1, borderRadius: 10, padding: 15 },
   joinKicker: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.7 },
   joinCopy: { color: C.muted, fontFamily: F.body, fontSize: 13, marginTop: 5, marginBottom: 13 },

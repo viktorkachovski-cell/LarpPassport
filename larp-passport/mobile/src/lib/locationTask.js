@@ -104,6 +104,10 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
     if (!await tracking.current(owner)) return
     await store.enqueue(scopeOf(owner), pings)
     if (!await tracking.current(owner)) { await store.purgeGame(scopeOf(owner)); return }
+    // Owner-scoped telemetry only: the newest local capture time, so the UI can
+    // show GPS age truthfully even after a successful drain empties the queue.
+    const newestFix = pings.reduce((latest, ping) => (ping.recorded_at > latest ? ping.recorded_at : latest), pings[0].recorded_at)
+    await AsyncStorage.setItem(`larp_last_fix_v2:${scopeOf(owner)}`, newestFix).catch(() => {})
     await flush(owner.gameId)
   } catch {
     // never throw from the task — pings stay queued for the next tick
@@ -218,17 +222,29 @@ async function startUpdates(mode) {
   })
 }
 
+const EMPTY_STATUS = { queued: 0, failed: 0, lastError: null, oldestPendingAt: null, lastSent: null, lastFixAt: null, profile: 'near' }
+
 export async function queueStatus(gameId) {
   const auth = await session()
-  if (!auth || !gameId) return { queued: 0, lastSent: null, profile: 'near' }
+  if (!auth || !gameId) return { ...EMPTY_STATUS }
   const owner = await tracking.read()
-  if (!owner || owner.gameId !== gameId || owner.userId !== auth.user.id) return { queued: 0, lastSent: null, profile: 'near' }
+  if (!owner || owner.gameId !== gameId || owner.userId !== auth.user.id) return { ...EMPTY_STATUS }
   const scope = scopeOf(owner)
   const status = await (await getStore()).status(scope)
-  return { ...status,
+  return { ...EMPTY_STATUS, ...status,
     lastSent: await AsyncStorage.getItem(`larp_last_sent_v2:${scope}`),
+    lastFixAt: await AsyncStorage.getItem(`larp_last_fix_v2:${scope}`),
     profile: await AsyncStorage.getItem(`larp_profile_v2:${scope}`) ?? 'near',
   }
+}
+
+// Read-only permission query for status display. Never prompts.
+export async function locationPermissionStatus() {
+  const [foreground, background] = await Promise.all([
+    Location.getForegroundPermissionsAsync(),
+    Location.getBackgroundPermissionsAsync(),
+  ])
+  return { foreground: foreground.status, background: background.status }
 }
 
 export async function startSharing(gameId) {

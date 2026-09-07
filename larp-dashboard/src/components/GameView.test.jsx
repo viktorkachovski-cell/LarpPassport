@@ -229,6 +229,38 @@ describe('GameView authoritative recovery', () => {
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Game status' }).value).toBe('finished'))
   })
 
+  it('keeps the last good snapshot and reports a failed refresh instead of claiming sync', async () => {
+    mocks.queryResults.games = { data: game(), error: null }
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Hunt panel')
+    expect(screen.getByText('Server updated just now')).toBeTruthy()
+    expect(screen.getByText(/Connecting live updates/)).toBeTruthy()
+
+    mocks.queryResults.games = { data: null, error: { message: 'Network unavailable' } }
+    act(() => mocks.subscribed('SUBSCRIBED'))
+    const alert = await screen.findByRole('alert', {}, { timeout: 2000 })
+    expect(alert.textContent).toContain('Network unavailable')
+    expect(screen.getByText(/Last refresh failed · showing data from/)).toBeTruthy()
+    expect(screen.getByText('Test game')).toBeTruthy()
+    expect(screen.getByText('Hunt panel')).toBeTruthy()
+
+    mocks.queryResults.games = { data: game(), error: null }
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await screen.findByText('Server updated just now')
+    expect(screen.getByText('Live updates on')).toBeTruthy()
+  })
+
+  it('reports the browser offline hint without dropping loaded data', async () => {
+    mocks.queryResults.games = { data: game(), error: null }
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Hunt panel')
+    act(() => window.dispatchEvent(new Event('offline')))
+    expect(screen.getByText(/Offline · showing data from/)).toBeTruthy()
+    expect(screen.getByText('Test game')).toBeTruthy()
+    act(() => window.dispatchEvent(new Event('online')))
+    await screen.findByText('Server updated just now')
+  })
+
   it('ignores an older snapshot that finishes after a newer refresh', async () => {
     let resolveOld
     mocks.queryResults.games = new Promise((resolve) => { resolveOld = resolve })

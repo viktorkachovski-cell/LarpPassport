@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
+import SyncStatus from './SyncStatus'
 
 const DEFAULT_TEMPLATE = {
   stats: [
@@ -14,15 +15,30 @@ export default function GamesList({ session, onOpen }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
+  // Last successful / failed games request (U01); the parent keys this
+  // component by account, so a second account starts from "Checking".
+  const [sync, setSync] = useState({ lastOkAt: null, lastErrorAt: null, lastError: '' })
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false))
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    const wentOnline = () => { setOnline(true); load() }
+    const wentOffline = () => setOnline(false)
+    window.addEventListener('online', wentOnline)
+    window.addEventListener('offline', wentOffline)
+    return () => { window.removeEventListener('online', wentOnline); window.removeEventListener('offline', wentOffline) }
+  }, [])
   async function load() {
     setLoading(true); setError('')
     try {
       const { data, error } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
       if (error) throw error
       setGames(data ?? [])
-    } catch (error) { setError(error.message) } finally { setLoading(false) }
+      setSync((current) => ({ ...current, lastOkAt: Date.now() }))
+    } catch (error) {
+      setError(error.message)
+      setSync((current) => ({ ...current, lastErrorAt: Date.now(), lastError: error.message }))
+    } finally { setLoading(false) }
   }
 
   async function createGame() {
@@ -47,6 +63,7 @@ export default function GamesList({ session, onOpen }) {
       </div>
       <div className="games-list">
         <div className="registry-heading"><span>ASSIGNED OPERATIONS</span><b>{String(games.length).padStart(2, '0')}</b></div>
+        <SyncStatus sync={sync} realtime="closed" online={online} onRetry={load} label="Games" />
         {games.map((g) => (
           <button key={g.id} type="button" className="game-card" onClick={() => onOpen(g.id)}>
             <span className="game-card-mark">//</span>

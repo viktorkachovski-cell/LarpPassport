@@ -167,6 +167,24 @@ label { display: block; margin-bottom: 5px; color: var(--muted); font-family: va
 }
 
 .game-shell { height: 100%; display: flex; flex-direction: column; }
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.games-list .sync-status { margin-bottom: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.sync-status .sync-text { font-weight: 600; }
+.sync-status .sync-detail { color: var(--muted); }
+.sync-status.tone-ok .sync-text { color: var(--green); }
+.sync-status.tone-warning .sync-text { color: var(--amber); }
+.sync-status.tone-error .sync-text { color: var(--red); }
+.sync-status.tone-checking .sync-text { color: var(--muted); }
+.sync-status .sync-retry { margin-left: auto; min-height: 30px; padding-block: 3px; }
 .topbar {
   min-height: 58px;
   display: flex;

@@ -6,7 +6,8 @@ import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { C, F } from '../lib/theme'
 import { readGameSnapshot } from '../lib/gameSnapshot'
 import { updateLocationConsent } from '../lib/locationConsent'
-import { flush, isSharing, syncNotifications, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
+import { flush, isSharing, locationPermissionStatus, syncNotifications, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
+import { describeServerSync, describeSharing, formatAge, realtimeStateFromStatus } from '../lib/syncStatus'
 
 const BANDS = ['immediate', 'close', 'nearby', 'distant', 'far']
 
@@ -70,12 +71,20 @@ export default function GameScreen({ gameId, session, onBack }) {
   const [hunt, setHunt] = useState(null)
   const [huntBusy, setHuntBusy] = useState(false)
   const [huntError, setHuntError] = useState('')
-  const [queue, setQueue] = useState({ queued: 0, lastSent: null, profile: 'near' })
+  const [queue, setQueue] = useState({ queued: 0, failed: 0, lastError: null, lastSent: null, lastFixAt: null, profile: 'near' })
+  const [permission, setPermission] = useState(null)
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
+  // Separate facts (U01): last successful authoritative response, last failed
+  // one, and the Realtime socket hint. They are allowed to disagree.
+  const [sync, setSync] = useState({ lastOkAt: null, lastErrorAt: null, lastError: '' })
+  const [realtime, setRealtime] = useState('connecting')
   const refreshRef = useRef(() => {})
   const huntRequest = useRef(0)
+  const loadedOnce = useRef(false)
   const [now, setNow] = useState(Date.now())
+  const recordOk = useCallback(() => setSync((current) => ({ ...current, lastOkAt: Date.now() })), [])
+  const recordError = useCallback((message) => setSync((current) => ({ ...current, lastErrorAt: Date.now(), lastError: String(message ?? 'Request failed') })), [])
 
   const stats = game?.template?.stats ?? []
 
@@ -86,13 +95,18 @@ export default function GameScreen({ gameId, session, onBack }) {
     if (request !== huntRequest.current) return null
     if (huntLoadError) {
       setHuntError(huntLoadError.message)
+      recordError(huntLoadError.message)
       return null
     }
     setHunt(data)
     setHuntError('')
+    recordOk()
     return data
-    } catch (error) { if (request === huntRequest.current) setHuntError(error.message); return null }
-  }, [gameId])
+    } catch (error) {
+      if (request === huntRequest.current) { setHuntError(error.message); recordError(error.message) }
+      return null
+    }
+  }, [gameId, recordOk, recordError])
 
 
   // Relative timestamps ("5m ago") and the boundary banner only need coarse
@@ -117,15 +131,26 @@ export default function GameScreen({ gameId, session, onBack }) {
       setGame(snapshot.game)
       setCharacter(snapshot.character)
       setEvents(snapshot.events)
+      loadedOnce.current = true
+      recordOk()
       await syncNotifications(gameId).catch(() => {})
-      } catch (error) { if (alive && request === version) setLoadError(error.message) }
+      } catch (error) {
+        if (!alive || request !== version) return
+        recordError(error.message)
+        // Keep the last good snapshot on screen; the status line says it is stale.
+        if (!loadedOnce.current) setLoadError(error.message)
+      }
     }
     const refresh = () => { load(); loadHunt() }
     refreshRef.current = refresh
+    const readDeviceFacts = () => {
+      queueStatus(gameId).then((status) => { if (alive) setQueue(status) }).catch((error) => { if (alive) setError(error.message) })
+      isSharing(gameId).then((value) => { if (alive) setSharing(value) }).catch((error) => { if (alive) setError(error.message) })
+      locationPermissionStatus().then((value) => { if (alive) setPermission(value) }).catch(() => {})
+    }
     load()
     loadHunt()
-    isSharing(gameId).then(setSharing).catch((error) => { if (alive) setError(error.message) })
-    queueStatus(gameId).then(setQueue).catch((error) => { if (alive) setError(error.message) })
+    readDeviceFacts()
     Notifications.requestPermissionsAsync().catch(() => {})
 
     const channel = supabase
@@ -156,6 +181,8 @@ export default function GameScreen({ gameId, session, onBack }) {
         )) loadHunt()
       })
       .subscribe((status) => {
+        if (!alive) return
+        setRealtime(realtimeStateFromStatus(status))
         if (status === 'SUBSCRIBED') refresh()
       })
 
@@ -164,8 +191,7 @@ export default function GameScreen({ gameId, session, onBack }) {
     // while the app was suspended. Background GPS continues independently.
     const tick = () => {
       if (AppState.currentState !== 'active') return
-      queueStatus(gameId).then(setQueue).catch((error) => { if (alive) setError(error.message) })
-      isSharing(gameId).then(setSharing).catch((error) => { if (alive) setError(error.message) })
+      readDeviceFacts()
       refresh()
     }
     const interval = setInterval(tick, 45000)
@@ -180,7 +206,7 @@ export default function GameScreen({ gameId, session, onBack }) {
       appStateSub.remove()
       supabase.removeChannel(channel)
     }
-  }, [gameId, uid, loadHunt])
+  }, [gameId, uid, loadHunt, recordOk, recordError])
 
   useEffect(() => {
     if (!hunt?.participant || hunt.alive || !sharing) return
@@ -209,6 +235,7 @@ export default function GameScreen({ gameId, session, onBack }) {
       const result = await flush(gameId)
       if (result?.error) setError(`Send failed: ${result.error}`)
       setQueue(await queueStatus(gameId))
+      setPermission(await locationPermissionStatus().catch(() => null))
     } catch (error) { setError(error.message) }
   }, [gameId])
 
@@ -286,6 +313,8 @@ export default function GameScreen({ gameId, session, onBack }) {
         </View>
       </View>
 
+      <SyncStatusLine sync={sync} realtime={realtime} onRetry={() => refreshRef.current()} />
+
       <View style={styles.stateStrip}>
         <StateCell value={hunt?.alive_count ?? '--'} label={phase === 'not_started' ? 'TRAVELLERS JOINED' : 'TRAVELLERS LEFT'} />
         <StateCell value={playerStatus.value} label="YOUR STATUS" color={playerStatus.color} bordered />
@@ -326,6 +355,7 @@ export default function GameScreen({ gameId, session, onBack }) {
           game={game}
           phase={phase}
           sharing={sharing}
+          permission={permission}
           queue={queue}
           error={error}
           toggleSharing={toggleSharing}
@@ -349,6 +379,32 @@ function LiveDot({ color }) {
   }, [opacity])
 
   return <Animated.View style={[styles.liveDot, { backgroundColor: color, opacity }]} />
+}
+
+// Self-ticking (10 s) so "12 s ago" stays honest without re-rendering the
+// screen. The age line is deliberately not a live region: announcing every
+// tick would be noise. Only the error detail is announced.
+function SyncStatusLine({ sync, realtime, onRetry }) {
+  const [tick, setTick] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setTick(Date.now()), 10000)
+    return () => clearInterval(timer)
+  }, [])
+  const status = describeServerSync({ ...sync, realtime, now: tick })
+  const color = status.tone === 'ok' ? C.green : status.tone === 'error' ? C.red : status.tone === 'warning' ? C.amber : C.muted
+  return (
+    <View style={styles.syncLine}>
+      <View style={styles.flex}>
+        <Text style={[styles.syncText, { color }]}>{status.text}</Text>
+        <Text style={styles.syncDetail} accessibilityLiveRegion={status.tone === 'error' ? 'polite' : 'none'}>{status.detail}</Text>
+      </View>
+      {status.tone === 'error' && (
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retry sync" onPress={onRetry} style={styles.syncRetry}>
+          <Text style={styles.syncRetryText}>RETRY</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  )
 }
 
 const StateCell = memo(function StateCell({ value, label, color = C.text, bordered = false }) {
@@ -663,14 +719,18 @@ function PlayerMessageBox({ gameId }) {
   )
 }
 
-const SharingTab = memo(function SharingTab({ game, phase, sharing, queue, error, toggleSharing, sendNow }) {
+const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, queue, error, toggleSharing, sendNow }) {
+  const status = describeSharing({
+    sharing, permission, lastFixAt: queue.lastFixAt, queued: queue.queued ?? 0, failed: queue.failed ?? 0, lastError: queue.lastError,
+  })
+  const stateColor = status.tone === 'ok' ? C.green : status.tone === 'error' ? C.red : status.tone === 'warning' ? C.amber : C.muted
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
       <View style={styles.neutralCard}>
         <View style={styles.sharingHeader}>
           <View style={styles.flex}>
-            <Text style={styles.sharingTitle}>Location uplink</Text>
-            <Text style={styles.sharingState}>{sharing ? 'TRANSMITTING' : 'OFFLINE'}</Text>
+            <Text style={styles.sharingTitle}>Location sharing</Text>
+            <Text style={[styles.sharingState, { color: stateColor }]}>{status.text}</Text>
           </View>
           <Switch
             value={sharing}
@@ -679,6 +739,9 @@ const SharingTab = memo(function SharingTab({ game, phase, sharing, queue, error
             thumbColor={sharing ? C.ink : C.muted}
           />
         </View>
+        {status.lines.map((line) => (
+          <Text key={line} style={[styles.sharingFact, status.tone === 'error' && styles.errorText, status.tone === 'warning' && styles.amberText]}>{line}</Text>
+        ))}
         <Text style={styles.bodyCopy}>
           While enabled, your phone sends its position roughly every 15 seconds, including with the screen off. GMs see it on their map and a permanent notification stays visible.
         </Text>
@@ -691,15 +754,20 @@ const SharingTab = memo(function SharingTab({ game, phase, sharing, queue, error
       </View>
 
       <View style={styles.telemetryCard}>
-        <Text style={styles.telemetryKicker}>UPLINK TELEMETRY</Text>
+        <Text style={styles.telemetryKicker}>SYNC DETAILS</Text>
         <View style={styles.telemetryRow}>
           <TelemetryCell label="QUEUED" value={queue.queued ?? 0} color={C.cyan} />
-          <TelemetryCell label="LAST SENT" value={timeAgo(queue.lastSent).toUpperCase()} color={C.green} />
+          <TelemetryCell label="LAST SENT" value={(formatAge(queue.lastSent) ?? 'never').toUpperCase()} color={queue.lastSent ? C.green : C.muted} />
+          <TelemetryCell label="GPS FIX" value={(formatAge(queue.lastFixAt) ?? 'none').toUpperCase()} color={queue.lastFixAt ? C.text : C.muted} />
           <TelemetryCell label="GPS MODE" value={queue.profile === 'far' ? 'RELAXED' : 'PRECISE'} />
         </View>
+        {(queue.failed ?? 0) > 0 && (
+          <Text style={styles.errorText}>{queue.failed} update{queue.failed === 1 ? '' : 's'} rejected by the server and will not be retried{queue.lastError ? `: ${queue.lastError}` : '.'}</Text>
+        )}
+        <Text style={styles.telemetryNote}>Queued updates are sent automatically. "Last sent" is about location updates only; it does not prove the rest of the game data is current.</Text>
         <GhostButton label="SEND NOW" onPress={sendNow} />
       </View>
-      <Text style={styles.sharingFootnote}>SHARING STOPS AND YOUR MAP POSITION IS REMOVED ON ELIMINATION. HISTORY FOLLOWS THE RETENTION PERIOD ABOVE.</Text>
+      <Text style={styles.sharingFootnote}>Sharing stops and your map position is removed on elimination. History follows the retention period above.</Text>
     </ScrollView>
   )
 })
@@ -883,6 +951,11 @@ const styles = StyleSheet.create({
   phaseChip: { minWidth: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 13, paddingHorizontal: 8, paddingVertical: 5 },
   phaseText: { fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.3 },
   liveDot: { width: 7, height: 7, borderRadius: 4, marginRight: 6 },
+  syncLine: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingBottom: 8, gap: 10 },
+  syncText: { fontFamily: F.bodyMedium, fontSize: 13 },
+  syncDetail: { color: C.muted, fontFamily: F.body, fontSize: 12, marginTop: 1 },
+  syncRetry: { minHeight: 40, justifyContent: 'center', borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12 },
+  syncRetryText: { color: C.text, fontFamily: F.displaySemiBold, fontSize: 12.5, letterSpacing: 0.85 },
   stateStrip: { minHeight: 57, flexDirection: 'row', backgroundColor: C.panel, borderTopColor: C.line, borderTopWidth: 1, borderBottomColor: C.line, borderBottomWidth: 1 },
   stateCell: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   stateCellBorder: { borderLeftColor: C.line, borderLeftWidth: 1, borderRightColor: C.line, borderRightWidth: 1 },
@@ -985,6 +1058,8 @@ const styles = StyleSheet.create({
   sharingTitle: { color: C.text, fontFamily: F.bodySemiBold, fontSize: 15 },
   sharingState: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.25, marginTop: 3 },
   sharingDetails: { marginTop: 9 },
+  sharingFact: { color: C.text, fontFamily: F.bodyMedium, fontSize: 13, lineHeight: 19, marginTop: 4 },
+  telemetryNote: { color: C.muted, fontFamily: F.body, fontSize: 12, lineHeight: 17, marginTop: 10 },
   warningCopy: { color: C.amber, fontFamily: F.bodyMedium, fontSize: 12.5, lineHeight: 18, marginTop: 11 },
   telemetryCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 14, marginTop: 12 },
   telemetryKicker: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.5 },

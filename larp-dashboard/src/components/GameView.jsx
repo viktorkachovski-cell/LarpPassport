@@ -7,6 +7,8 @@ import TemplatePanel from './TemplatePanel'
 import EventsPanel from './EventsPanel'
 import PlayersPanel from './PlayersPanel'
 import HuntPanel from './HuntPanel'
+import SyncStatus from './SyncStatus'
+import { realtimeStateFromStatus } from '../lib/syncStatus'
 
 const MapPanel = lazy(() => import('./MapPanel'))
 
@@ -37,6 +39,22 @@ export default function GameView({ gameId, session, onBack }) {
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
+  // Separate facts (U01): last successful authoritative snapshot, last failed
+  // one, the Realtime socket hint and the browser online hint.
+  const [sync, setSync] = useState({ lastOkAt: null, lastErrorAt: null, lastError: '' })
+  const [realtime, setRealtime] = useState('connecting')
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false))
+  const loadedOnce = useRef(false)
+  const recordOk = useCallback(() => setSync((current) => ({ ...current, lastOkAt: Date.now() })), [])
+  const recordError = useCallback((message) => {
+    setSync((current) => ({ ...current, lastErrorAt: Date.now(), lastError: String(message ?? 'Request failed') }))
+    return message
+  }, [])
+  const failSnapshot = useCallback((message) => {
+    recordError(message)
+    // Keep the last good snapshot on screen; the status line reports staleness.
+    if (!loadedOnce.current) setLoadError(message)
+  }, [recordError])
 
   const isGm = !!game && (
     game.gm_id === uid || members.some((m) => m.profile_id === uid && m.role === 'gm')
@@ -96,13 +114,13 @@ export default function GameView({ gameId, session, onBack }) {
       ])
       if (!alive || request !== version) return
       const accessFailure = [g, mem].find((result) => result.error)
-      if (accessFailure) { setLoadError(accessFailure.error.message); return }
+      if (accessFailure) { failSnapshot(accessFailure.error.message); return }
 
       setGame(g.data)
       setMembers(mem.data ?? [])
       const canManage = g.data.gm_id === uid
         || (mem.data ?? []).some((member) => member.profile_id === uid && member.role === 'gm')
-      if (!canManage) { setLoadError(''); return }
+      if (!canManage) { setLoadError(''); loadedOnce.current = true; recordOk(); return }
 
       const [z, pos, chars, fac, ev, huntState, joinCode, pending] = await Promise.all([
         supabase.from('zones_view').select('*').eq('game_id', gameId),
@@ -116,7 +134,7 @@ export default function GameView({ gameId, session, onBack }) {
       ])
       if (!alive || request !== version) return
       const failed = [z, pos, chars, fac, ev, huntState, pending, joinCode].find((result) => result.error)
-      if (failed) { setLoadError(failed.error.message); return }
+      if (failed) { failSnapshot(failed.error.message); return }
       if (typeof joinCode.data === 'string') {
         setGame((current) => ({ ...(current ?? g.data), join_code: joinCode.data }))
       }
@@ -130,12 +148,17 @@ export default function GameView({ gameId, session, onBack }) {
       setPendingEvents(pending.data ?? [])
       setLoadError('')
       setHunt(huntState.data)
-      } catch (error) { if (alive && request === version) setLoadError(error.message) }
+      loadedOnce.current = true
+      recordOk()
+      } catch (error) { if (alive && request === version) failSnapshot(error.message) }
       finally { if (request === version) snapshotPending.current = false }
     }
     refreshRef.current = load
     const focus = () => { if (document.visibilityState !== 'hidden') load() }
-    window.addEventListener('online', focus)
+    const wentOnline = () => { setOnline(true); focus() }
+    const wentOffline = () => setOnline(false)
+    window.addEventListener('online', wentOnline)
+    window.addEventListener('offline', wentOffline)
     window.addEventListener('focus', focus)
     document.addEventListener('visibilitychange', focus)
     const timer = setInterval(focus, 60000)
@@ -146,10 +169,11 @@ export default function GameView({ gameId, session, onBack }) {
       refreshRef.current = () => {}
       invalidateSnapshot.current = () => {}
       snapshotPending.current = false
-      window.removeEventListener('online', focus); window.removeEventListener('focus', focus)
+      window.removeEventListener('online', wentOnline); window.removeEventListener('offline', wentOffline)
+      window.removeEventListener('focus', focus)
       document.removeEventListener('visibilitychange', focus)
     }
-  }, [gameId, uid, refetchZones, refetchMembers, scheduleRefresh])
+  }, [gameId, uid, refetchZones, refetchMembers, scheduleRefresh, recordOk, failSnapshot])
 
   useEffect(() => {
     if (!isGm) return undefined
@@ -218,9 +242,12 @@ export default function GameView({ gameId, session, onBack }) {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'zones', filter: `game_id=eq.${gameId}` }, refetchZones)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players', filter: `game_id=eq.${gameId}` }, refetchMembers)
-      .subscribe((status) => { if (status === 'SUBSCRIBED') scheduleRefresh() })
+      .subscribe((status) => {
+        setRealtime(realtimeStateFromStatus(status))
+        if (status === 'SUBSCRIBED') scheduleRefresh()
+      })
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { supabase.removeChannel(channel); setRealtime('closed') }
   }, [gameId, isGm, refetchZones, refetchMembers, refetchHunt, scheduleRefresh])
 
   const usernameOf = useCallback((profileId) => {
@@ -476,8 +503,8 @@ export default function GameView({ gameId, session, onBack }) {
     setCopied(true); setTimeout(() => setCopied(false), 1400)
   }
 
-  if (loadError) return <div className="center-screen"><p className="error">{loadError}</p><button onClick={() => refreshRef.current()}>Retry</button><button onClick={onBack}>Back</button></div>
-  if (!game) return <div className="center-screen"><p className="hint">Loading game…</p></div>
+  if (loadError && !game) return <div className="center-screen"><p className="error" role="alert">{loadError}</p><button onClick={() => refreshRef.current()}>Retry</button><button onClick={onBack}>Back</button></div>
+  if (!game) return <div className="center-screen"><p className="hint" role="status">Loading game…</p></div>
 
   if (!isGm) return (
     <div className="center-screen">
@@ -514,6 +541,7 @@ export default function GameView({ gameId, session, onBack }) {
         </div>
         <button className="ghost" onClick={refetchHunt}>Refresh</button><span className="gm-chip">GM</span>
       </div>
+      <SyncStatus sync={sync} realtime={realtime} online={online} onRetry={refetchHunt} />
       <div className="tabs">
         {['hunt', 'map', 'characters', 'template', 'events', 'players'].map((t) => (
           <button key={t} className={tab === t ? 'active' : ''} onClick={() => {
