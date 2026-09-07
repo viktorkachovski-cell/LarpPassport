@@ -8,7 +8,7 @@ The owner approved completing F01-F12, pushing to main and deploying Supabase/Ve
 
 Local implementation now includes owned GPS sessions and queues, serialized notification delivery with a separate database delivery cursor, reconnect/foreground snapshots, an independent pending-action query, history pagination, retry states, chronology/round/consent guards, and compatible dependency patches. The original review below is retained as the baseline; its "Remaining" labels describe the initial review, not the implementation follow-up.
 
-Validation is in progress. Hosted migration compilation was blocked by automatic approval review; the full migration history will be verified in disposable GitHub CI before hosted deployment.
+Implementation and validation results are recorded in [the release record](RELIABILITY_RELEASE_2026-09-07.md). The full migration history passed disposable GitHub CI and both new migrations were applied to the hosted project.
 
 ## Recommendation
 
@@ -48,7 +48,7 @@ The user confirmed that existing database data is test data. No existing game wa
 
 Key evidence locations:
 
-- F01: [existing validator](../supabase/migrations/20260715201551_account_deletion_fk_repair.sql), [proposed migration](../supabase/migrations/20260907144947_prevent_player_reset_of_locked_stats.sql), [regression tests](../supabase/tests/database/004_locked_character_fields.sql).
+- F01: [existing validator](../supabase/migrations/20260715201551_account_deletion_fk_repair.sql), [proposed migration](../supabase/migrations/20260907153825_prevent_player_reset_of_locked_stats.sql), [regression tests](../supabase/tests/database/004_locked_character_fields.sql).
 - F02/F03: [location task](../larp-passport/mobile/src/lib/locationTask.js), especially `startSharing`, `stopSharing`, `isSharing`, `notifyEvents`, and `markSeenUpTo`; [queue schema](../larp-passport/mobile/src/lib/pingStore.js); [sign-out](../larp-passport/mobile/src/screens/GamesScreen.js).
 - F04/F05: [dashboard game view](../larp-dashboard/src/components/GameView.jsx); [mobile game screen](../larp-passport/mobile/src/screens/GameScreen.js). Realtime delete filtering/old-row limitations also require care when reconciling positions: [Supabase documentation](https://supabase.com/docs/guides/realtime/postgres-changes).
 - F06: [ping ingestion and zone evaluation](../supabase/migrations/20260715201125_harden_ping_ingest_and_boundary.sql).

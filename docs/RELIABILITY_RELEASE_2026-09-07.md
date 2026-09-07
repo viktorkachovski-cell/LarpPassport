@@ -26,8 +26,16 @@ Consent and GPS ingestion share the existing per-game hunt lock. Eliminated part
 - Dashboard: 15 regression tests and production build pass locally.
 - Mobile: 38 regression tests, Expo Doctor 18/18 and Android bundle export pass locally. Final changes are also checked by CI.
 - Database: 145 assertions pass on a clean disposable Supabase stack with the complete migration history.
-- Multi-connection checks cover consent revocation/ingestion, elimination/ingestion, roster writes while a hunt lock is held, and delayed boundary evidence arriving alongside a new claim. The final CI result is required before deployment.
+- Multi-connection checks cover consent revocation/ingestion, elimination/ingestion, roster writes while a hunt lock is held, and delayed boundary evidence arriving alongside a new claim. All four passed in the final verification run.
 - No APK build or game release tag is created by this deployment.
+
+## Deployment record
+
+- Application commit: `572371c8b5d5052c6d88ba75bd17a2b84822c36d`.
+- [Verification branch CI](https://github.com/viktorkachovski-cell/LarpPassport/actions/runs/34139139345) and [main CI](https://github.com/viktorkachovski-cell/LarpPassport/actions/runs/34139317624) passed all jobs.
+- Supabase `Passport` (`ufcnxkowpkwayczbfnzy`): applied `20260907153825_prevent_player_reset_of_locked_stats` and `20260907153842_reliable_tracking_and_event_delivery`. Filenames use the versions assigned by the hosted migration service; migration contents are unchanged from the verified patch.
+- Existing four recovered migrations were not reapplied. No existing game or account was deleted/reset.
+- Post-migration advisor findings are the expected authenticated security-definer API warnings, plus disabled leaked-password protection. The new delivery RPC checks authentication and membership and returns only the caller's visible events. [Advisor explanation](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
 
 ## Remaining limits
 
@@ -38,3 +46,5 @@ An Android export does not test screen-off GPS, operating-system permission chan
 Notification delivery retries on failure. A process crash between operating-system notification scheduling and cursor persistence can replay a notification; stable notification identifiers reduce duplicates. This is not a transactional exactly-once guarantee across the OS and local storage.
 
 The hosted dataset is test data and too small to establish live-game capacity. No broad index removal, database reset, visual redesign or new mechanic is included.
+
+Supabase leaked-password protection is disabled. Enable it when supported by the project plan; this is an Auth configuration follow-up, not a gameplay rule. [Supabase password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
