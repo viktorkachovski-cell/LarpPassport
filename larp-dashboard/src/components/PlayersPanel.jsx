@@ -31,7 +31,7 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
   return (
     <div className="panel-pad">
       <p className="hint mb">
-        Players join from the app with code <b style={{ color: 'var(--cyan)' }}>{game.join_code}</b>.
+        Players join from the app with join code <b style={{ color: 'var(--cyan)' }}>{game.join_code}</b>.
         Location pings older than <input type="number" min="1" max="90" aria-label="Days to keep location pings" style={{ width: 76 }} defaultValue={game.purge_after_days}
           onBlur={(e) => { const v = Number(e.target.value); if (v >= 1 && v !== game.purge_after_days) updateGame({ purge_after_days: v }) }} /> days are deleted automatically.
       </p>
@@ -51,8 +51,8 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
               </td>
               <td>
                 {m.role === 'gm' ? <span className="badge-pill gm">GM</span>
-                  : consentActive(m) ? <span className="badge-pill on">sharing</span>
-                  : <span className="badge-pill off">not sharing</span>}
+                  : consentActive(m) ? <span className="badge-pill on">sharing on</span>
+                  : <span className="badge-pill off">sharing off</span>}
               </td>
               <td className="hint">{timeAgo(positions[m.profile_id]?.recorded_at)}</td>
               <td className="hint">{positions[m.profile_id]?.battery_pct != null ? Math.round(positions[m.profile_id].battery_pct) + '%' : '—'}</td>

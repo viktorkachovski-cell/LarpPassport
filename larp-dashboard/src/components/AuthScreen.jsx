@@ -33,12 +33,12 @@ export default function AuthScreen() {
         <span className="brand-mark" aria-hidden="true"><span /></span>
         <span className="brand-kicker">TEMPORAL FIELD AUTHORITY</span>
         <h1 className="display">LARP PASSPORT</h1>
-        <p>GM COMMAND CONSOLE // SECURE UPLINK</p>
+        <p>GM DASHBOARD // SIGN IN TO RUN A GAME</p>
       </div>
       <div className="card auth-card">
         <div className="card-heading">
-          <span className="micro-label">{mode === 'signin' ? 'COMMAND RE-ENTRY' : 'NEW COMMAND ID'}</span>
-          <h2>{mode === 'signin' ? 'Authenticate' : 'Create GM account'}</h2>
+          <span className="micro-label">{mode === 'signin' ? 'GM ACCESS' : 'NEW GM ACCOUNT'}</span>
+          <h2>{mode === 'signin' ? 'Sign in' : 'Create GM account'}</h2>
         </div>
         {mode === 'signup' && (
           <div className="field">

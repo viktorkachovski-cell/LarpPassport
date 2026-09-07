@@ -52,14 +52,14 @@ export default function GamesScreen({ onOpen }) {
       <View style={styles.header}>
         <View>
           <Text style={styles.eyebrow}>TEMPORAL FIELD AUTHORITY</Text>
-          <Text style={styles.title}>DEPLOYMENTS</Text>
+          <Text style={styles.title}>GAMES</Text>
         </View>
         <ListSyncStatus sync={sync} loading={loading} />
       </View>
 
       <View style={styles.joinCard}>
-        <Text style={styles.joinKicker}>JOIN A TIMELINE</Text>
-        <Text style={styles.joinCopy}>Enter the field code issued by your GM.</Text>
+        <Text style={styles.joinKicker}>JOIN A GAME</Text>
+        <Text style={styles.joinCopy}>Enter the join code from your GM.</Text>
         <View style={styles.joinRow}>
           <TextInput
             style={styles.codeInput}
@@ -70,7 +70,7 @@ export default function GamesScreen({ onOpen }) {
             value={code}
             onChangeText={setCode}
             onSubmitEditing={join}
-            placeholder="GAME CODE"
+            placeholder="JOIN CODE"
             placeholderTextColor={C.muted}
           />
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy || !code.trim() }} disabled={busy || !code.trim()} onPress={join} style={[styles.joinButton, (busy || !code.trim()) && styles.disabled]}>
@@ -81,7 +81,7 @@ export default function GamesScreen({ onOpen }) {
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionLabel}>ASSIGNED OPERATIONS</Text>
+        <Text style={styles.sectionLabel}>YOUR GAMES</Text>
         <Text style={styles.sectionCount}>{String(games.length).padStart(2, '0')}</Text>
       </View>
       <FlatList
@@ -89,7 +89,7 @@ export default function GamesScreen({ onOpen }) {
         keyExtractor={(game) => game.id}
         contentContainerStyle={games.length === 0 ? styles.emptyList : styles.list}
         refreshing={loading} onRefresh={load}
-        ListEmptyComponent={<Text style={styles.empty}>{loading ? 'Loading games...' : error ? 'Could not load games. Pull to retry.' : 'NO ACTIVE PASSPORTS FOUND'}</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>{loading ? 'Loading games...' : error ? 'Could not load games. Pull to retry.' : 'No games yet. Join one with a code from your GM.'}</Text>}
         renderItem={({ item }) => {
           const color = STATUS_COLORS[item.status] ?? C.muted
           return (
@@ -108,7 +108,7 @@ export default function GamesScreen({ onOpen }) {
         try { await stopSharing(); const { error } = await supabase.auth.signOut(); if (error) throw error }
         catch (error) { setError(error.message) }
       }} style={styles.signout}>
-        <Text style={styles.signoutText}>DISCONNECT FIELD ID</Text>
+        <Text style={styles.signoutText}>SIGN OUT</Text>
       </TouchableOpacity>
     </SafeAreaView>
   )

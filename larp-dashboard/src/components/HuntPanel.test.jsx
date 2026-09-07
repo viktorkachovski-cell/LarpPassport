@@ -185,7 +185,7 @@ describe('HuntPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Awaiting GM assignment')).toBeTruthy()
+    expect(screen.getByText('Waiting for GM target assignment')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Assign target to Ariadne' }))
     await waitFor(() => expect(recovery.assignNextTarget).toHaveBeenCalledWith('player-1'))
   })

@@ -550,7 +550,7 @@ export default function GameView({ gameId, session, onBack }) {
           </select>
         </div>
         <div className="topbar-control">
-          <span className="control-label">POSITIONS</span>
+          <span className="control-label">WHO SEES POSITIONS</span>
           <select aria-label="Position visibility" value={game.location_visibility} onChange={(e) => updateGame({ location_visibility: e.target.value })}>
             <option value="gm_only">GMs only</option>
             <option value="faction">Same faction</option>

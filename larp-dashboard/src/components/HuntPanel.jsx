@@ -130,7 +130,7 @@ export default function HuntPanel({
   if (hunt.phase === 'not_started') return (
     <div className="panel-pad hunt-panel">
       <div className="card hunt-start-card">
-        <span className="micro-label">TIME HUNT // DEPLOYMENT CONTROL</span>
+        <span className="micro-label">TIME HUNT // START CONTROL</span>
         <h2 className="display">Roster readiness</h2>
         <p className="hint">
           Starting randomizes every player into one secret circular target chain. GMs remain observers,
@@ -224,7 +224,7 @@ export default function HuntPanel({
                     <tr key={player.profile_id} className={`${player.state === 'eliminated' ? 'eliminated-row' : ''} ${awaitingAssignment ? 'awaiting-row' : ''}`}>
                       <td><b>{player.character_name}</b><div className="hint">@{player.username}</div></td>
                       <td><span className={`badge-pill ${player.state === 'alive' ? 'on' : 'off'}`}>{player.state.toUpperCase()}</span></td>
-                      <td className={awaitingAssignment ? 'awaiting-target' : 'target-cell'}>{player.target_name ? <>→ {player.target_name}</> : awaitingAssignment ? 'Awaiting GM assignment' : '-'}</td>
+                      <td className={awaitingAssignment ? 'awaiting-target' : 'target-cell'}>{player.target_name ? <>→ {player.target_name}</> : awaitingAssignment ? 'Waiting for GM target assignment' : '-'}</td>
                       <td className={signal.startsWith('cloaked') ? 'signal-cloaked' : 'hint'}>{signal}</td>
                       <td className="hint">{player.eliminated_at ? timeAgo(player.eliminated_at) : '-'}</td>
                       <td className="action-cell">
@@ -248,8 +248,8 @@ export default function HuntPanel({
 
         <aside className="hunt-sidebar">
           <section className="command-card recovery-card">
-            <span className="micro-label">GM RECOVERY</span>
-            <h3>Ruling overrides</h3>
+            <span className="micro-label">GM OVERRIDES</span>
+            <h3>Rulings and corrections</h3>
             <p className="hint">Override claims, eliminate or restore a traveller, or replace the complete living-player chain. Every action is recorded.</p>
           </section>
 

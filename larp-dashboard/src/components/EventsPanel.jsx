@@ -79,7 +79,7 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
     <div className="panel-pad events-panel">
       <section className="command-card event-composer">
         <div>
-          <span className="micro-label">FIELD BROADCAST</span>
+          <span className="micro-label">MESSAGE PLAYERS</span>
           <h3>Message players</h3>
         </div>
         <div className="broadcast-controls">
@@ -89,9 +89,9 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
               <option key={member.profile_id} value={member.profile_id}>{member.profile?.username}</option>
             ))}
           </select>
-          <input aria-label="Message to players" placeholder="Message players - appears in their app instantly" value={message}
+          <input aria-label="Message to players" placeholder="Message to players - appears in their app" value={message}
             onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} />
-          <button className="primary" disabled={!message.trim() || sending} onClick={send}>{sending ? 'Sending…' : 'Send broadcast'}</button>
+          <button className="primary" disabled={!message.trim() || sending} onClick={send}>{sending ? 'Sending…' : 'Send message'}</button>
         </div>
         {outcome(sendState, () => setSendState(null))}
       </section>
@@ -99,7 +99,7 @@ export default function EventsPanel({ events, pendingEvents = [], loadOlder, has
       {outcome(decision, () => setDecision(null))}
 
       <div className="event-toolbar">
-        <div><span className="micro-label">EVENT STREAM</span><h2>Timeline activity</h2></div>
+        <div><span className="micro-label">EVENT LOG</span><h2>Events</h2></div>
         <div className="filter-group" role="group" aria-label="Event filter">
           <button className={filter === 'all' ? 'primary' : 'ghost'} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All</button>
           <button className={filter === 'pending' ? 'primary' : 'ghost'} aria-pressed={filter === 'pending'} onClick={() => setFilter('pending')}>Pending</button>

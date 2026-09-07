@@ -301,7 +301,7 @@ export default function GameScreen({ gameId, session, onBack }) {
   if (!game || character === undefined) {
     return (
       <SafeAreaView style={styles.loading}>
-        <Text style={styles.loadingText}>SYNCING FIELD DATA...</Text>
+        <Text style={styles.loadingText}>LOADING GAME...</Text>
       </SafeAreaView>
     )
   }
@@ -314,7 +314,7 @@ export default function GameScreen({ gameId, session, onBack }) {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to deployments" onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to games" onPress={onBack} style={styles.backButton}>
           <Text style={styles.backText}>&lt;</Text>
         </TouchableOpacity>
         <Text style={styles.gameName} numberOfLines={1}>{game.name.toUpperCase()}</Text>
@@ -327,7 +327,7 @@ export default function GameScreen({ gameId, session, onBack }) {
       <SyncStatusLine sync={sync} realtime={realtime} onRetry={() => refreshRef.current()} />
 
       <View style={styles.stateStrip}>
-        <StateCell value={hunt?.alive_count ?? '--'} label={phase === 'not_started' ? 'TRAVELLERS JOINED' : 'TRAVELLERS LEFT'} />
+        <StateCell value={hunt?.alive_count ?? '--'} label={phase === 'not_started' ? 'PLAYERS JOINED' : 'TRAVELLERS LEFT'} />
         <StateCell value={playerStatus.value} label="YOUR STATUS" color={playerStatus.color} bordered />
         <StateCell value={<Countdown to={hunt?.hidden_until} />} label="CLOAK LEFT" color={C.cyan} />
       </View>
@@ -459,7 +459,7 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, out
   if (!hunt) {
     return (
       <View style={styles.centerState}>
-        <Text style={[styles.centerCopy, error && styles.errorText]}>{error || 'Reading temporal field...'}</Text>
+        <Text style={[styles.centerCopy, error && styles.errorText]}>{error || 'Loading hunt status...'}</Text>
         {!!error && <GhostButton label="RETRY" onPress={refresh} />}
       </View>
     )
@@ -470,7 +470,7 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, out
       <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
         <View style={styles.neutralCard}>
           <Text style={styles.cyanKicker}>O AWAITING THE HUNT</Text>
-          <Text style={styles.sectionTitle}>Deployment pending</Text>
+          <Text style={styles.sectionTitle}>Hunt not started</Text>
           <Text style={styles.bodyCopy}>The GM will lock the roster and assign one secret target to every traveller.</Text>
           {!hasCharacter && (
             <View style={styles.warningInset}>
@@ -488,8 +488,8 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, out
     return (
       <View style={styles.centerState}>
         <View style={styles.neutralIcon}><Text style={styles.neutralIconText}>O</Text></View>
-        <Text style={styles.sectionTitle}>Observer channel</Text>
-        <Text style={styles.centerCopy}>You are not part of this target chain.</Text>
+        <Text style={styles.sectionTitle}>Observer</Text>
+        <Text style={styles.centerCopy}>You are not part of this hunt's target chain.</Text>
       </View>
     )
   }
@@ -537,7 +537,7 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, out
           )}
         </View>
         <View style={styles.targetBody}>
-          <Text style={[styles.targetName, awaitingTarget && styles.awaitingName]}>{hunt.target?.character_name ?? 'SIGNAL PENDING'}</Text>
+          <Text style={[styles.targetName, awaitingTarget && styles.awaitingName]}>{hunt.target?.character_name ?? 'NO TARGET YET'}</Text>
           {awaitingTarget ? (
             <Text style={styles.bodyCopy}>Elimination confirmed. Waiting for the GM to assign your next target. No claim can start until then.</Text>
           ) : (
@@ -546,7 +546,7 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, out
 
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={requestElimination} style={[disabled ? styles.disabledClaimButton : styles.claimButton, busy && styles.disabled]}>
             <Text style={disabled ? styles.disabledButtonText : styles.filledButtonText}>
-              {awaitingTarget ? 'AWAITING GM ASSIGNMENT' : claimPending ? 'WAITING FOR TARGET CONFIRMATION' : 'CLAIM ELIMINATION'}
+              {awaitingTarget ? 'WAITING FOR GM TARGET ASSIGNMENT' : claimPending ? 'WAITING FOR TARGET CONFIRMATION' : 'CLAIM ELIMINATION'}
             </Text>
           </TouchableOpacity>
           <Text style={styles.claimCaption}>
@@ -647,7 +647,7 @@ const EventsTab = memo(function EventsTab({ gameId, events }) {
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <PlayerMessageBox gameId={gameId} />
-      {events.length === 0 && <Text style={styles.emptyText}>NO FIELD EVENTS // STAY ALERT</Text>}
+      {events.length === 0 && <Text style={styles.emptyText}>No events yet.</Text>}
       {events.map((event) => {
         const meta = eventMeta(event.type)
         const message = event.payload?.message || eventBody(event.type)
@@ -680,8 +680,8 @@ function eventMeta(type) {
 
 function eventTitle(type) {
   if (type === 'gm_note') return 'Message from your GM'
-  if (type === 'consent_granted') return 'Location uplink enabled'
-  if (type === 'consent_revoked') return 'Location uplink disabled'
+  if (type === 'consent_granted') return 'Location sharing on'
+  if (type === 'consent_revoked') return 'Location sharing off'
   if (type === 'hunt_started') return 'The hunt has begun'
   if (type === 'elimination_requested') return 'Elimination confirmation requested'
   if (type === 'elimination_claimed') return 'Waiting for target confirmation'
@@ -726,7 +726,7 @@ function PlayerMessageBox({ gameId }) {
   const sendDisabled = busy || !message.trim()
   return (
     <View style={styles.messageCard}>
-      <Text style={styles.messageTitle}>Message the GM</Text>
+      <Text style={styles.messageTitle}>Message GM</Text>
       <TextInput
         style={[styles.input, styles.messageInput]}
         accessibilityLabel="Message to the GM"
@@ -739,7 +739,7 @@ function PlayerMessageBox({ gameId }) {
       <View style={styles.messageFooter}>
         <Text style={styles.charCount}>{message.length}/100</Text>
         <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={send} style={[styles.smallCyanButton, sendDisabled && styles.disabled]}>
-          <Text style={styles.smallCyanButtonText}>{busy ? 'SENDING...' : 'SEND'}</Text>
+          <Text style={styles.smallCyanButtonText}>{busy ? 'SENDING...' : 'SEND TO GM'}</Text>
         </TouchableOpacity>
       </View>
       <Text style={styles.privateCaption}>ONLY YOU AND THE GMS SEE THIS // 3s COOLDOWN</Text>

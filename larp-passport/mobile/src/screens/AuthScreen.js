@@ -52,29 +52,29 @@ export default function AuthScreen() {
           <View style={styles.markOuter}><View style={styles.markInner} /></View>
           <Text style={styles.eyebrow}>TEMPORAL FIELD AUTHORITY</Text>
           <Text style={styles.brand}>LARP PASSPORT</Text>
-          <Text style={styles.tagline}>IDENTITY UPLINK // FIELD TERMINAL</Text>
+          <Text style={styles.tagline}>PLAYER APP // SIGN IN TO JOIN A GAME</Text>
         </View>
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardKicker}>{signingIn ? 'AGENT RE-ENTRY' : 'NEW AGENT REGISTRY'}</Text>
-            <Text style={styles.cardTitle}>{signingIn ? 'Authenticate' : 'Create identity'}</Text>
+            <Text style={styles.cardKicker}>{signingIn ? 'PLAYER ACCESS' : 'NEW PLAYER ACCOUNT'}</Text>
+            <Text style={styles.cardTitle}>{signingIn ? 'Sign in' : 'Create account'}</Text>
           </View>
 
           {mode === 'signup' && (
-            <Field label="FIELD HANDLE" value={username} onChangeText={setUsername} placeholder="agent_tachyon" autoCapitalize="none" />
+            <Field label="USERNAME" value={username} onChangeText={setUsername} placeholder="your_name" autoCapitalize="none" />
           )}
           <Field label="EMAIL" value={email} onChangeText={setEmail} placeholder="agent@example.com" autoCapitalize="none" keyboardType="email-address" />
-          <Field label="ACCESS PHRASE" value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
+          <Field label="PASSWORD" value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
 
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={submit} style={[styles.primaryButton, busy && styles.disabled]}>
-            <Text style={styles.primaryButtonText}>{busy ? 'CONNECTING...' : signingIn ? 'ENTER TIMELINE' : 'REGISTER AGENT'}</Text>
+            <Text style={styles.primaryButtonText}>{busy ? 'SIGNING IN...' : signingIn ? 'SIGN IN' : 'CREATE ACCOUNT'}</Text>
           </TouchableOpacity>
           {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
           {!!notice && <Text style={styles.notice} accessibilityLiveRegion="polite">{notice}</Text>}
 
           <TouchableOpacity accessibilityRole="button" onPress={switchMode} style={styles.modeButton}>
-            <Text style={styles.modeCopy}>{signingIn ? 'NO FIELD ID? ' : 'ALREADY REGISTERED? '}<Text style={styles.modeLink}>{signingIn ? 'CREATE ONE' : 'SIGN IN'}</Text></Text>
+            <Text style={styles.modeCopy}>{signingIn ? 'New here? ' : 'Already have an account? '}<Text style={styles.modeLink}>{signingIn ? 'Create an account' : 'Sign in'}</Text></Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.footer}>SECURE CHANNEL // BUILD 2141.07</Text>

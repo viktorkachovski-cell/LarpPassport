@@ -58,11 +58,11 @@ export default function GamesList({ session, onOpen }) {
     <div className="center-screen" style={{ justifyContent: 'flex-start', paddingTop: 60 }}>
       <div className="brand">
         <span className="brand-kicker">TEMPORAL FIELD AUTHORITY</span>
-        <h1 className="display">DEPLOYMENT REGISTRY</h1>
-        <p>Open an operation or authorize a new timeline.</p>
+        <h1 className="display">GAMES</h1>
+        <p>Open a game or create a new one.</p>
       </div>
       <div className="games-list">
-        <div className="registry-heading"><span>ASSIGNED OPERATIONS</span><b>{String(games.length).padStart(2, '0')}</b></div>
+        <div className="registry-heading"><span>YOUR GAMES</span><b>{String(games.length).padStart(2, '0')}</b></div>
         <SyncStatus sync={sync} realtime="closed" online={online} onRetry={load} label="Games" />
         {games.map((g) => (
           <button key={g.id} type="button" className="game-card" onClick={() => onOpen(g.id)}>

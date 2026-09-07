@@ -62,21 +62,21 @@ describe('EventsPanel', () => {
   it('keeps a failed broadcast visible with the draft intact', async () => {
     const panelProps = props({ broadcast: vi.fn().mockResolvedValue(new Error('permission denied')) })
     render(<EventsPanel {...panelProps} />)
-    fireEvent.change(screen.getByPlaceholderText(/appears in their app instantly/), { target: { value: 'Regroup.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send broadcast' }))
+    fireEvent.change(screen.getByPlaceholderText(/appears in their app/), { target: { value: 'Regroup.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('permission denied')
-    expect(screen.getByPlaceholderText(/appears in their app instantly/).value).toBe('Regroup.')
+    expect(screen.getByPlaceholderText(/appears in their app/).value).toBe('Regroup.')
   })
 
   it('broadcasts a GM message only to player profiles', async () => {
     const panelProps = props()
     render(<EventsPanel {...panelProps} />)
 
-    const send = screen.getByRole('button', { name: 'Send broadcast' })
+    const send = screen.getByRole('button', { name: 'Send message' })
     expect(send.disabled).toBe(true)
 
-    fireEvent.change(screen.getByPlaceholderText(/appears in their app instantly/), {
+    fireEvent.change(screen.getByPlaceholderText(/appears in their app/), {
       target: { value: 'Return to the anomaly center.' },
     })
     fireEvent.click(send)
