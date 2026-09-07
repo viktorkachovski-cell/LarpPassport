@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View, Text } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
@@ -46,6 +46,7 @@ export default function App() {
   })
   const [session, setSession] = useState(undefined)
   const [game, setGame] = useState(null)
+  const previousUser = useRef(null)
 
   useEffect(() => {
     let alive = true
@@ -62,6 +63,10 @@ export default function App() {
 
   useEffect(() => {
     setGame(null)
+    if (previousUser.current && previousUser.current !== session?.user.id) {
+      Notifications.dismissAllNotificationsAsync().catch(() => {})
+    }
+    previousUser.current = session?.user.id
     reconcileTracking().catch(() => {})
   }, [session?.user.id])
 

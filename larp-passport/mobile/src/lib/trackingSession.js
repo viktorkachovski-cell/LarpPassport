@@ -13,8 +13,7 @@ export function createTrackingSession({ storage, key, start, stop, purge, curren
   }
   async function clear(owner) {
     await storage.removeItem(key)
-    await stop()
-    if (owner) await purge(owner)
+    try { await stop() } finally { if (owner) await purge(owner) }
   }
   return {
     read, current,
@@ -44,6 +43,7 @@ export function createTrackingSession({ storage, key, start, stop, purge, curren
     changeProfile: (owner, mode) => serial(async () => {
       if (!await current(owner)) return
       await stop()
+      if (!await current(owner)) return
       try { await start(mode) } catch (error) { await clear(owner); throw error }
     }),
   }

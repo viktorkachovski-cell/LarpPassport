@@ -59,6 +59,14 @@ try:
     race(f"update private.hunt_players set state='eliminated', eliminated_at=now(), eliminated_by='{GM}', target_profile_id=null where game_id='{GAME}' and profile_id='{PLAYER}';", auth(PLAYER) + ping, 'eliminated')
     print('PASS: concurrent elimination prevents old-consent uploads')
 
+    query('begin;' + auth(GM) + f"select public.reset_hunt('{GAME}'); select public.start_hunt('{GAME}'); commit;")
+    query(f"update private.hunt_rounds set started_at=now()-interval '1 minute' where game_id='{GAME}';")
+    query('begin;' + auth(PLAYER) + f"select public.ingest_pings('{GAME}',jsonb_build_array(jsonb_build_object('lat',42.6977,'lng',23.3219,'recorded_at',now()-interval '30 seconds'))); commit;")
+    exit_ping = f"select public.ingest_pings('{GAME}',jsonb_build_array(jsonb_build_object('lat',42.6977,'lng',23.3235,'recorded_at',now()-interval '10 seconds'))) ->> 'accepted';"
+    race(auth(PLAYER) + f"select public.request_elimination('{GAME}');", auth(PLAYER) + exit_ping, '1')
+    assert query(f"select status from private.hunt_claims where game_id='{GAME}' and hunter_id='{PLAYER}'") == 'pending'
+    print('PASS: concurrent delayed boundary evidence preserves a newer claim')
+
     # A row writer must fail promptly instead of deadlocking behind start_hunt.
     holder = subprocess.Popen(CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     holder.stdin.write(f"begin; select pg_advisory_xact_lock(hashtextextended('hunt:{GAME}',0));\n\\echo LOCKED\n")

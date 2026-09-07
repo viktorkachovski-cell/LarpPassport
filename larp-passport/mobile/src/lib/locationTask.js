@@ -78,6 +78,7 @@ function getStore() {
       await store.init()
       // Unowned legacy points cannot safely be attributed to the signed-in account.
       await AsyncStorage.removeItem('larp_ping_queue_v1')
+      await SQLite.deleteDatabaseAsync('larp_pings.db').catch(() => {})
       return store
     })().catch((error) => { storePromise = null; throw error })
   }
@@ -157,6 +158,7 @@ export async function flush(gameId) {
 
 const REJECT_MESSAGES = {
   game_finished: 'The game has finished, so location sharing stopped.',
+  eliminated: 'You have been eliminated, so location sharing stopped.',
   no_consent: 'Location consent is off for this game, so sharing stopped.',
   not_member: 'You are no longer a member of this game, so sharing stopped.',
 }
