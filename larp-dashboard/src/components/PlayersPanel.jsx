@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { timeAgo } from '../lib/geo'
+import TableScroll from './TableScroll'
 
 export default function PlayersPanel({ members, positions, uid, game, setMemberRole, removeMember, updateGame }) {
   const gmCount = members.filter((m) => m.role === 'gm').length
@@ -34,6 +35,7 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
         Location pings older than <input type="number" min="1" max="90" aria-label="Days to keep location pings" style={{ width: 76 }} defaultValue={game.purge_after_days}
           onBlur={(e) => { const v = Number(e.target.value); if (v >= 1 && v !== game.purge_after_days) updateGame({ purge_after_days: v }) }} /> days are deleted automatically.
       </p>
+      <TableScroll label="Members table">
       <table className="grid">
         <thead><tr><th>Member</th><th>Role</th><th>Location sharing</th><th>Last seen</th><th>Battery</th><th><span className="visually-hidden">Actions</span></th></tr></thead>
         <tbody>
@@ -59,6 +61,7 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
           ))}
         </tbody>
       </table>
+      </TableScroll>
       {outcome && (
         <div className={`outcome ${outcome.tone === 'error' ? 'outcome-error' : 'outcome-ok'}`} role={outcome.tone === 'error' ? 'alert' : 'status'}>
           <span>{outcome.text}</span>

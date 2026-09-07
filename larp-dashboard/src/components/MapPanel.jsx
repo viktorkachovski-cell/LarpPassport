@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { circlePolygon, haversine, pointEwkt, polygonEwkt, centroidOf, timeAgo } from '../lib/geo'
+import { canFinishPolygon, dedupeVertices } from '../lib/draw'
 
 const MAP_STYLE = {
   version: 8,
@@ -89,7 +90,9 @@ export default function MapPanel({
       if (!d) return
       if (d.type === 'circle') {
         if (!d.center) setDraw({ ...d, center: { lng, lat }, radiusM: 0 })
-        else finalizeCircle(d.center, Math.max(5, d.radiusM))
+        // Touch devices never send mousemove, so measure from the second tap
+        // itself; on desktop this equals the hovered radius.
+        else finalizeCircle(d.center, Math.max(5, haversine(d.center, { lng, lat })))
       } else if (d.type === 'polygon') {
         setDraw({ ...d, points: [...d.points, [lng, lat]] })
       }
@@ -108,7 +111,7 @@ export default function MapPanel({
 
     map.on('dblclick', (e) => {
       const d = drawRef.current
-      if (d?.type === 'polygon' && d.points.length >= 3) {
+      if (d?.type === 'polygon' && canFinishPolygon(d.points)) {
         e.preventDefault()
         finalizePolygon(d.points)
       }
@@ -142,6 +145,17 @@ export default function MapPanel({
     if (active && ready) mapRef.current?.resize()
   }, [active, ready])
 
+  // The visible container also changes size when the side panel wraps below
+  // the map on narrow screens; resize the existing map instead of recreating
+  // it. One observer, removed on unmount.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(() => { if (ready) mapRef.current?.resize() })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ready])
+
   selectRef.current = (id) => {
     setSelectedId(id)
     const z = zones.find((x) => x.id === id)
@@ -169,8 +183,15 @@ export default function MapPanel({
   }
 
   function finalizePolygon(points) {
+    const ring = dedupeVertices(points)
+    if (!canFinishPolygon(ring)) return
     cancelDraw()
-    setEditing({ ...NEW_ZONE, shape: 'polygon', points, name: 'New polygon zone' })
+    // Opens the editor only; saving still goes through submitEditor -> saveZone.
+    setEditing({ ...NEW_ZONE, shape: 'polygon', points: ring, name: 'New polygon zone' })
+  }
+
+  function undoVertex() {
+    setDraw((d) => (d?.type === 'polygon' && d.points.length > 0 ? { ...d, points: d.points.slice(0, -1) } : d))
   }
 
   function openEditor(z) {
@@ -357,16 +378,28 @@ export default function MapPanel({
         <div className="side-section">
           <h3>Zones</h3>
           <div className="row mb">
-            <button className={draw?.type === 'circle' ? 'primary' : ''} onClick={() => (draw?.type === 'circle' ? cancelDraw() : startDraw('circle'))}>+ Circle</button>
-            <button className={draw?.type === 'polygon' ? 'primary' : ''} onClick={() => (draw?.type === 'polygon' ? cancelDraw() : startDraw('polygon'))}>+ Polygon</button>
+            <button className={draw?.type === 'circle' ? 'primary' : ''} aria-pressed={draw?.type === 'circle'} onClick={() => (draw?.type === 'circle' ? cancelDraw() : startDraw('circle'))}>+ Circle</button>
+            <button className={draw?.type === 'polygon' ? 'primary' : ''} aria-pressed={draw?.type === 'polygon'} onClick={() => (draw?.type === 'polygon' ? cancelDraw() : startDraw('polygon'))}>+ Polygon</button>
           </div>
           {draw && (
-            <p className="hint">
+            <p className="hint" role="status">
               {draw.type === 'circle'
-                ? draw.center ? `Radius ${Math.round(draw.radiusM)} m — click to set` : 'Click the map to set the center'
-                : `${draw.points.length} points — double-click to finish`}
+                ? draw.center ? `Radius ${Math.round(draw.radiusM)} m — tap or click the edge to set it` : 'Tap or click the map to set the center'
+                : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} — tap or click the map to add corners`}
               {' · Esc cancels'}
             </p>
+          )}
+          {draw?.type === 'polygon' && (
+            <div className="row mb draw-controls" role="group" aria-label="Polygon drawing controls">
+              <button type="button" className="primary" disabled={!canFinishPolygon(draw.points)} onClick={() => finalizePolygon(draw.points)}>Finish polygon</button>
+              <button type="button" disabled={draw.points.length === 0} onClick={undoVertex}>Undo last point</button>
+              <button type="button" className="ghost" onClick={cancelDraw}>Cancel</button>
+            </div>
+          )}
+          {draw?.type === 'circle' && (
+            <div className="row mb draw-controls" role="group" aria-label="Circle drawing controls">
+              <button type="button" className="ghost" onClick={cancelDraw}>Cancel</button>
+            </div>
           )}
           {zones.map((z) => (
             <button type="button" key={z.id} className={`zone-row ${z.id === selectedId ? 'selected' : ''}`} aria-pressed={z.id === selectedId} onClick={() => selectAndFly(z)}>

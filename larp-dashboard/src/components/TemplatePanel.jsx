@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import TableScroll from './TableScroll'
 
 const KEY_RE = /^[a-z0-9_]{1,32}$/
 
@@ -44,6 +45,7 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
     <div className="panel-pad">
       <p className="hint mb">Stats every character in this game will have. Players can only edit fields you mark editable; number fields are clamped to min/max for players.</p>
       {hasCharacters && <p className="hint mb" style={{ color: 'var(--amber)' }}>Characters already exist — renaming a key orphans its stored values. Add new keys instead of renaming when possible.</p>}
+      <TableScroll label="Template stats table">
       <table className="grid">
         <thead>
           <tr><th>Key</th><th>Label</th><th>Type</th><th>Default</th><th>Min</th><th>Max</th><th>Player editable</th><th><span className="visually-hidden">Actions</span></th></tr>
@@ -68,6 +70,7 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
           ))}
         </tbody>
       </table>
+      </TableScroll>
       <div className="row mt">
         <button onClick={add}>Add stat</button>
         <button className="primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save template'}</button>

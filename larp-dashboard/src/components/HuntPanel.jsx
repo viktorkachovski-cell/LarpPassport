@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { timeAgo } from '../lib/geo'
+import TableScroll from './TableScroll'
 
 function cloakLabel(timestamp) {
   if (!timestamp || new Date(timestamp) <= new Date()) return 'visible'
@@ -212,7 +213,7 @@ export default function HuntPanel({
               <button className="ghost" disabled={busy} onClick={editChain}>Edit target chain</button>
             )}
           </div>
-          <div className="table-scroll" role="region" aria-label="Target chain table" tabIndex={0}>
+          <TableScroll label="Target chain table">
             <table className="grid hunt-grid">
               <thead><tr><th>Traveller</th><th>State</th><th>Targets</th><th>Signal</th><th>Eliminated</th><th>GM action</th></tr></thead>
               <tbody>
@@ -242,7 +243,7 @@ export default function HuntPanel({
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         </section>
 
         <aside className="hunt-sidebar">

@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/geo'
+import TableScroll from './TableScroll'
 
 export default function CharactersPanel({ game, characters, members, factions, usernameOf, saveCharacter, addNpc, deleteCharacter, addFaction }) {
   const stats = game.template?.stats ?? []
@@ -93,6 +94,7 @@ export default function CharactersPanel({ game, characters, members, factions, u
 
   return (
     <div className="panel-pad">
+      <TableScroll label="Characters table">
       <table className="grid">
         <thead>
           <tr>
@@ -149,6 +151,7 @@ export default function CharactersPanel({ game, characters, members, factions, u
           })}
         </tbody>
       </table>
+      </TableScroll>
       {characters.length === 0 && <p className="hint mt">No characters yet. Players create theirs in the app after joining with the game code.</p>}
 
       <div className="row mt">
