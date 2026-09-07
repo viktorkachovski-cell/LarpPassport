@@ -554,7 +554,7 @@ function EliminatedState({ aliveCount }) {
     <View style={styles.centerState}>
       <View style={styles.eliminatedIcon}><Text style={styles.eliminatedIconText}>X</Text></View>
       <Text style={styles.eliminatedTitle}>ELIMINATED</Text>
-      <Text style={styles.resultCopy}>Location sharing has stopped. Your history is cleared and no target is revealed.</Text>
+      <Text style={styles.resultCopy}>Location sharing has stopped. Your latest map position is removed and no target is revealed.</Text>
       <View style={styles.resultChip}><Text style={styles.resultChipText}>{aliveCount} TRAVELLERS REMAIN</Text></View>
       <Text style={styles.restoreNote}>THE GM CAN RESTORE YOU TO THE CHAIN</Text>
     </View>
@@ -619,7 +619,7 @@ function eventTitle(type) {
 function eventBody(type) {
   if (type === 'elimination_confirmed') return 'Wait for the GM to assign your next target. A 10-minute temporal cloak is active.'
   if (type === 'zone_boundary_warning') return 'Move back toward the safe interior.'
-  if (type === 'zone_boundary_exit') return 'Any pending claim was forfeited and the GM was alerted.'
+  if (type === 'zone_boundary_exit') return 'Claims active at the recorded exit may have been forfeited. The GM was alerted.'
   return ''
 }
 

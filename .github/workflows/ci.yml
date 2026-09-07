@@ -69,3 +69,5 @@ jobs:
         run: supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
       - name: Run database tests
         run: supabase test db supabase/tests/database
+      - name: Verify concurrent consent, elimination and roster writes
+        run: python3 supabase/tests/concurrency.py

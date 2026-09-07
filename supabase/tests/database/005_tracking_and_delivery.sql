@@ -118,7 +118,7 @@ select set_config('request.jwt.claim.sub','82000000-0000-0000-0000-000000000002'
 select public.ingest_pings('91000000-0000-0000-0000-000000000001',jsonb_build_array(jsonb_build_object('lat',42.6977,'lng',23.3219,'recorded_at',now()-interval '1 second')));
 reset role;
 select extensions.is((select count(*)::integer from private.zone_state where zone_id='92000000-0000-0000-0000-000000000001'),0,'pre-round fixes do not enter the new play area');
-update private.hunt_players set alive=false where game_id='91000000-0000-0000-0000-000000000001' and profile_id='82000000-0000-0000-0000-000000000002';
+update private.hunt_players set state='eliminated', eliminated_at=now(), eliminated_by='81000000-0000-0000-0000-000000000001', target_profile_id=null where game_id='91000000-0000-0000-0000-000000000001' and profile_id='82000000-0000-0000-0000-000000000002';
 set local role authenticated;
 select extensions.throws_ok(format('select public.set_location_consent(%L,true)','91000000-0000-0000-0000-000000000001'),'55000','Eliminated players cannot share until restored by a GM.','eliminated participant cannot re-enable consent');
 select extensions.is(public.ingest_pings('91000000-0000-0000-0000-000000000001',jsonb_build_array(jsonb_build_object('lat',42.6977,'lng',23.3219,'recorded_at',now()))) ->> 'reason','eliminated','eliminated participant cannot upload under old consent');

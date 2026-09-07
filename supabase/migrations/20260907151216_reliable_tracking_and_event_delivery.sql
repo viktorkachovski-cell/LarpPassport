@@ -99,7 +99,7 @@ begin
     reject_reason := 'not_member';
   elsif member_row.game_status = 'finished' then
     reject_reason := 'game_finished';
-  elsif exists (select 1 from private.hunt_players hp where hp.game_id = g and hp.profile_id = caller and not hp.alive) then
+  elsif exists (select 1 from private.hunt_players hp where hp.game_id = g and hp.profile_id = caller and hp.state = 'eliminated') then
     reject_reason := 'eliminated';
   elsif not member_row.consent_ok then
     reject_reason := 'no_consent';
@@ -487,7 +487,7 @@ begin
 
   if grant_consent and exists (
     select 1 from private.hunt_players hp
-    where hp.game_id = g and hp.profile_id = caller and not hp.alive
+    where hp.game_id = g and hp.profile_id = caller and hp.state = 'eliminated'
   ) then
     raise exception using errcode = '55000', message = 'Eliminated players cannot share until restored by a GM.';
   end if;
@@ -773,3 +773,49 @@ end;
 $$;
 revoke all on function public.get_player_event_delivery(uuid,bigint) from public, anon, authenticated;
 grant execute on function public.get_player_event_delivery(uuid,bigint) to authenticated;
+
+create or replace function private.emit_play_area_event(
+  p_zone public.zones,
+  p_user_id uuid,
+  p_event_type text,
+  p_at_time timestamptz
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  player_character_id uuid;
+  event_message text;
+begin
+  select character.id into player_character_id
+  from public.characters character
+  where character.game_id = p_zone.game_id
+    and character.user_id = p_user_id
+    and not character.is_npc
+  limit 1;
+
+  event_message := case p_event_type
+    when 'zone_boundary_warning' then
+      'Warning: you are nearing the edge of the time anomaly. Leaving it will forfeit any active elimination claim.'
+    else
+      'You left the time anomaly. Claims active at the recorded exit may have been forfeited; contact the GM for a ruling.'
+  end;
+
+  insert into public.game_events (
+    game_id, profile_id, character_id, zone_id, type, status,
+    player_visible, payload, created_at
+  ) values (
+    p_zone.game_id,
+    p_user_id,
+    player_character_id,
+    p_zone.id,
+    p_event_type,
+    case when p_event_type = 'zone_boundary_exit' then 'pending' else 'confirmed' end,
+    true,
+    p_zone.payload || jsonb_build_object('message', event_message),
+    p_at_time
+  );
+end;
+$$;
