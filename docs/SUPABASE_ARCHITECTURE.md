@@ -101,7 +101,17 @@ members with non-NPC characters. GMs are observers. The active roster is locked
 and location visibility is forced to GM-only until reset or completion.
 
 Players receive only their target's character name and a coarse proximity band;
-no target profile ID or hunter identity crosses the API boundary. A confirmed
+no target profile ID or hunter identity crosses the API boundary. A GM may set
+`games.direction_enabled` (default off; column-level select for members,
+update through the existing GM-only policy). While it is on, `get_hunt_status`
+adds a true-north `bearing_deg` (PostGIS geography azimuth, whole degrees in
+`[0, 360)`, `null` for coincident fixes), `direction_state`
+(`available` / `unavailable` / `not_enabled`), `computed_at` and a two-minute
+`valid_until`, and replaces the 10 m rounded `distance_m` with the band edge
+(`distance_is_band_edge = true`) so no client can combine bearing and metres
+into coordinates. All of this lives inside the existing fresh, uncloaked
+"available" branch: stale, cloaked, waiting, non-participant, eliminated and
+finished responses never carry a bearing (`006_hunt_direction.sql`). A confirmed
 elimination atomically removes the victim, revokes their location sharing, and
 cloaks the hunter for ten minutes. The inherited target remains private and
 unassigned until the GM explicitly releases it or replaces the complete chain.

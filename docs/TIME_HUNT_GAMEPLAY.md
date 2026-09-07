@@ -66,17 +66,34 @@ of the player hunting the current user.
 
 Proximity is calculated only when both positions are less than two minutes old:
 
-| Band | Distance |
-| --- | --- |
-| `immediate` | 25 m or less |
-| `close` | More than 25 m and up to 100 m |
-| `nearby` | More than 100 m and up to 300 m |
-| `distant` | More than 300 m and up to 1 km |
-| `far` | More than 1 km |
+| Band | Distance | Value sent while direction is on |
+| --- | --- | --- |
+| `immediate` | 25 m or less | 25 |
+| `close` | More than 25 m and up to 100 m | 100 |
+| `nearby` | More than 100 m and up to 300 m | 300 |
+| `distant` | More than 300 m and up to 1 km | 1000 |
+| `far` | More than 1 km | 1000 |
 
 The displayed approximate distance is rounded to 10 metres. A missing location
 shows **waiting for location**; a position older than two minutes shows
 **stale**.
+
+### Direction To The Target (GM opt-in)
+
+The GM can switch **Hunter direction** on for a game from the dashboard top
+bar (default off; it can be changed during a round). While it is on, a living
+hunter with a fresh, uncloaked signal also sees the **bearing from true north**
+to their target, e.g. `047° NE`, and the distance is shown as the band only —
+the `~120 m` readout is withheld for that game so bearing and metres cannot be
+combined into coordinates. The phone shows a rotating arrow only when its
+compass reports a usable true heading; without one (no calibration, permission
+missing, no sensor) it shows "Face NE (47° from true north)" instead. Low
+compass calibration is labelled. Reduced-motion settings stop the arrow
+animation but keep the label. The bearing is suppressed by the same rules as
+the proximity signal: cloak, a fix older than two minutes, a missing fix, and
+target changes; the app also expires a cached bearing locally two minutes after
+the older of the two fixes. Two fixes on the same spot give no direction. Games
+with direction off behave exactly as before.
 
 ### Message The GM
 
@@ -154,6 +171,13 @@ not be shown to active players.
   claims and replaces all assignments atomically.
 - The GM cannot manually alter the roster, game status, or location visibility
   while a hunt is active. This prevents a partial or broken target chain.
+- **Hunter direction** (top bar) switches the true-north bearing on or off for
+  the game at any time, including mid-round. On means bearing plus band only;
+  off means rounded metres and no bearing. Announce a change to players.
+- The top bar also reports the dashboard's own sync state (age of the last
+  successful refresh, live-update socket, browser offline hint) and lists
+  pending decisions — claims, target assignments, breaches, zone triggers —
+  with a link to the tab that holds them.
 
 Reset returns the game to draft; players who were still sharing keep sharing,
 because draft games accept pings. Reset does not restore a previously
@@ -210,6 +234,14 @@ reject that claim.
   active, and wait for a fresh marker before continuing.
 - The GM can see the full target chain and exact map markers. Operational access
   to the dashboard must therefore be kept away from active players.
+- A bearing plus a band still narrows the target's position to an arc; that is
+  the approved trade-off of enabling direction. Coincident fixes give no
+  direction, and no accuracy-based suppression is applied beyond that: a poor
+  GPS fix on either phone can produce a misleading bearing, and the phone's
+  compass arrow depends on the device's calibration.
+- The phone's arrow needs the compass to report a true heading. Phones without
+  a magnetometer, or with location permission withdrawn, only get the textual
+  bearing.
 
 ## Pre-Release Verification
 

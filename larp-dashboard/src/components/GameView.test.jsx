@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../lib/supabase', () => ({
   GAME_COLUMNS:
-    'id, gm_id, name, template, location_visibility, status, purge_after_days, created_at',
+    'id, gm_id, name, template, location_visibility, status, purge_after_days, created_at, direction_enabled',
   supabase: {
     channel: mocks.channel,
     from: mocks.from,
@@ -287,6 +287,18 @@ describe('GameView authoritative recovery', () => {
     expect(screen.getByText(/Events panel/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Open Events' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Open Hunt' })).toBeTruthy()
+  })
+
+  it('lets the GM toggle hunter direction through the ordinary game update', async () => {
+    mocks.queryResults.games = { data: game(), error: null }
+    mocks.mutationResults.games = { data: { ...game(), direction_enabled: true }, error: null }
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Hunt panel')
+    const select = screen.getByRole('combobox', { name: 'Hunter direction to target' })
+    expect(select.value).toBe('off')
+    fireEvent.change(select, { target: { value: 'on' } })
+    await waitFor(() => expect(mocks.mutationPatches).toEqual([{ patch: { direction_enabled: true }, table: 'games' }]))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Hunter direction to target' }).value).toBe('on'))
   })
 
   it('ignores an older snapshot that finishes after a newer refresh', async () => {

@@ -161,11 +161,21 @@ Retain themed headings as secondary decoration where useful. Change display stri
 
 ### UI package exit checklist
 
-- [ ] U01, U02, U04, U05, U06 and U07 implemented and checked.
-- [ ] Existing component/unit tests and both client builds pass; behavior tests cover new state transitions and drawing controls.
-- [ ] General character/event mode and Time Hunt both receive a smoke test.
-- [ ] No database migrations or gameplay changes were needed for the UI package; any unexpected need is explained before expanding scope.
-- [ ] Device/accessibility checks and any untested cases are recorded separately from automated checks.
+- [x] U01, U02, U04, U05, U06 and U07 implemented (branch `codex/ui-package-direction`, 2026-09-07, one commit per card) and checked by automated tests; see the implementation record below.
+- [x] Existing component/unit tests and both client builds pass; behavior tests cover the new sync-status transitions, pending decisions, persistent outcomes, duplicate-submit guards and the polygon drawing controls.
+- [ ] General character/event mode and Time Hunt smoke test on real devices — **not performed by the agent** (no device or hosted access in the session).
+- [x] No database migration or gameplay change was needed for the UI package. The only migration in this branch belongs to D01.
+- [ ] Device/accessibility checks (TalkBack, large system text, 360/390/768 widths on real hardware, reduced motion on device) — **not performed**; automated checks are recorded separately in the implementation record.
+
+### Implementation record (2026-09-07)
+
+- U01: `GameView`/`GamesList` (web) and `GameScreen`/`GamesScreen` (mobile) track the last successful authoritative snapshot separately from the last failed request, the Realtime socket status and the browser online hint; a failed refresh keeps the last good data on screen and says so. Mobile reads OS location permissions without prompting (`locationPermissionStatus`) and records the newest local GPS capture per owner scope (`larp_last_fix_v2:<scope>`), exposed through `queueStatus().lastFixAt`. Pure wording lives in `src/lib/syncStatus.js` in both clients with unit tests.
+- U02: pending-decision banner above the dashboard tabs derived from `get_hunt_admin` and the fully paginated pending query; the player app shows an incoming claim above its tabs; outcomes persist until dismissed; every handler ignores repeated submissions while in flight; member and NPC removal confirm first.
+- U04: type/spacing tokens (`theme.js` `T`/`S`; CSS `--fs-*`, `--touch`); 48 dp native and 44 px coarse-pointer targets.
+- U05: labelled inputs, row-specific accessible names, tablist semantics, alert/status roles, solid focus ring, `prefers-reduced-motion` and `AccessibilityInfo` reduce-motion handling for `LiveDot`. Measured contrast (WCAG formula): muted on panel 7.6:1, red on panel 5.5:1, amber 9.5:1, green 9.3:1, cyan 10.1:1; placeholder raised 4.4→5.4:1, `--line-strong`/`C.lineStrong` raised 2.6→3.4:1 for control boundaries, focus ring 2.8→10:1. Combinations not measured: MapLibre attribution and marker labels over map tiles.
+- U06: `TableScroll` region with overflow cue; Finish/Undo/Cancel polygon controls with the three-distinct-vertex rule, duplicate-vertex removal and a ring closed once by `polygonEwkt`; circle radius from the second tap; single `ResizeObserver` resize. Tests: `lib/draw.test.js`, `components/MapPanel.test.jsx`.
+- U07: display strings only; tab keys, database values, event types and RPC names unchanged.
+- D01: see section 9 note.
 
 ## 5. Gameplay decisions required before dependent feature work
 
@@ -258,6 +268,8 @@ Do not silently choose a new cloak duration, reveal lifetime, inventory cap, rew
 8. Suppress a previously cached arrow when its fix expires, the target changes, cloak activates, consent is revoked or the app loses a usable current state. Preserve explicit waiting/stale/cloaked messages. Reduced-motion mode must still communicate direction without decorative rotation.
 
 **Accept when:** cardinal/intercardinal fixtures, 359°/0° transitions, coincident points, poor compass calibration, stale positions, cloak, target changes, missing heading and background/foreground transitions behave correctly. Existing bands and claims are unchanged. Database tests prove direction is not leaked through unauthorized response branches.
+
+**Implemented 2026-09-07** under decision G7: migration `20260907180000_hunt_direction_bearing.sql` (adds `games.direction_enabled`, `private.hunt_band_edge_m`, redefines `get_hunt_status` additively), pgTAP `006_hunt_direction.sql` (34 assertions: grants, RLS, N/E/S/W, 360→0 wrap, coincident, stale, cloak, non-participant, eliminated), dashboard **Hunter direction** control in `GameView`, mobile `src/lib/direction.js` (pure helpers with unit tests) and `DirectionSignal` in `GameScreen.js` (foreground-only `watchHeadingAsync`, true heading only, shortest-angle arrow smoothing, reduced-motion aware, local `valid_until` expiry). Not covered by automated checks: real compass behaviour, calibration states and background/foreground transitions on a device. The migration has **not** been applied to the hosted project and no APK was built.
 
 ## 10. Validation and handoff requirements
 

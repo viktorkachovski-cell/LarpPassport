@@ -557,6 +557,14 @@ export default function GameView({ gameId, session, onBack }) {
             <option value="all">Everyone</option>
           </select>
         </div>
+        <div className="topbar-control">
+          <span className="control-label">HUNTER DIRECTION</span>
+          <select aria-label="Hunter direction to target" title="On: living hunters see a true-north bearing to their target and only the distance band. Off: rounded metres, no bearing."
+            value={game.direction_enabled ? 'on' : 'off'} onChange={(e) => updateGame({ direction_enabled: e.target.value === 'on' })}>
+            <option value="off">Off (bands + metres)</option>
+            <option value="on">On (bearing + bands)</option>
+          </select>
+        </div>
         <button className="ghost" onClick={refetchHunt}>Refresh</button><span className="gm-chip">GM</span>
       </div>
       <SyncStatus sync={sync} realtime={realtime} online={online} onRetry={refetchHunt} />

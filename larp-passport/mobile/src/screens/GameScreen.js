@@ -2,10 +2,12 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Animated, AppState, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
+import * as Location from 'expo-location'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { C, F, S, T } from '../lib/theme'
 import { readGameSnapshot } from '../lib/gameSnapshot'
 import { useReducedMotion } from '../lib/useReducedMotion'
+import { arrowRotation, describeDirection, headingQuality, shortestAngleDelta, showsMetres, usableTrueHeading } from '../lib/direction'
 import { updateLocationConsent } from '../lib/locationConsent'
 import { flush, isSharing, locationPermissionStatus, syncNotifications, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
 import { describeServerSync, describeSharing, formatAge, realtimeStateFromStatus } from '../lib/syncStatus'
@@ -532,6 +534,7 @@ const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, out
       <View style={[styles.targetCard, awaitingTarget && styles.awaitingCard]}>
         <View style={[styles.targetHeader, awaitingTarget && styles.awaitingHeader]}>
           <Text style={[styles.targetKicker, awaitingTarget && styles.mutedKicker]}>+ YOUR TARGET</Text>
+          {!!hunt.direction_enabled && <Text style={styles.directionChip}>DIRECTION ON</Text>}
           {!!hunt.target?.proximity?.last_seen_at && (
             <Text style={[styles.signalAge, hunt.target.proximity.state === 'stale' && styles.amberText]}>{timeAgo(hunt.target.proximity.last_seen_at)}</Text>
           )}
@@ -597,10 +600,10 @@ function ProximitySignal({ proximity }) {
   return (
     <View style={styles.signalAvailable}>
       <View style={styles.distanceRow}>
-        <Text style={styles.bandWord}>{activeBand.toUpperCase()}</Text>
-        <Text style={styles.distance}>~{Math.round(Number(proximity.distance_m) / 10) * 10} m</Text>
+        <Text style={styles.bandWord} accessibilityLabel={`Target is ${activeBand}`}>{activeBand.toUpperCase()}</Text>
+        {showsMetres(proximity) && <Text style={styles.distance}>~{Math.round(Number(proximity.distance_m) / 10) * 10} m</Text>}
       </View>
-      <View style={styles.meterRow}>
+      <View style={styles.meterRow} importantForAccessibility="no-hide-descendants">
         {BANDS.map((band) => {
           const active = band === activeBand
           return (
@@ -611,6 +614,91 @@ function ProximitySignal({ proximity }) {
           )
         })}
       </View>
+      <DirectionSignal proximity={proximity} />
+    </View>
+  )
+}
+
+// Foreground-only compass subscription. Active only while an arrow can be
+// shown (direction available, app active); removed on background, unmount
+// (tab switch, account/game change) and whenever direction goes away. No
+// GPS settings are touched here.
+function useTrueHeading(enabled) {
+  const [heading, setHeading] = useState(null)
+  useEffect(() => {
+    if (!enabled) { setHeading(null); return undefined }
+    let subscription = null
+    let alive = true
+    const stop = () => { subscription?.remove?.(); subscription = null; if (alive) setHeading(null) }
+    const start = async () => {
+      if (!alive || subscription || AppState.currentState !== 'active') return
+      try {
+        const sub = await Location.watchHeadingAsync((value) => { if (alive) setHeading(value) })
+        if (!alive || AppState.currentState !== 'active') { sub.remove(); return }
+        subscription = sub
+      } catch { if (alive) setHeading(null) }
+    }
+    start()
+    const appState = AppState.addEventListener('change', (state) => { if (state === 'active') start(); else stop() })
+    return () => { alive = false; appState.remove(); subscription?.remove?.() }
+  }, [enabled])
+  return heading
+}
+
+// Direction to the target, north-referenced. The label never assumes the
+// screen top points north; the arrow appears only with a usable true heading.
+function DirectionSignal({ proximity }) {
+  const [tick, setTick] = useState(() => Date.now())
+  const validUntil = proximity?.valid_until
+  useEffect(() => {
+    if (!validUntil) return undefined
+    const timer = setInterval(() => setTick(Date.now()), 5000)
+    return () => clearInterval(timer)
+  }, [validUntil])
+  const direction = describeDirection(proximity, tick)
+  const reduced = useReducedMotion()
+  const heading = useTrueHeading(direction.state === 'available')
+  const trueHeading = usableTrueHeading(heading)
+  const quality = headingQuality(heading)
+  const rotation = direction.state === 'available' ? arrowRotation(direction.bearing, trueHeading) : null
+
+  // Visual smoothing only: shortest-angle interpolation across 359/0. It does
+  // not extend authorization or freshness; the bearing itself comes untouched
+  // from the server.
+  const shown = useRef(new Animated.Value(0)).current
+  const lastRotation = useRef(0)
+  useEffect(() => {
+    if (rotation == null) return
+    const next = lastRotation.current + shortestAngleDelta(lastRotation.current, rotation)
+    lastRotation.current = next
+    if (reduced) { shown.setValue(next); return }
+    Animated.timing(shown, { toValue: next, duration: 250, useNativeDriver: true }).start()
+  }, [rotation, reduced, shown])
+
+  if (direction.state === 'none' || direction.state === 'not_enabled') return null
+
+  if (direction.state === 'expired') {
+    return <Text style={[styles.directionNote, styles.amberText]}>Direction expired. Waiting for a fresh fix.</Text>
+  }
+  if (direction.state === 'unavailable') {
+    return <Text style={styles.directionNote}>Direction unavailable: both fixes are on the same spot.</Text>
+  }
+
+  const spin = shown.interpolate({ inputRange: [-360, 0, 360], outputRange: ['-360deg', '0deg', '360deg'] })
+  return (
+    <View style={styles.directionRow} accessibilityLabel={`Bearing ${direction.label}, measured from true north`}>
+      <View style={styles.directionCopy}>
+        <Text style={styles.directionKicker}>BEARING FROM NORTH</Text>
+        <Text style={styles.directionValue}>{direction.label}</Text>
+        {rotation == null
+          ? <Text style={styles.directionNote}>{quality === 'none' && heading ? 'Compass unavailable on this phone. Face ' : 'Face '}{direction.cardinal} ({direction.bearing}° from true north).</Text>
+          : <Text style={styles.directionNote}>{quality === 'low' ? 'Compass calibration is low; the arrow is approximate.' : 'Arrow is relative to where your phone points.'}</Text>}
+      </View>
+      {rotation != null && (
+        <View style={styles.compassDial} importantForAccessibility="no-hide-descendants">
+          <Animated.Text style={[styles.compassArrow, { transform: [{ rotate: spin }] }]}>▲</Animated.Text>
+        </View>
+      )}
     </View>
   )
 }
@@ -1061,6 +1149,14 @@ const styles = StyleSheet.create({
   meterBarActive: { backgroundColor: C.orange },
   meterLabel: { color: C.muted, fontFamily: F.mono, fontSize: 10, marginTop: 5, textAlign: 'center' },
   meterLabelActive: { color: C.orangeBright, fontFamily: F.monoSemiBold },
+  directionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14, paddingTop: 12, borderTopColor: C.line, borderTopWidth: 1 },
+  directionCopy: { flex: 1 },
+  directionKicker: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.1 },
+  directionValue: { color: C.text, fontFamily: F.displayBold, fontSize: 24, marginTop: 2 },
+  directionNote: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, marginTop: 6 },
+  directionChip: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1, marginRight: 10 },
+  compassDial: { width: 64, height: 64, borderRadius: 32, borderColor: C.lineStrong, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  compassArrow: { color: C.orangeBright, fontSize: 30, lineHeight: 34 },
   claimButton: { minHeight: S.touch, backgroundColor: C.orange, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 12, marginTop: 18 },
   disabledClaimButton: { minHeight: S.touch, backgroundColor: C.panel2, borderColor: C.line, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 12, marginTop: 18 },
   cyanButton: { minHeight: S.touch, backgroundColor: C.cyan, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 12 },

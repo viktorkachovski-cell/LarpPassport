@@ -7,4 +7,4 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 // fails with "permission denied", so every read names its columns. GMs fetch
 // the code through the gm_get_join_code RPC.
 export const GAME_COLUMNS =
-  'id, gm_id, name, template, location_visibility, status, purge_after_days, created_at'
+  'id, gm_id, name, template, location_visibility, status, purge_after_days, created_at, direction_enabled'
