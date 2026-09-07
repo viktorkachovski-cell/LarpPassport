@@ -31,9 +31,15 @@ Consent and GPS ingestion share the existing per-game hunt lock. Eliminated part
 
 ## Deployment record
 
-- Application commit: `572371c8b5d5052c6d88ba75bd17a2b84822c36d`.
+- Application changes: `572371c8b5d5052c6d88ba75bd17a2b84822c36d`. Deployed source tree: `797a61348902a83caf723e884299e19225a330fd` (same application files; migration version records synchronized).
 - [Verification branch CI](https://github.com/viktorkachovski-cell/LarpPassport/actions/runs/34139139345) and [main CI](https://github.com/viktorkachovski-cell/LarpPassport/actions/runs/34139317624) passed all jobs.
 - Supabase `Passport` (`ufcnxkowpkwayczbfnzy`): applied `20260907153825_prevent_player_reset_of_locked_stats` and `20260907153842_reliable_tracking_and_event_delivery`. Filenames use the versions assigned by the hosted migration service; migration contents are unchanged from the verified patch.
+- Vercel production: **READY**, deployment `dpl_HJa6ohF9n8c7f8nkQMt2neN3DAjN`, [production URL](https://larp-passport.vercel.app), [deployment inspector](https://vercel.com/viktor-kachovski-s-projects/larp-passport/HJa6ohF9n8c7f8nkQMt2neN3DAjN). Uploaded the 25 tracked dashboard files from the deployed source tree through authenticated Vercel MCP, retaining the existing `larp-dashboard` root and production environment. Build duration was approximately 15 seconds.
+- [Final source-tree CI](https://github.com/viktorkachovski-cell/LarpPassport/actions/runs/34139848581) passed all jobs. This document's later bookkeeping update does not change deployed application files.
+- Hosted post-deployment regression tests: **25/25 passed** (locked stats plus tracking/delivery), inside rollback transactions. Confirmed 24 applied migrations, no leftover regression accounts, and the original five events remain.
+- Production page and JavaScript asset returned HTTP 200. The bundle contains the history fix and the correct Supabase project reference. The public login screen renders. No authenticated browser walkthrough was completed; database authorization and gameplay were exercised by the regression suites.
+- Production initial JavaScript is **146.60 KB gzip**, including environment-enabled instrumentation. The comparable local build measured approximately 121 KB. Map JavaScript remains deferred at 222.39 KB gzip. These are delivery sizes, not frame-rate or battery claims.
+- Vercel reported no runtime error clusters in the 15-minute post-deployment query. This static dashboard's browser-side failures are not comprehensively covered by Vercel function logs.
 - Existing four recovered migrations were not reapplied. No existing game or account was deleted/reset.
 - Post-migration advisor findings are the expected authenticated security-definer API warnings, plus disabled leaked-password protection. The new delivery RPC checks authentication and membership and returns only the caller's visible events. [Advisor explanation](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable).
 
