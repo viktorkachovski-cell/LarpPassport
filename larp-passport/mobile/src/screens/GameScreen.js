@@ -3,7 +3,7 @@ import { Alert, Animated, AppState, ScrollView, StyleSheet, Switch, Text, TextIn
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
-import { C, F } from '../lib/theme'
+import { C, F, S, T } from '../lib/theme'
 import { readGameSnapshot } from '../lib/gameSnapshot'
 import { updateLocationConsent } from '../lib/locationConsent'
 import { flush, isSharing, locationPermissionStatus, syncNotifications, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
@@ -601,7 +601,7 @@ function ProximitySignal({ proximity }) {
           return (
             <View key={band} style={styles.meterItem}>
               <View style={[styles.meterBar, active && styles.meterBarActive]} />
-              <Text style={[styles.meterLabel, active && styles.meterLabelActive]} numberOfLines={1}>{band.toUpperCase()}</Text>
+              <Text style={[styles.meterLabel, active && styles.meterLabelActive]}>{band.toUpperCase()}</Text>
             </View>
           )
         })}
@@ -640,7 +640,7 @@ function EliminatedState({ aliveCount }) {
 
 const EventsTab = memo(function EventsTab({ gameId, events }) {
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <PlayerMessageBox gameId={gameId} />
       {events.length === 0 && <Text style={styles.emptyText}>NO FIELD EVENTS // STAY ALERT</Text>}
       {events.map((event) => {
@@ -799,7 +799,7 @@ const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, 
 const TelemetryCell = memo(function TelemetryCell({ label, value, color = C.text }) {
   return (
     <View style={styles.telemetryCell}>
-      <Text style={[styles.telemetryValue, { color }]} numberOfLines={1}>{String(value)}</Text>
+      <Text style={[styles.telemetryValue, { color }]}>{String(value)}</Text>
       <Text style={styles.telemetryLabel}>{label}</Text>
     </View>
   )
@@ -835,7 +835,7 @@ const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
   }
 
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <View style={styles.identityRow}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{initials(character.name)}</Text></View>
         <View style={styles.flex}>
@@ -908,7 +908,7 @@ function CreateCharacter({ game, uid, onCreated }) {
   }
 
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <View style={styles.neutralCard}>
         <Text style={styles.cyanKicker}>IDENTITY REGISTRY</Text>
         <Text style={styles.sectionTitle}>Create your character</Text>
@@ -982,57 +982,57 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: C.ink },
   loading: { flex: 1, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center' },
-  loadingText: { color: C.cyan, fontFamily: F.mono, fontSize: 10, letterSpacing: 1.8 },
+  loadingText: { color: C.cyan, fontFamily: F.mono, fontSize: T.label, letterSpacing: 1.4, textAlign: 'center', paddingHorizontal: 20, lineHeight: T.lineLabel },
   header: { minHeight: 55, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, backgroundColor: C.ink },
-  backButton: { width: 35, alignItems: 'flex-start', paddingVertical: 8 },
+  backButton: { width: S.touch, minHeight: S.touch, alignItems: 'flex-start', justifyContent: 'center' },
   backText: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 20 },
   gameName: { flex: 1, color: C.text, fontFamily: F.displayBold, fontSize: 17, letterSpacing: 1.35 },
-  phaseChip: { minWidth: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 13, paddingHorizontal: 8, paddingVertical: 5 },
-  phaseText: { fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.3 },
+  phaseChip: { minWidth: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 6 },
+  phaseText: { fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.1 },
   liveDot: { width: 7, height: 7, borderRadius: 4, marginRight: 6 },
   syncLine: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingBottom: 8, gap: 10 },
-  syncText: { fontFamily: F.bodyMedium, fontSize: 13 },
-  syncDetail: { color: C.muted, fontFamily: F.body, fontSize: 12, marginTop: 1 },
-  syncRetry: { minHeight: 40, justifyContent: 'center', borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12 },
+  syncText: { fontFamily: F.bodyMedium, fontSize: T.body },
+  syncDetail: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, marginTop: 1 },
+  syncRetry: { minHeight: S.touch, justifyContent: 'center', borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12 },
   syncRetryText: { color: C.text, fontFamily: F.displaySemiBold, fontSize: 12.5, letterSpacing: 0.85 },
   stateStrip: { minHeight: 57, flexDirection: 'row', backgroundColor: C.panel, borderTopColor: C.line, borderTopWidth: 1, borderBottomColor: C.line, borderBottomWidth: 1 },
   stateCell: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   stateCellBorder: { borderLeftColor: C.line, borderLeftWidth: 1, borderRightColor: C.line, borderRightWidth: 1 },
-  stateValue: { fontFamily: F.displayBold, fontSize: 16.5 },
-  stateLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 7.5, letterSpacing: 0.85, marginTop: 2 },
-  tabs: { minHeight: 47, flexDirection: 'row', borderBottomColor: C.line, borderBottomWidth: 1, backgroundColor: C.ink },
-  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', paddingHorizontal: 2 },
+  stateValue: { fontFamily: F.displayBold, fontSize: 18 },
+  stateLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 0.6, marginTop: 3, textAlign: 'center' },
+  tabs: { minHeight: S.touch, flexDirection: 'row', borderBottomColor: C.line, borderBottomWidth: 1, backgroundColor: C.ink },
+  tab: { flex: 1, minHeight: S.touch, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', paddingHorizontal: 2 },
   activeTab: { borderBottomColor: C.cyan },
-  tabText: { color: C.muted, fontFamily: F.displaySemiBold, fontSize: 11.5, letterSpacing: 0.45 },
+  tabText: { color: C.muted, fontFamily: F.displaySemiBold, fontSize: 13, letterSpacing: 0.4, textAlign: 'center' },
   activeTabText: { color: C.text },
   scrollContent: { padding: 15, paddingBottom: 32 },
   centerState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  centerCopy: { color: C.muted, fontFamily: F.body, fontSize: 13.5, lineHeight: 20, textAlign: 'center', marginTop: 9 },
+  centerCopy: { color: C.muted, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: 22, textAlign: 'center', marginTop: 9 },
   neutralCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 17 },
-  cyanKicker: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 9.5, letterSpacing: 1.65 },
-  redKicker: { color: C.red, fontFamily: F.monoSemiBold, fontSize: 9.5, letterSpacing: 1.65 },
-  amberKicker: { color: C.amber, fontFamily: F.monoSemiBold, fontSize: 9.5, letterSpacing: 1.5 },
+  cyanKicker: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.3 },
+  redKicker: { color: C.red, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.3 },
+  amberKicker: { color: C.amber, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.2 },
   kickerRow: { flexDirection: 'row', alignItems: 'center' },
   sectionTitle: { color: C.text, fontFamily: F.displayBold, fontSize: 20, marginTop: 7 },
-  bodyCopy: { color: C.muted, fontFamily: F.body, fontSize: 13, lineHeight: 20, marginTop: 7 },
+  bodyCopy: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 7 },
   warningInset: { backgroundColor: 'rgba(255,176,32,0.08)', borderColor: C.amberBorder, borderWidth: 1, borderRadius: 6, padding: 11, marginTop: 14 },
-  warningInsetText: { color: C.amber, fontFamily: F.bodyMedium, fontSize: 12.5, lineHeight: 18 },
+  warningInsetText: { color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody },
   neutralIcon: { width: 60, height: 60, borderRadius: 30, borderColor: C.lineStrong, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   neutralIconText: { color: C.muted, fontFamily: F.displayBold, fontSize: 21 },
   claimAlert: { backgroundColor: C.panel, borderColor: C.red, borderWidth: 1, borderRadius: 10, padding: 15, marginBottom: 11 },
   claimTitle: { color: C.text, fontFamily: F.displayBold, fontSize: 19, lineHeight: 24, marginTop: 7 },
-  redButton: { backgroundColor: C.red, borderRadius: 6, alignItems: 'center', paddingVertical: 12, marginTop: 14 },
+  redButton: { minHeight: S.touch, backgroundColor: C.red, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 12, marginTop: 14 },
   boundaryBanner: { backgroundColor: 'rgba(255,176,32,0.08)', borderColor: C.amberBorder, borderWidth: 1, borderRadius: 10, padding: 13, marginBottom: 11 },
-  boundaryCopy: { color: C.muted, fontFamily: F.body, fontSize: 12.5, lineHeight: 19, marginTop: 5 },
+  boundaryCopy: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 5 },
   cloakCard: { backgroundColor: C.panel, borderColor: C.cyanBorder, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 11 },
-  cloakCopy: { color: C.muted, fontFamily: F.body, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
+  cloakCopy: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 4 },
   targetCard: { backgroundColor: C.panel, borderColor: C.orange, borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
   awaitingCard: { borderColor: C.line },
   targetHeader: { backgroundColor: 'rgba(255,122,51,0.10)', borderBottomColor: 'rgba(255,122,51,0.40)', borderBottomWidth: 1, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' },
   awaitingHeader: { backgroundColor: C.panel2, borderBottomColor: C.line },
-  targetKicker: { flex: 1, color: C.orangeBright, fontFamily: F.monoSemiBold, fontSize: 9.5, letterSpacing: 1.7 },
+  targetKicker: { flex: 1, color: C.orangeBright, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.3 },
   mutedKicker: { color: C.muted },
-  signalAge: { color: C.muted, fontFamily: F.mono, fontSize: 9.5 },
+  signalAge: { color: C.muted, fontFamily: F.mono, fontSize: T.label },
   amberText: { color: C.amber },
   targetBody: { padding: 14 },
   targetName: { color: C.orangeBright, fontFamily: F.displayBold, fontSize: 24, letterSpacing: 0.35 },
@@ -1044,92 +1044,92 @@ const styles = StyleSheet.create({
   signalAvailable: { marginTop: 10 },
   distanceRow: { flexDirection: 'row', alignItems: 'baseline' },
   bandWord: { flex: 1, color: C.orangeBright, fontFamily: F.displayBold, fontSize: 29 },
-  distance: { color: C.text, fontFamily: F.monoSemiBold, fontSize: 12.5 },
+  distance: { color: C.text, fontFamily: F.monoSemiBold, fontSize: T.body },
   meterRow: { flexDirection: 'row', gap: 5, marginTop: 12 },
   meterItem: { flex: 1, alignItems: 'center' },
   meterBar: { width: '100%', height: 5, borderRadius: 3, backgroundColor: C.line },
   meterBarActive: { backgroundColor: C.orange },
-  meterLabel: { color: C.muted, fontFamily: F.mono, fontSize: 6.3, marginTop: 5 },
+  meterLabel: { color: C.muted, fontFamily: F.mono, fontSize: 10, marginTop: 5, textAlign: 'center' },
   meterLabelActive: { color: C.orangeBright, fontFamily: F.monoSemiBold },
-  claimButton: { backgroundColor: C.orange, borderRadius: 6, alignItems: 'center', paddingVertical: 13, marginTop: 18 },
-  disabledClaimButton: { backgroundColor: C.panel2, borderColor: C.line, borderWidth: 1, borderRadius: 6, alignItems: 'center', paddingVertical: 12, marginTop: 18 },
-  cyanButton: { backgroundColor: C.cyan, borderRadius: 6, alignItems: 'center', paddingVertical: 13 },
-  filledButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 13.5, letterSpacing: 1.05, textAlign: 'center' },
-  disabledButtonText: { color: C.muted, fontFamily: F.displayBold, fontSize: 12.5, letterSpacing: 0.7, textAlign: 'center' },
+  claimButton: { minHeight: S.touch, backgroundColor: C.orange, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 12, marginTop: 18 },
+  disabledClaimButton: { minHeight: S.touch, backgroundColor: C.panel2, borderColor: C.line, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 12, marginTop: 18 },
+  cyanButton: { minHeight: S.touch, backgroundColor: C.cyan, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 12 },
+  filledButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: T.button, letterSpacing: 1, textAlign: 'center' },
+  disabledButtonText: { color: C.muted, fontFamily: F.displayBold, fontSize: T.button, letterSpacing: 0.7, textAlign: 'center' },
   disabled: { opacity: 0.55 },
   outcomeNote: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(63,214,143,0.08)', borderColor: C.greenBorder, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, marginTop: 12 },
   outcomeNoteError: { backgroundColor: 'rgba(255,84,73,0.08)', borderColor: C.redBorder },
-  outcomeText: { flex: 1, color: C.green, fontFamily: F.bodyMedium, fontSize: 13, lineHeight: 19 },
+  outcomeText: { flex: 1, color: C.green, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody },
   outcomeErrorText: { marginTop: 0 },
-  outcomeDismiss: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 },
+  outcomeDismiss: { minHeight: S.touch, justifyContent: 'center', paddingHorizontal: 8 },
   outcomeDismissText: { color: C.text, fontFamily: F.displaySemiBold, fontSize: 12, letterSpacing: 0.8 },
   decisionBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,176,32,0.10)', borderTopColor: C.amberBorder, borderTopWidth: 1, borderBottomColor: C.amberBorder, borderBottomWidth: 1, paddingHorizontal: 13, paddingVertical: 8 },
-  decisionText: { flex: 1, color: C.amber, fontFamily: F.bodyMedium, fontSize: 13.5, lineHeight: 19 },
-  decisionButton: { minHeight: 44, justifyContent: 'center', backgroundColor: C.amber, borderRadius: 6, paddingHorizontal: 12 },
+  decisionText: { flex: 1, color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody },
+  decisionButton: { minHeight: S.touch, justifyContent: 'center', backgroundColor: C.amber, borderRadius: 6, paddingHorizontal: 12 },
   decisionButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 12.5, letterSpacing: 0.8 },
-  claimCaption: { color: C.muted, fontFamily: F.mono, fontSize: 8.5, lineHeight: 14, letterSpacing: 0.35, textAlign: 'center', marginTop: 8 },
-  hunterWarning: { color: C.muted, fontFamily: F.mono, fontSize: 8.5, lineHeight: 14, letterSpacing: 0.65, textAlign: 'center', marginTop: 13 },
-  errorText: { color: C.red, fontFamily: F.bodyMedium, fontSize: 12.5, lineHeight: 18, marginTop: 10 },
+  claimCaption: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, lineHeight: T.lineLabel, letterSpacing: 0.3, textAlign: 'center', marginTop: 8 },
+  hunterWarning: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, lineHeight: T.lineLabel, letterSpacing: 0.5, textAlign: 'center', marginTop: 13 },
+  errorText: { color: C.red, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 10 },
   resultIcon: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 17 },
   winnerIcon: { borderColor: C.cyan },
   otherIcon: { borderColor: C.lineStrong },
   resultIconText: { fontFamily: F.displayBold, fontSize: 26 },
   resultTitle: { color: C.text, fontFamily: F.displayBold, fontSize: 26, lineHeight: 31, textAlign: 'center' },
   winnerTitle: { color: C.cyan, fontSize: 30 },
-  resultCopy: { color: C.muted, fontFamily: F.body, fontSize: 13.5, lineHeight: 21, textAlign: 'center', marginTop: 10 },
+  resultCopy: { color: C.muted, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: 22, textAlign: 'center', marginTop: 10 },
   targetInline: { color: C.orangeBright, fontFamily: F.bodySemiBold },
   resultChip: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 15, paddingHorizontal: 13, paddingVertical: 7, marginTop: 18 },
   winnerChip: { borderColor: C.cyanBorder },
-  resultChipText: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.25 },
+  resultChipText: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1 },
   winnerChipText: { color: C.cyan },
   eliminatedIcon: { width: 64, height: 64, borderRadius: 32, borderColor: C.red, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 17 },
   eliminatedIconText: { color: C.red, fontFamily: F.displayBold, fontSize: 24 },
   eliminatedTitle: { color: C.red, fontFamily: F.displayBold, fontSize: 30, letterSpacing: 1 },
-  restoreNote: { color: C.muted, fontFamily: F.mono, fontSize: 8.5, letterSpacing: 1, marginTop: 17 },
+  restoreNote: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, letterSpacing: 0.8, marginTop: 17, textAlign: 'center' },
   messageCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 13, marginBottom: 13 },
-  messageTitle: { color: C.text, fontFamily: F.bodyBold, fontSize: 14 },
+  messageTitle: { color: C.text, fontFamily: F.bodyBold, fontSize: T.bodyLarge },
   messageInput: { marginTop: 9 },
   messageFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  charCount: { flex: 1, color: C.muted, fontFamily: F.mono, fontSize: 9.5 },
-  smallCyanButton: { backgroundColor: C.cyan, borderRadius: 5, paddingHorizontal: 17, paddingVertical: 8 },
-  smallCyanButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 11.5, letterSpacing: 0.8 },
-  privateCaption: { color: C.muted, fontFamily: F.mono, fontSize: 8, letterSpacing: 0.65, marginTop: 9 },
+  charCount: { flex: 1, color: C.muted, fontFamily: F.mono, fontSize: T.label },
+  smallCyanButton: { minHeight: S.touch, justifyContent: 'center', backgroundColor: C.cyan, borderRadius: 5, paddingHorizontal: 17, paddingVertical: 8 },
+  smallCyanButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: T.button, letterSpacing: 0.8 },
+  privateCaption: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, lineHeight: T.lineLabel, letterSpacing: 0.5, marginTop: 9 },
   eventCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 9 },
   eventTopRow: { flexDirection: 'row', alignItems: 'center' },
-  eventTag: { flex: 1, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.35 },
-  eventTime: { color: C.muted, fontFamily: F.mono, fontSize: 9.5 },
-  eventTitle: { color: C.text, fontFamily: F.bodySemiBold, fontSize: 14, marginTop: 7 },
-  eventBody: { color: C.muted, fontFamily: F.body, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
-  emptyText: { color: C.muted, fontFamily: F.mono, fontSize: 9, letterSpacing: 1.2, textAlign: 'center', marginVertical: 28 },
+  eventTag: { flex: 1, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.1 },
+  eventTime: { color: C.muted, fontFamily: F.mono, fontSize: T.label },
+  eventTitle: { color: C.text, fontFamily: F.bodySemiBold, fontSize: T.bodyLarge, lineHeight: 21, marginTop: 7 },
+  eventBody: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 4 },
+  emptyText: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, textAlign: 'center', marginVertical: 28 },
   sharingHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  sharingTitle: { color: C.text, fontFamily: F.bodySemiBold, fontSize: 15 },
-  sharingState: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.25, marginTop: 3 },
+  sharingTitle: { color: C.text, fontFamily: F.bodySemiBold, fontSize: 16 },
+  sharingState: { color: C.cyan, fontFamily: F.bodyMedium, fontSize: T.body, marginTop: 3 },
   sharingDetails: { marginTop: 9 },
-  sharingFact: { color: C.text, fontFamily: F.bodyMedium, fontSize: 13, lineHeight: 19, marginTop: 4 },
-  telemetryNote: { color: C.muted, fontFamily: F.body, fontSize: 12, lineHeight: 17, marginTop: 10 },
-  warningCopy: { color: C.amber, fontFamily: F.bodyMedium, fontSize: 12.5, lineHeight: 18, marginTop: 11 },
+  sharingFact: { color: C.text, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 4 },
+  telemetryNote: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, marginTop: 10 },
+  warningCopy: { color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 11 },
   telemetryCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 14, marginTop: 12 },
-  telemetryKicker: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.5 },
-  telemetryRow: { flexDirection: 'row', gap: 7, marginTop: 11 },
-  telemetryCell: { flex: 1, minHeight: 57, backgroundColor: C.ink, borderColor: C.line, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  telemetryValue: { fontFamily: F.displayBold, fontSize: 12.5 },
-  telemetryLabel: { color: C.muted, fontFamily: F.mono, fontSize: 7.5, letterSpacing: 0.75, marginTop: 3 },
-  sharingFootnote: { color: C.muted, fontFamily: F.mono, fontSize: 8, lineHeight: 13, letterSpacing: 0.55, textAlign: 'center', marginTop: 14 },
-  ghostButton: { borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, alignItems: 'center', paddingVertical: 11, marginTop: 14 },
-  ghostButtonText: { color: C.text, fontFamily: F.displaySemiBold, fontSize: 12.5, letterSpacing: 0.85 },
+  telemetryKicker: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.2 },
+  telemetryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 11 },
+  telemetryCell: { flexGrow: 1, flexBasis: '45%', minHeight: 60, backgroundColor: C.ink, borderColor: C.line, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 8 },
+  telemetryValue: { fontFamily: F.displayBold, fontSize: T.bodyLarge, textAlign: 'center' },
+  telemetryLabel: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, letterSpacing: 0.6, marginTop: 3 },
+  sharingFootnote: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, textAlign: 'center', marginTop: 14 },
+  ghostButton: { minHeight: S.touch, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, paddingHorizontal: 12, marginTop: 14 },
+  ghostButtonText: { color: C.text, fontFamily: F.displaySemiBold, fontSize: T.button, letterSpacing: 0.8, textAlign: 'center' },
   identityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   avatar: { width: 46, height: 46, borderRadius: 6, backgroundColor: C.panel, borderColor: C.cyanBorder, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   avatarText: { color: C.cyan, fontFamily: F.displayBold, fontSize: 17 },
   characterName: { color: C.text, fontFamily: F.displayBold, fontSize: 22 },
-  characterBio: { color: C.muted, fontFamily: F.body, fontSize: 12.5, lineHeight: 18, marginTop: 2 },
-  sheetLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.35, marginBottom: 9 },
+  characterBio: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 2 },
+  sheetLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.1, marginBottom: 9 },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statCard: { minWidth: 94, flexGrow: 1, backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 8, alignItems: 'center', paddingHorizontal: 12, paddingVertical: 13 },
   statValue: { fontFamily: F.displayBold, fontSize: 23 },
-  statLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 8, letterSpacing: 0.9, marginTop: 3 },
+  statLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 0.7, marginTop: 3, textAlign: 'center' },
   editSection: { marginTop: 22 },
   field: { marginBottom: 12 },
-  inputLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.15, marginBottom: 5 },
-  input: { backgroundColor: C.ink, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, color: C.text, fontFamily: F.body, fontSize: 14, paddingHorizontal: 12, paddingVertical: 10 },
+  inputLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1, marginBottom: 5 },
+  input: { minHeight: S.touch, backgroundColor: C.ink, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, color: C.text, fontFamily: F.body, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10 },
   bioInput: { minHeight: 76, textAlignVertical: 'top' },
 })

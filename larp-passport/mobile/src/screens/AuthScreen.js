@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
-import { C, F } from '../lib/theme'
+import { C, F, S, T } from '../lib/theme'
 
 export default function AuthScreen() {
   const [mode, setMode] = useState('signin')
@@ -46,7 +46,8 @@ export default function AuthScreen() {
     <SafeAreaView style={styles.safe}>
       <View pointerEvents="none" style={styles.scanLineOne} />
       <View pointerEvents="none" style={styles.scanLineTwo} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboard}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+      <ScrollView contentContainerStyle={styles.keyboard} keyboardShouldPersistTaps="handled">
         <View style={styles.identityBlock}>
           <View style={styles.markOuter}><View style={styles.markInner} /></View>
           <Text style={styles.eyebrow}>TEMPORAL FIELD AUTHORITY</Text>
@@ -77,6 +78,7 @@ export default function AuthScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.footer}>SECURE CHANNEL // BUILD 2141.07</Text>
+      </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -93,29 +95,30 @@ function Field({ label, ...props }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.ink },
-  keyboard: { flex: 1, justifyContent: 'center', paddingHorizontal: 22, paddingVertical: 26 },
+  flex: { flex: 1 },
+  keyboard: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 22, paddingVertical: 26 },
   scanLineOne: { position: 'absolute', top: '14%', left: 0, right: 0, height: 1, backgroundColor: C.panel2 },
   scanLineTwo: { position: 'absolute', bottom: '12%', left: 38, right: 38, height: 1, backgroundColor: C.panel2 },
   identityBlock: { alignItems: 'center', marginBottom: 25 },
   markOuter: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: C.cyanBorder, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   markInner: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: C.cyan },
-  eyebrow: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 2.1 },
+  eyebrow: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.6 },
   brand: { color: C.text, fontFamily: F.displayBold, fontSize: 29, letterSpacing: 2.5, marginTop: 5 },
-  tagline: { color: C.muted, fontFamily: F.mono, fontSize: 9, letterSpacing: 1.25, marginTop: 7 },
+  tagline: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, letterSpacing: 1, marginTop: 7 },
   card: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 18 },
   cardHeader: { borderBottomColor: C.line, borderBottomWidth: 1, paddingBottom: 13, marginBottom: 16 },
-  cardKicker: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.7 },
+  cardKicker: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.3 },
   cardTitle: { color: C.text, fontFamily: F.displayBold, fontSize: 21, marginTop: 5 },
   field: { marginBottom: 13 },
-  label: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.5, marginBottom: 6 },
-  input: { backgroundColor: C.ink, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, color: C.text, fontFamily: F.body, fontSize: 14, paddingHorizontal: 12, paddingVertical: 11 },
-  primaryButton: { backgroundColor: C.cyan, borderRadius: 6, alignItems: 'center', paddingVertical: 13, marginTop: 3 },
-  primaryButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 14, letterSpacing: 1.2 },
+  label: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.1, marginBottom: 6 },
+  input: { minHeight: S.touch, backgroundColor: C.ink, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, color: C.text, fontFamily: F.body, fontSize: 16, paddingHorizontal: 12, paddingVertical: 11 },
+  primaryButton: { minHeight: S.touch, backgroundColor: C.cyan, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 12, marginTop: 3 },
+  primaryButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: T.button, letterSpacing: 1.1, textAlign: 'center' },
   disabled: { opacity: 0.55 },
-  error: { color: C.red, fontFamily: F.bodyMedium, fontSize: 13, lineHeight: 19, marginTop: 11 },
-  notice: { color: C.green, fontFamily: F.bodyMedium, fontSize: 13, lineHeight: 19, marginTop: 11 },
-  modeButton: { paddingTop: 17, paddingBottom: 2 },
-  modeCopy: { color: C.muted, textAlign: 'center', fontFamily: F.mono, fontSize: 10, letterSpacing: 0.7 },
-  modeLink: { color: C.cyan, fontFamily: F.monoSemiBold },
-  footer: { color: C.lineStrong, textAlign: 'center', fontFamily: F.mono, fontSize: 8.5, letterSpacing: 1.5, marginTop: 20 },
+  error: { color: C.red, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 11 },
+  notice: { color: C.green, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 11 },
+  modeButton: { minHeight: S.touch, justifyContent: 'center', paddingTop: 14, paddingBottom: 2 },
+  modeCopy: { color: C.muted, textAlign: 'center', fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody },
+  modeLink: { color: C.cyan, fontFamily: F.bodySemiBold },
+  footer: { color: C.muted, textAlign: 'center', fontFamily: F.mono, fontSize: T.micro, letterSpacing: 1.2, marginTop: 20 },
 })

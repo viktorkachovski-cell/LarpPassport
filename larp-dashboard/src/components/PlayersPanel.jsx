@@ -31,7 +31,7 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
     <div className="panel-pad">
       <p className="hint mb">
         Players join from the app with code <b style={{ color: 'var(--cyan)' }}>{game.join_code}</b>.
-        Location pings older than <input type="number" min="1" style={{ width: 60 }} defaultValue={game.purge_after_days}
+        Location pings older than <input type="number" min="1" style={{ width: 76 }} defaultValue={game.purge_after_days}
           onBlur={(e) => { const v = Number(e.target.value); if (v >= 1 && v !== game.purge_after_days) updateGame({ purge_after_days: v }) }} /> days are deleted automatically.
       </p>
       <table className="grid">

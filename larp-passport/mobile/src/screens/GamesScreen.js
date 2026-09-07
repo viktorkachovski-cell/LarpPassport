@@ -3,7 +3,7 @@ import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { stopSharing } from '../lib/locationTask'
-import { C, F } from '../lib/theme'
+import { C, F, S, T } from '../lib/theme'
 import { describeServerSync } from '../lib/syncStatus'
 
 const STATUS_COLORS = { active: C.green, draft: C.amber, finished: C.muted }
@@ -130,32 +130,32 @@ function ListSyncStatus({ sync, loading }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.ink, paddingHorizontal: 18 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, paddingBottom: 18 },
-  eyebrow: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.65 },
+  eyebrow: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.3 },
   title: { color: C.text, fontFamily: F.displayBold, fontSize: 25, letterSpacing: 1.6, marginTop: 3 },
   syncChip: { maxWidth: '45%', borderColor: C.line, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
-  syncChipText: { fontFamily: F.bodyMedium, fontSize: 12, textAlign: 'right' },
+  syncChipText: { fontFamily: F.bodyMedium, fontSize: T.label, lineHeight: T.lineLabel, textAlign: 'right' },
   joinCard: { backgroundColor: C.panel, borderColor: C.cyanBorder, borderWidth: 1, borderRadius: 10, padding: 15 },
-  joinKicker: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.7 },
-  joinCopy: { color: C.muted, fontFamily: F.body, fontSize: 13, marginTop: 5, marginBottom: 13 },
+  joinKicker: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.3 },
+  joinCopy: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 5, marginBottom: 13 },
   joinRow: { flexDirection: 'row', gap: 9 },
-  codeInput: { flex: 1, backgroundColor: C.ink, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, color: C.text, fontFamily: F.monoSemiBold, paddingHorizontal: 12, paddingVertical: 11, letterSpacing: 2.4, fontSize: 13 },
-  joinButton: { backgroundColor: C.cyan, borderRadius: 6, paddingHorizontal: 18, justifyContent: 'center' },
-  joinButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 13, letterSpacing: 1 },
+  codeInput: { flex: 1, minHeight: S.touch, backgroundColor: C.ink, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, color: C.text, fontFamily: F.monoSemiBold, paddingHorizontal: 12, paddingVertical: 11, letterSpacing: 2, fontSize: 16 },
+  joinButton: { minHeight: S.touch, minWidth: 72, backgroundColor: C.cyan, borderRadius: 6, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
+  joinButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: T.button, letterSpacing: 1 },
   disabled: { opacity: 0.55 },
-  error: { color: C.red, fontFamily: F.bodyMedium, fontSize: 12.5, marginTop: 10 },
+  error: { color: C.red, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 10 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 24, marginBottom: 9 },
-  sectionLabel: { flex: 1, color: C.muted, fontFamily: F.monoSemiBold, fontSize: 9, letterSpacing: 1.6 },
-  sectionCount: { color: C.cyan, fontFamily: F.mono, fontSize: 10 },
+  sectionLabel: { flex: 1, color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.2 },
+  sectionCount: { color: C.cyan, fontFamily: F.mono, fontSize: T.label },
   list: { paddingBottom: 12 },
   emptyList: { flexGrow: 1, justifyContent: 'center' },
-  empty: { color: C.muted, textAlign: 'center', fontFamily: F.mono, fontSize: 9.5, letterSpacing: 1.4 },
-  gameCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 8, padding: 14, marginBottom: 9, flexDirection: 'row', alignItems: 'center' },
+  empty: { color: C.muted, textAlign: 'center', fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, paddingHorizontal: 20 },
+  gameCard: { minHeight: S.touch, backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 8, padding: 14, marginBottom: 9, flexDirection: 'row', alignItems: 'center' },
   gameIndex: { width: 34, height: 34, borderRadius: 6, borderColor: C.cyanBorder, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   gameIndexText: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: 11 },
   gameBody: { flex: 1 },
   gameName: { color: C.text, fontFamily: F.displaySemiBold, fontSize: 17, letterSpacing: 0.5 },
-  gameStatus: { fontFamily: F.monoSemiBold, fontSize: 8.5, letterSpacing: 1.4, marginTop: 3 },
+  gameStatus: { fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.1, marginTop: 3 },
   arrow: { color: C.lineStrong, fontFamily: F.monoSemiBold, fontSize: 14 },
-  signout: { paddingVertical: 15, borderTopColor: C.panel2, borderTopWidth: 1 },
-  signoutText: { color: C.muted, textAlign: 'center', fontFamily: F.mono, fontSize: 9, letterSpacing: 1.5 },
+  signout: { minHeight: S.touch, justifyContent: 'center', paddingVertical: 12, borderTopColor: C.panel2, borderTopWidth: 1 },
+  signoutText: { color: C.text, textAlign: 'center', fontFamily: F.displaySemiBold, fontSize: T.button, letterSpacing: 0.8 },
 })

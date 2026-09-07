@@ -30,3 +30,24 @@ export const F = {
   monoMedium: 'IBMPlexMono_500Medium',
   monoSemiBold: 'IBMPlexMono_600SemiBold',
 }
+
+// Type scale (logical px). Operational text never goes below `label`; only
+// genuinely decorative kickers may use `micro`. Native font scaling stays on.
+export const T = {
+  micro: 11,
+  label: 12,
+  body: 14,
+  bodyLarge: 15,
+  button: 14,
+  title: 20,
+  hero: 26,
+  lineBody: 20,
+  lineLabel: 16,
+}
+
+// Spacing and touch-target minimums.
+export const S = {
+  touch: 48,
+  gap: 8,
+  pad: 14,
+}
