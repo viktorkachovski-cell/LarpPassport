@@ -28,6 +28,7 @@ export default function GamesScreen({ onOpen }) {
   async function join() {
     if (!code.trim()) return
     setBusy(true); setError('')
+    try {
     const { data, error: joinError } = await supabase.rpc('join_game', { code: code.trim() })
     setBusy(false)
     if (joinError) { setError(joinError.message); return }
@@ -35,6 +36,7 @@ export default function GamesScreen({ onOpen }) {
     setCode('')
     await load()
     onOpen({ id: data.joined_game_id, name: data.joined_game_name })
+    } catch (error) { setError(error.message) } finally { setBusy(false) }
   }
 
   return (

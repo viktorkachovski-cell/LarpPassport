@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { C, F } from '../lib/theme'
+import { readGameSnapshot } from '../lib/gameSnapshot'
 import { updateLocationConsent } from '../lib/locationConsent'
 import { flush, isSharing, syncNotifications, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
 
@@ -93,9 +94,6 @@ export default function GameScreen({ gameId, session, onBack }) {
     } catch (error) { if (request === huntRequest.current) setHuntError(error.message); return null }
   }, [gameId])
 
-  const tabRef = useRef(tab)
-  const realtimeUp = useRef(false)
-  useEffect(() => { tabRef.current = tab }, [tab])
 
   // Relative timestamps ("5m ago") and the boundary banner only need coarse
   // time. Live countdowns tick per-second inside <Countdown /> instead of
@@ -108,21 +106,17 @@ export default function GameScreen({ gameId, session, onBack }) {
   useEffect(() => {
     let alive = true
     let version = 0
+    let refreshTimer
+    const scheduleRefresh = () => { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => { if (alive) refresh() }, 250) }
     async function load() {
       const request = ++version
       try {
-      const [gameResult, characterResult, eventResult] = await Promise.all([
-        supabase.from('games').select(GAME_COLUMNS).eq('id', gameId).single(),
-        supabase.from('characters').select('*').eq('game_id', gameId).eq('user_id', uid).eq('is_npc', false).maybeSingle(),
-        supabase.from('game_events').select('*').eq('game_id', gameId).order('seq', { ascending: false }).limit(50),
-      ])
+      const snapshot = await readGameSnapshot(supabase, gameId, uid, GAME_COLUMNS)
       if (!alive || request !== version) return
-      const failed = [gameResult, characterResult, eventResult].find((r) => r.error)
-      if (failed) throw failed.error
       setLoadError('')
-      setGame(gameResult.data ?? null)
-      setCharacter(characterResult.data ?? null)
-      setEvents(eventResult.data ?? [])
+      setGame(snapshot.game)
+      setCharacter(snapshot.character)
+      setEvents(snapshot.events)
       await syncNotifications(gameId).catch(() => {})
       } catch (error) { if (alive && request === version) setLoadError(error.message) }
     }
@@ -130,20 +124,20 @@ export default function GameScreen({ gameId, session, onBack }) {
     refreshRef.current = refresh
     load()
     loadHunt()
-    isSharing(gameId).then(setSharing)
-    queueStatus(gameId).then(setQueue)
+    isSharing(gameId).then(setSharing).catch((error) => { if (alive) setError(error.message) })
+    queueStatus(gameId).then(setQueue).catch((error) => { if (alive) setError(error.message) })
     Notifications.requestPermissionsAsync().catch(() => {})
 
     const channel = supabase
       .channel(`m-game-${gameId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
         if (payload.eventType === 'DELETE') { load(); return }
-        ++version
+        ++version; scheduleRefresh()
         if (payload.new?.user_id === uid && !payload.new?.is_npc) setCharacter(payload.new)
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${gameId}` }, (payload) => {
         if (payload.eventType === 'DELETE') { load(); return }
-        ++version
+        ++version; scheduleRefresh()
         const row = payload.new
         if (!row?.id) return
         setEvents((previous) => {
@@ -162,18 +156,16 @@ export default function GameScreen({ gameId, session, onBack }) {
         )) loadHunt()
       })
       .subscribe((status) => {
-        realtimeUp.current = status === 'SUBSCRIBED'
         if (status === 'SUBSCRIBED') refresh()
       })
 
     // Realtime is the normal update path; polling is the recovery mechanism.
-    // No UI polling while backgrounded (the background location task is a
-    // separate foreground service and is NOT affected by this), and the hunt
-    // reload only runs when the hunt tab is visible or realtime is down.
+    // Foreground snapshots recover every data set, including deletions missed
+    // while the app was suspended. Background GPS continues independently.
     const tick = () => {
       if (AppState.currentState !== 'active') return
-      queueStatus(gameId).then(setQueue)
-      isSharing(gameId).then(setSharing)
+      queueStatus(gameId).then(setQueue).catch((error) => { if (alive) setError(error.message) })
+      isSharing(gameId).then(setSharing).catch((error) => { if (alive) setError(error.message) })
       refresh()
     }
     const interval = setInterval(tick, 45000)
@@ -184,7 +176,7 @@ export default function GameScreen({ gameId, session, onBack }) {
     return () => {
       alive = false; ++version; ++huntRequest.current
       refreshRef.current = () => {}
-      clearInterval(interval)
+      clearInterval(interval); clearTimeout(refreshTimer)
       appStateSub.remove()
       supabase.removeChannel(channel)
     }
@@ -213,17 +205,21 @@ export default function GameScreen({ gameId, session, onBack }) {
 
   const sendNow = useCallback(async () => {
     setError('')
-    const result = await flush(gameId)
-    if (result?.error) setError(`Send failed: ${result.error}`)
-    queueStatus(gameId).then(setQueue)
+    try {
+      const result = await flush(gameId)
+      if (result?.error) setError(`Send failed: ${result.error}`)
+      setQueue(await queueStatus(gameId))
+    } catch (error) { setError(error.message) }
   }, [gameId])
 
   const requestElimination = useCallback(async () => {
     setHuntBusy(true); setHuntError('')
+    try {
     const { error: claimError } = await supabase.rpc('request_elimination', { g: gameId })
     setHuntBusy(false)
     if (claimError) { setHuntError(claimError.message); return }
     await loadHunt()
+    } catch (error) { setHuntError(error.message) } finally { setHuntBusy(false) }
   }, [gameId, loadHunt])
 
   const confirmEliminationRequest = useCallback(() => {
@@ -241,6 +237,7 @@ export default function GameScreen({ gameId, session, onBack }) {
   const respondToElimination = useCallback(async (confirmed) => {
     if (!incomingClaimId) return
     setHuntBusy(true); setHuntError('')
+    try {
     const { data, error: responseError } = await supabase.rpc('respond_elimination', {
       claim_id: incomingClaimId,
       confirm_elimination: confirmed,
@@ -248,6 +245,7 @@ export default function GameScreen({ gameId, session, onBack }) {
     setHuntBusy(false)
     if (responseError) { setHuntError(responseError.message); return }
     setHunt(data)
+    } catch (error) { setHuntError(error.message) } finally { setHuntBusy(false) }
   }, [incomingClaimId])
 
   const visibleEvents = events.filter((event) => event.player_visible && event.profile_id === uid)
@@ -632,11 +630,13 @@ function PlayerMessageBox({ gameId }) {
     const clean = message.trim()
     if (!clean) return
     setBusy(true); setStatus('')
+    try {
     const { error } = await supabase.rpc('send_gm_message', { g: gameId, message: clean })
     setBusy(false)
     if (error) { setStatus(error.message); return }
     setMessage('')
     setStatus('Sent to the GM.')
+    } catch (error) { setStatus(error.message) } finally { setBusy(false) }
   }
 
   const sendDisabled = busy || !message.trim()
@@ -726,6 +726,7 @@ const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
 
   async function save() {
     setError(''); setSaved(false)
+    try {
     const next = { ...fields }
     for (const stat of editable) {
       if (!(stat.key in values)) continue
@@ -737,6 +738,7 @@ const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
     setDraft(null)
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
+    } catch (error) { setError(error.message) }
   }
 
   return (
@@ -800,6 +802,7 @@ function CreateCharacter({ game, uid, onCreated }) {
   async function create() {
     if (!name.trim()) { setError('Your character needs a name.'); return }
     setBusy(true); setError('')
+    try {
     const fields = {}
     for (const stat of editable) fields[stat.key] = stat.type === 'number' ? Number(values[stat.key]) || 0 : String(values[stat.key] ?? '')
     const { data, error: createError } = await supabase.from('characters')
@@ -808,6 +811,7 @@ function CreateCharacter({ game, uid, onCreated }) {
     setBusy(false)
     if (createError) { setError(createError.message); return }
     onCreated(data)
+    } catch (error) { setError(error.message) } finally { setBusy(false) }
   }
 
   return (

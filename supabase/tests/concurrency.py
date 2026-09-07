@@ -9,7 +9,9 @@ PLAYER = '82000000-0000-0000-0000-000000000002'
 GM = '81000000-0000-0000-0000-000000000001'
 
 def query(sql):
-    return subprocess.run(CMD, input=sql, text=True, capture_output=True, check=True, timeout=20).stdout.strip()
+    result = subprocess.run(CMD, input=sql, text=True, capture_output=True, timeout=20)
+    if result.returncode: raise AssertionError(result.stderr)
+    return result.stdout.strip()
 
 def auth(uid):
     return f"set local role authenticated; select set_config('request.jwt.claim.sub','{uid}',true);"
@@ -70,4 +72,5 @@ try:
     finally:
         holder.stdin.write('rollback;\n'); holder.stdin.close(); holder.wait(timeout=10)
 finally:
+    query('begin;' + auth(GM) + f"select public.reset_hunt('{GAME}');commit;")
     query(f"delete from public.games where id='{GAME}'; delete from auth.users where id in ('{GM}','{PLAYER}','83000000-0000-0000-0000-000000000003');")

@@ -69,3 +69,13 @@ describe('EventsPanel', () => {
     expect(await screen.findByText('Sent to 2 players.')).toBeTruthy()
   })
 })
+
+it('pending filter uses the independent queue and history can request another page', () => {
+  const event = { id: 'old', type: 'zone_boundary_exit', status: 'pending', created_at: new Date().toISOString() }
+  const loadOlder = vi.fn()
+  render(<EventsPanel {...props({ events: [], pendingEvents: [event], loadOlder, hasMore: true })} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Load older events' }))
+  expect(loadOlder).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByRole('button', { name: 'Pending' }))
+  expect(screen.getByText('BREACH // PENDING')).toBeTruthy()
+})

@@ -74,8 +74,8 @@ export default function App() {
     )
   } else if (!session) {
     body = <AuthScreen />
-  } else if (!game) {
-    body = <GamesScreen onOpen={setGame} />
+  } else if (!game || game.owner !== session.user.id) {
+    body = <GamesScreen key={session.user.id} onOpen={(g) => setGame({ ...g, owner: session.user.id })} />
   } else {
     body = <GameScreen key={`${session.user.id}:${game.id}`} gameId={game.id} session={session} onBack={() => setGame(null)} />
   }

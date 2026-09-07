@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   channel: vi.fn(),
   from: vi.fn(),
   mapError: null,
+  subscribed: null,
   mutationPatches: [],
   mutationResults: {},
   queryResults: {},
@@ -29,7 +30,7 @@ vi.mock('./MapPanel', () => ({ default: () => {
 } }))
 vi.mock('./CharactersPanel', () => ({ default: () => <div>Characters panel</div> }))
 vi.mock('./TemplatePanel', () => ({ default: () => <div>Template panel</div> }))
-vi.mock('./EventsPanel', () => ({ default: () => <div>Events panel</div> }))
+vi.mock('./EventsPanel', () => ({ default: ({ pendingEvents }) => <div>Events panel {pendingEvents.map((e) => <span key={e.id}>{e.id}</span>)}</div> }))
 vi.mock('./PlayersPanel', () => ({ default: () => <div>Players panel</div> }))
 vi.mock('./HuntPanel', () => ({ default: () => <div>Hunt panel</div> }))
 
@@ -44,14 +45,17 @@ function resultFor(table, operation) {
 
 function queryBuilder(table) {
   let operation = 'select'
+  let pending = false
   const builder = {
     delete() {
       operation = 'delete'
       return builder
     },
-    eq() {
+    eq(key, value) {
+      if (key === 'status' && value === 'pending') pending = true
       return builder
     },
+    lt() { return builder },
     insert() {
       operation = 'insert'
       return builder
@@ -66,10 +70,10 @@ function queryBuilder(table) {
       return builder
     },
     single() {
-      return Promise.resolve(resultFor(table, operation))
+      return Promise.resolve(resultFor(pending ? `${table}_pending` : table, operation))
     },
     then(resolve, reject) {
-      return Promise.resolve(resultFor(table, operation)).then(resolve, reject)
+      return Promise.resolve(resultFor(pending ? `${table}_pending` : table, operation)).then(resolve, reject)
     },
     update(patch) {
       operation = 'update'
@@ -108,7 +112,7 @@ beforeEach(() => {
     subscribe: vi.fn(),
   }
   realtimeChannel.on.mockReturnValue(realtimeChannel)
-  realtimeChannel.subscribe.mockReturnValue(realtimeChannel)
+  realtimeChannel.subscribe.mockImplementation((cb) => { mocks.subscribed = cb; return realtimeChannel })
   mocks.channel.mockReturnValue(realtimeChannel)
 })
 
@@ -199,5 +203,40 @@ describe('GameView access and mutation errors', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('permission denied')
     expect(mocks.mutationPatches).toEqual([{ patch: { status: 'active' }, table: 'games' }])
+  })
+})
+
+describe('GameView authoritative recovery', () => {
+  it('keeps an unresolved event independently of 300 newer timeline entries', async () => {
+    mocks.queryResults.games = { data: game(), error: null }
+    mocks.queryResults.game_events = { data: Array.from({ length: 300 }, (_, i) => ({ id: `new-${i}`, seq: 400-i, status: 'confirmed' })), error: null }
+    mocks.queryResults.game_events_pending = { data: [{ id: 'old-pending', seq: 1, status: 'pending' }], error: null }
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Hunt panel')
+    fireEvent.click(screen.getByRole('button', { name: /EVENTS/ }))
+    expect(await screen.findByText('old-pending')).toBeTruthy()
+  })
+
+  it('refreshes game status after reconnect and recovers a failed request on retry', async () => {
+    mocks.queryResults.games = { data: null, error: { message: 'Network unavailable' } }
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Network unavailable')
+    mocks.queryResults.games = { data: game(), error: null }
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await screen.findByText('Hunt panel')
+    mocks.queryResults.games = { data: { ...game(), status: 'finished' }, error: null }
+    act(() => mocks.subscribed('SUBSCRIBED'))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Game status' }).value).toBe('finished'))
+  })
+
+  it('ignores an older snapshot that finishes after a newer refresh', async () => {
+    let resolveOld
+    mocks.queryResults.games = new Promise((resolve) => { resolveOld = resolve })
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mocks.queryResults.games = { data: { ...game(), status: 'finished' }, error: null }
+    act(() => window.dispatchEvent(new Event('focus')))
+    await screen.findByText('Hunt panel')
+    await act(async () => resolveOld({ data: game(), error: null }))
+    expect(screen.getByRole('combobox', { name: 'Game status' }).value).toBe('finished')
   })
 })

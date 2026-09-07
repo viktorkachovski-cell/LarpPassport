@@ -25,6 +25,8 @@ export default function GameView({ gameId, session, onBack }) {
   const [historyBusy, setHistoryBusy] = useState(false)
   const refreshRef = useRef(() => {})
   const refreshTimer = useRef(null)
+  const invalidateSnapshot = useRef(() => {})
+  const snapshotPending = useRef(false)
   const scheduleRefresh = useCallback(() => {
     clearTimeout(refreshTimer.current)
     refreshTimer.current = setTimeout(() => refreshRef.current(), 250)
@@ -83,8 +85,10 @@ export default function GameView({ gameId, session, onBack }) {
       }
       return { data: rows, error: null }
     }
+    invalidateSnapshot.current = () => { if (snapshotPending.current) { ++version; scheduleRefresh() } }
     async function load() {
       const request = ++version
+      snapshotPending.current = true
       try {
       const [g, mem] = await Promise.all([
         supabase.from('games').select(GAME_COLUMNS).eq('id', gameId).single(),
@@ -98,7 +102,7 @@ export default function GameView({ gameId, session, onBack }) {
       setMembers(mem.data ?? [])
       const canManage = g.data.gm_id === uid
         || (mem.data ?? []).some((member) => member.profile_id === uid && member.role === 'gm')
-      if (!canManage) return
+      if (!canManage) { setLoadError(''); return }
 
       const [z, pos, chars, fac, ev, huntState, joinCode, pending] = await Promise.all([
         supabase.from('zones_view').select('*').eq('game_id', gameId),
@@ -127,6 +131,7 @@ export default function GameView({ gameId, session, onBack }) {
       setLoadError('')
       setHunt(huntState.data)
       } catch (error) { if (alive && request === version) setLoadError(error.message) }
+      finally { if (request === version) snapshotPending.current = false }
     }
     refreshRef.current = load
     const focus = () => { if (document.visibilityState !== 'hidden') load() }
@@ -139,10 +144,12 @@ export default function GameView({ gameId, session, onBack }) {
     return () => {
       alive = false; ++version; clearInterval(timer); clearTimeout(refreshTimer.current)
       refreshRef.current = () => {}
+      invalidateSnapshot.current = () => {}
+      snapshotPending.current = false
       window.removeEventListener('online', focus); window.removeEventListener('focus', focus)
       document.removeEventListener('visibilitychange', focus)
     }
-  }, [gameId, uid, refetchZones, refetchMembers])
+  }, [gameId, uid, refetchZones, refetchMembers, scheduleRefresh])
 
   useEffect(() => {
     if (!isGm) return undefined
@@ -150,6 +157,7 @@ export default function GameView({ gameId, session, onBack }) {
     const channel = supabase
       .channel(`game-${gameId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'player_positions', filter: `game_id=eq.${gameId}` }, (payload) => {
+        invalidateSnapshot.current()
         if (payload.eventType === 'DELETE') {
           const gone = payload.old?.profile_id
           if (gone) {
@@ -179,6 +187,7 @@ export default function GameView({ gameId, session, onBack }) {
         }))
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${gameId}` }, (payload) => {
+        invalidateSnapshot.current()
         setPendingEvents((prev) => {
           const rest = prev.filter((e) => e.id !== (payload.new?.id ?? payload.old?.id))
           return payload.new?.status === 'pending' ? [payload.new, ...rest] : rest
@@ -196,6 +205,7 @@ export default function GameView({ gameId, session, onBack }) {
             || payload.new?.type === 'zone_boundary_exit') scheduleRefresh()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
+        invalidateSnapshot.current()
         if (payload.eventType === 'DELETE') {
           setCharacters((prev) => prev.filter((c) => c.id !== payload.old?.id))
         } else {
@@ -234,6 +244,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function updateGame(patch) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.from('games').update(patch).eq('id', gameId).select(GAME_COLUMNS).single()
@@ -243,6 +254,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function confirmEvent(ev) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const patch = { status: 'confirmed', player_visible: true, resolved_at: new Date().toISOString(), resolved_by: uid }
@@ -255,6 +267,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function dismissEvent(ev) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const patch = { status: 'dismissed', resolved_at: new Date().toISOString(), resolved_by: uid }
@@ -267,6 +280,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function saveZone(draft) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     if (draft.id) {
@@ -291,6 +305,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function deleteZone(id) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { error } = await supabase.from('zones').delete().eq('id', id)
@@ -300,6 +315,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function saveCharacter(id, patch) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { error } = await supabase.from('characters').update(patch).eq('id', id)
@@ -307,6 +323,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function addNpc(name) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { error } = await supabase.from('characters').insert({ game_id: gameId, user_id: uid, name, is_npc: true })
@@ -314,6 +331,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function deleteCharacter(id) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { error } = await supabase.from('characters').delete().eq('id', id)
@@ -321,6 +339,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function addFaction(name, color) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.from('factions').insert({ game_id: gameId, name, color }).select().single()
@@ -330,6 +349,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function broadcast(targetProfileIds, message) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const rows = targetProfileIds.map((pid) => ({
@@ -341,6 +361,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function setMemberRole(profileId, role) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { error } = await supabase.from('game_players').update({ role }).eq('game_id', gameId).eq('profile_id', profileId)
@@ -350,6 +371,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function removeMember(profileId) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { error } = await supabase.from('game_players').delete().eq('game_id', gameId).eq('profile_id', profileId)
@@ -359,6 +381,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function startHunt() {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.rpc('start_hunt', { g: gameId })
@@ -369,6 +392,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function resetHunt() {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.rpc('reset_hunt', { g: gameId })
@@ -379,6 +403,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function resolveHuntClaim(claimId, confirmed) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.rpc('gm_resolve_elimination', {
@@ -392,6 +417,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function eliminateHuntPlayer(profileId) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.rpc('gm_eliminate_player', {
@@ -405,6 +431,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function restoreHuntPlayer(profileId) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.rpc('gm_restore_player', {
@@ -418,6 +445,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function saveHuntChain(profileIds) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.rpc('gm_set_hunt_chain', {
@@ -430,6 +458,7 @@ export default function GameView({ gameId, session, onBack }) {
   }
 
   async function assignNextTarget(profileId) {
+    invalidateSnapshot.current()
     const denied = requireGm()
     if (denied) return denied
     const { data, error } = await supabase.rpc('gm_assign_next_target', {

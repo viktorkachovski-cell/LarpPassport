@@ -28,12 +28,14 @@ export default function GamesList({ session, onOpen }) {
   async function createGame() {
     if (!name.trim()) return
     setBusy(true); setError('')
+    try {
     const { data, error } = await supabase.from('games')
       .insert({ name: name.trim(), gm_id: session.user.id, status: 'draft', template: DEFAULT_TEMPLATE })
       .select(GAME_COLUMNS).single()
     setBusy(false)
     if (error) { setError(error.message); return }
     onOpen(data.id)
+    } catch (error) { setError(error.message) } finally { setBusy(false) }
   }
 
   return (
