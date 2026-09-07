@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ErrorBoundary } from '@sentry/react'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { parseWkbPoint } from '../lib/geo'
-import MapPanel from './MapPanel'
 import CharactersPanel from './CharactersPanel'
 import TemplatePanel from './TemplatePanel'
 import EventsPanel from './EventsPanel'
 import PlayersPanel from './PlayersPanel'
 import HuntPanel from './HuntPanel'
+
+const MapPanel = lazy(() => import('./MapPanel'))
 
 export default function GameView({ gameId, session, onBack }) {
   const uid = session.user.id
@@ -17,8 +19,19 @@ export default function GameView({ gameId, session, onBack }) {
   const [members, setMembers] = useState([])
   const [factions, setFactions] = useState([])
   const [events, setEvents] = useState([])
+  const [pendingEvents, setPendingEvents] = useState([])
+  const [olderEvents, setOlderEvents] = useState([])
+  const [hasMore, setHasMore] = useState(true)
+  const [historyBusy, setHistoryBusy] = useState(false)
+  const refreshRef = useRef(() => {})
+  const refreshTimer = useRef(null)
+  const scheduleRefresh = useCallback(() => {
+    clearTimeout(refreshTimer.current)
+    refreshTimer.current = setTimeout(() => refreshRef.current(), 250)
+  }, [])
   const [hunt, setHunt] = useState(null)
   const [tab, setTab] = useState('hunt')
+  const [mapOpened, setMapOpened] = useState(false)
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -51,22 +64,33 @@ export default function GameView({ gameId, session, onBack }) {
     return null
   }, [gameId, reportAction])
 
-  const refetchHunt = useCallback(async () => {
-    const { data, error } = await supabase.rpc('get_hunt_admin', { g: gameId })
-    if (error) return reportAction(error)
-    setHunt(data)
-    return null
-  }, [gameId, reportAction])
+  const refetchHunt = useCallback(() => refreshRef.current(), [])
 
   useEffect(() => {
     let alive = true
-
+    let version = 0
+    async function loadPending() {
+      const rows = []
+      let before
+      while (alive) {
+        let query = supabase.from('game_events').select('*').eq('game_id', gameId).eq('status', 'pending').order('seq', { ascending: false }).limit(500)
+        if (before != null) query = query.lt('seq', before)
+        const result = await query
+        if (result.error) return result
+        rows.push(...(result.data ?? []))
+        if ((result.data?.length ?? 0) < 500) break
+        before = result.data.at(-1).seq
+      }
+      return { data: rows, error: null }
+    }
     async function load() {
+      const request = ++version
+      try {
       const [g, mem] = await Promise.all([
         supabase.from('games').select(GAME_COLUMNS).eq('id', gameId).single(),
         supabase.from('game_players').select('*, profile:profiles(username)').eq('game_id', gameId),
       ])
-      if (!alive) return
+      if (!alive || request !== version) return
       const accessFailure = [g, mem].find((result) => result.error)
       if (accessFailure) { setLoadError(accessFailure.error.message); return }
 
@@ -76,7 +100,7 @@ export default function GameView({ gameId, session, onBack }) {
         || (mem.data ?? []).some((member) => member.profile_id === uid && member.role === 'gm')
       if (!canManage) return
 
-      const [z, pos, chars, fac, ev, huntState, joinCode] = await Promise.all([
+      const [z, pos, chars, fac, ev, huntState, joinCode, pending] = await Promise.all([
         supabase.from('zones_view').select('*').eq('game_id', gameId),
         supabase.from('player_positions_view').select('*').eq('game_id', gameId),
         supabase.from('characters').select('*').eq('game_id', gameId),
@@ -84,9 +108,10 @@ export default function GameView({ gameId, session, onBack }) {
         supabase.from('game_events').select('*').eq('game_id', gameId).order('seq', { ascending: false }).limit(200),
         supabase.rpc('get_hunt_admin', { g: gameId }),
         supabase.rpc('gm_get_join_code', { g: gameId }),
+        loadPending(),
       ])
-      if (!alive) return
-      const failed = [z, pos, chars, fac, ev, huntState].find((result) => result.error)
+      if (!alive || request !== version) return
+      const failed = [z, pos, chars, fac, ev, huntState, pending, joinCode].find((result) => result.error)
       if (failed) { setLoadError(failed.error.message); return }
       if (typeof joinCode.data === 'string') {
         setGame((current) => ({ ...(current ?? g.data), join_code: joinCode.data }))
@@ -98,12 +123,25 @@ export default function GameView({ gameId, session, onBack }) {
       setCharacters(chars.data ?? [])
       setFactions(fac.data ?? [])
       setEvents(ev.data ?? [])
+      setPendingEvents(pending.data ?? [])
+      setLoadError('')
       setHunt(huntState.data)
+      } catch (error) { if (alive && request === version) setLoadError(error.message) }
     }
-
+    refreshRef.current = load
+    const focus = () => { if (document.visibilityState !== 'hidden') load() }
+    window.addEventListener('online', focus)
+    window.addEventListener('focus', focus)
+    document.addEventListener('visibilitychange', focus)
+    const timer = setInterval(focus, 60000)
     load()
 
-    return () => { alive = false }
+    return () => {
+      alive = false; ++version; clearInterval(timer); clearTimeout(refreshTimer.current)
+      refreshRef.current = () => {}
+      window.removeEventListener('online', focus); window.removeEventListener('focus', focus)
+      document.removeEventListener('visibilitychange', focus)
+    }
   }, [gameId, uid, refetchZones, refetchMembers])
 
   useEffect(() => {
@@ -141,6 +179,10 @@ export default function GameView({ gameId, session, onBack }) {
         }))
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${gameId}` }, (payload) => {
+        setPendingEvents((prev) => {
+          const rest = prev.filter((e) => e.id !== (payload.new?.id ?? payload.old?.id))
+          return payload.new?.status === 'pending' ? [payload.new, ...rest] : rest
+        })
         if (payload.eventType === 'INSERT') {
           setEvents((prev) => (prev.some((e) => e.id === payload.new.id) ? prev : [payload.new, ...prev].slice(0, 300)))
         } else if (payload.eventType === 'UPDATE') {
@@ -151,7 +193,7 @@ export default function GameView({ gameId, session, onBack }) {
         if (payload.new?.type?.startsWith('hunt_')
             || payload.new?.type?.startsWith('elimination_')
             || payload.new?.type === 'eliminated'
-            || payload.new?.type === 'zone_boundary_exit') refetchHunt()
+            || payload.new?.type === 'zone_boundary_exit') scheduleRefresh()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
         if (payload.eventType === 'DELETE') {
@@ -166,10 +208,10 @@ export default function GameView({ gameId, session, onBack }) {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'zones', filter: `game_id=eq.${gameId}` }, refetchZones)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players', filter: `game_id=eq.${gameId}` }, refetchMembers)
-      .subscribe()
+      .subscribe((status) => { if (status === 'SUBSCRIBED') scheduleRefresh() })
 
     return () => { supabase.removeChannel(channel) }
-  }, [gameId, isGm, refetchZones, refetchMembers, refetchHunt])
+  }, [gameId, isGm, refetchZones, refetchMembers, refetchHunt, scheduleRefresh])
 
   const usernameOf = useCallback((profileId) => {
     const m = members.find((x) => x.profile_id === profileId)
@@ -178,7 +220,18 @@ export default function GameView({ gameId, session, onBack }) {
 
   const zoneNameOf = useCallback((zoneId) => zones.find((z) => z.id === zoneId)?.name ?? 'a zone', [zones])
 
-  const pendingEvents = useMemo(() => events.filter((e) => e.status === 'pending'), [events])
+  const history = useMemo(() => [...new Map([...olderEvents, ...events].map((e) => [e.id, e])).values()].sort((a, b) => b.seq - a.seq), [events, olderEvents])
+  async function loadOlder() {
+    if (historyBusy || !history.length) return
+    setHistoryBusy(true)
+    try {
+      const { data, error } = await supabase.from('game_events').select('*').eq('game_id', gameId)
+        .lt('seq', history.at(-1).seq).order('seq', { ascending: false }).limit(200)
+      if (error) throw error
+      setOlderEvents((prev) => [...prev, ...(data ?? [])])
+      setHasMore(data?.length === 200)
+    } catch (error) { reportAction(error) } finally { setHistoryBusy(false) }
+  }
 
   async function updateGame(patch) {
     const denied = requireGm()
@@ -196,6 +249,8 @@ export default function GameView({ gameId, session, onBack }) {
     const { data, error } = await supabase.from('game_events').update(patch).eq('id', ev.id).select().single()
     if (error) return reportAction(error)
     setEvents((prev) => prev.map((e) => (e.id === ev.id ? data : e)))
+    setOlderEvents((prev) => prev.map((e) => e.id === ev.id ? data : e))
+    setPendingEvents((prev) => prev.filter((e) => e.id !== ev.id))
     return reportAction(null)
   }
 
@@ -206,6 +261,8 @@ export default function GameView({ gameId, session, onBack }) {
     const { data, error } = await supabase.from('game_events').update(patch).eq('id', ev.id).select().single()
     if (error) return reportAction(error)
     setEvents((prev) => prev.map((e) => (e.id === ev.id ? data : e)))
+    setOlderEvents((prev) => prev.map((e) => e.id === ev.id ? data : e))
+    setPendingEvents((prev) => prev.filter((e) => e.id !== ev.id))
     return reportAction(null)
   }
 
@@ -390,7 +447,7 @@ export default function GameView({ gameId, session, onBack }) {
     setCopied(true); setTimeout(() => setCopied(false), 1400)
   }
 
-  if (loadError) return <div className="center-screen"><p className="error">{loadError}</p><button onClick={onBack}>Back</button></div>
+  if (loadError) return <div className="center-screen"><p className="error">{loadError}</p><button onClick={() => refreshRef.current()}>Retry</button><button onClick={onBack}>Back</button></div>
   if (!game) return <div className="center-screen"><p className="hint">Loading game…</p></div>
 
   if (!isGm) return (
@@ -426,11 +483,14 @@ export default function GameView({ gameId, session, onBack }) {
             <option value="all">Everyone</option>
           </select>
         </div>
-        <span className="gm-chip">GM</span>
+        <button className="ghost" onClick={refetchHunt}>Refresh</button><span className="gm-chip">GM</span>
       </div>
       <div className="tabs">
         {['hunt', 'map', 'characters', 'template', 'events', 'players'].map((t) => (
-          <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
+          <button key={t} className={tab === t ? 'active' : ''} onClick={() => {
+            if (t === 'map') setMapOpened(true)
+            setTab(t)
+          }}>
             {t.toUpperCase()}
             {t === 'events' && pendingEvents.length > 0 && <span className="badge">{pendingEvents.length}</span>}
           </button>
@@ -459,11 +519,23 @@ export default function GameView({ gameId, session, onBack }) {
           />
         )}
         <div style={{ display: tab === 'map' ? 'block' : 'none', height: '100%' }}>
-          <MapPanel
-            zones={zones} positions={positions} members={members} characters={characters} factions={factions}
-            pendingEvents={pendingEvents} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
-            saveZone={saveZone} deleteZone={deleteZone} confirmEvent={confirmEvent} dismissEvent={dismissEvent}
-          />
+          {mapOpened && (
+            <ErrorBoundary fallback={
+              <div className="panel-pad" role="alert">
+                <p>The map could not load. Check your connection and reload to try again.</p>
+                <button onClick={() => window.location.reload()}>Reload dashboard</button>
+              </div>
+            }>
+              <Suspense fallback={<p className="hint" role="status">Loading map…</p>}>
+                <MapPanel
+                  active={tab === 'map'}
+                  zones={zones} positions={positions} members={members} characters={characters} factions={factions}
+                  pendingEvents={pendingEvents} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
+                  saveZone={saveZone} deleteZone={deleteZone} confirmEvent={confirmEvent} dismissEvent={dismissEvent}
+                />
+              </Suspense>
+            </ErrorBoundary>
+          )}
         </div>
         {tab === 'characters' && (
           <CharactersPanel game={game} characters={characters} members={members} factions={factions}
@@ -472,7 +544,7 @@ export default function GameView({ gameId, session, onBack }) {
         )}
         {tab === 'template' && <TemplatePanel game={game} hasCharacters={characters.length > 0} updateGame={updateGame} />}
         {tab === 'events' && (
-          <EventsPanel events={events} members={members} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
+          <EventsPanel events={history} pendingEvents={pendingEvents} loadOlder={loadOlder} hasMore={hasMore} historyBusy={historyBusy} members={members} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
             confirmEvent={confirmEvent} dismissEvent={dismissEvent} broadcast={broadcast} onOpenHunt={() => setTab('hunt')} />
         )}
         {tab === 'players' && (

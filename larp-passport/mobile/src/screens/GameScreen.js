@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { C, F } from '../lib/theme'
-import { flush, isSharing, markSeenUpTo, notifyEvents, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
+import { updateLocationConsent } from '../lib/locationConsent'
+import { flush, isSharing, syncNotifications, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
 
 const BANDS = ['immediate', 'close', 'nearby', 'distant', 'far']
 
@@ -70,12 +71,18 @@ export default function GameScreen({ gameId, session, onBack }) {
   const [huntError, setHuntError] = useState('')
   const [queue, setQueue] = useState({ queued: 0, lastSent: null, profile: 'near' })
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const refreshRef = useRef(() => {})
+  const huntRequest = useRef(0)
   const [now, setNow] = useState(Date.now())
 
   const stats = game?.template?.stats ?? []
 
   const loadHunt = useCallback(async () => {
+    const request = ++huntRequest.current
+    try {
     const { data, error: huntLoadError } = await supabase.rpc('get_hunt_status', { g: gameId })
+    if (request !== huntRequest.current) return null
     if (huntLoadError) {
       setHuntError(huntLoadError.message)
       return null
@@ -83,6 +90,7 @@ export default function GameScreen({ gameId, session, onBack }) {
     setHunt(data)
     setHuntError('')
     return data
+    } catch (error) { if (request === huntRequest.current) setHuntError(error.message); return null }
   }, [gameId])
 
   const tabRef = useRef(tab)
@@ -99,35 +107,43 @@ export default function GameScreen({ gameId, session, onBack }) {
 
   useEffect(() => {
     let alive = true
+    let version = 0
     async function load() {
+      const request = ++version
+      try {
       const [gameResult, characterResult, eventResult] = await Promise.all([
         supabase.from('games').select(GAME_COLUMNS).eq('id', gameId).single(),
         supabase.from('characters').select('*').eq('game_id', gameId).eq('user_id', uid).eq('is_npc', false).maybeSingle(),
         supabase.from('game_events').select('*').eq('game_id', gameId).order('seq', { ascending: false }).limit(50),
       ])
-      if (!alive) return
+      if (!alive || request !== version) return
+      const failed = [gameResult, characterResult, eventResult].find((r) => r.error)
+      if (failed) throw failed.error
+      setLoadError('')
       setGame(gameResult.data ?? null)
       setCharacter(characterResult.data ?? null)
       setEvents(eventResult.data ?? [])
-      let maxSeq = 0
-      for (const event of eventResult.data ?? []) {
-        if (event.player_visible && event.profile_id === uid && event.seq > maxSeq) maxSeq = event.seq
-      }
-      if (maxSeq > 0) markSeenUpTo(maxSeq)
+      await syncNotifications(gameId).catch(() => {})
+      } catch (error) { if (alive && request === version) setLoadError(error.message) }
     }
-
+    const refresh = () => { load(); loadHunt() }
+    refreshRef.current = refresh
     load()
     loadHunt()
-    isSharing().then(setSharing)
-    queueStatus().then(setQueue)
+    isSharing(gameId).then(setSharing)
+    queueStatus(gameId).then(setQueue)
     Notifications.requestPermissionsAsync().catch(() => {})
 
     const channel = supabase
       .channel(`m-game-${gameId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
+        if (payload.eventType === 'DELETE') { load(); return }
+        ++version
         if (payload.new?.user_id === uid && !payload.new?.is_npc) setCharacter(payload.new)
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${gameId}` }, (payload) => {
+        if (payload.eventType === 'DELETE') { load(); return }
+        ++version
         const row = payload.new
         if (!row?.id) return
         setEvents((previous) => {
@@ -137,7 +153,7 @@ export default function GameScreen({ gameId, session, onBack }) {
           next[index] = row
           return next
         })
-        if (row.player_visible && row.profile_id === uid && row.type !== 'player_message') notifyEvents([row])
+        if (row.player_visible && row.profile_id === uid && row.type !== 'player_message') syncNotifications(gameId).catch(() => {})
         if (row.profile_id === uid && (
           row.type?.startsWith('hunt_')
           || row.type?.startsWith('elimination_')
@@ -147,6 +163,7 @@ export default function GameScreen({ gameId, session, onBack }) {
       })
       .subscribe((status) => {
         realtimeUp.current = status === 'SUBSCRIBED'
+        if (status === 'SUBSCRIBED') refresh()
       })
 
     // Realtime is the normal update path; polling is the recovery mechanism.
@@ -155,9 +172,9 @@ export default function GameScreen({ gameId, session, onBack }) {
     // reload only runs when the hunt tab is visible or realtime is down.
     const tick = () => {
       if (AppState.currentState !== 'active') return
-      queueStatus().then(setQueue)
-      isSharing().then(setSharing)
-      if (tabRef.current === 'hunt' || !realtimeUp.current) loadHunt()
+      queueStatus(gameId).then(setQueue)
+      isSharing(gameId).then(setSharing)
+      refresh()
     }
     const interval = setInterval(tick, 45000)
     const appStateSub = AppState.addEventListener('change', (state) => {
@@ -165,7 +182,8 @@ export default function GameScreen({ gameId, session, onBack }) {
     })
 
     return () => {
-      alive = false
+      alive = false; ++version; ++huntRequest.current
+      refreshRef.current = () => {}
       clearInterval(interval)
       appStateSub.remove()
       supabase.removeChannel(channel)
@@ -174,26 +192,20 @@ export default function GameScreen({ gameId, session, onBack }) {
 
   useEffect(() => {
     if (!hunt?.participant || hunt.alive || !sharing) return
-    stopSharing().then(() => setSharing(false)).catch(() => {})
-  }, [hunt?.alive, hunt?.participant, sharing])
+    stopSharing(gameId).then(() => setSharing(false)).catch(() => {})
+  }, [gameId, hunt?.alive, hunt?.participant, sharing])
 
   const toggleSharing = useCallback(async (next) => {
     setError('')
     try {
-      if (next) {
-        await supabase.rpc('set_location_consent', { g: gameId, grant_consent: true })
-        try {
-          await startSharing(gameId)
-        } catch (permissionError) {
-          await supabase.rpc('set_location_consent', { g: gameId, grant_consent: false })
-          throw permissionError
-        }
-        setSharing(true)
-      } else {
-        await stopSharing()
-        await supabase.rpc('set_location_consent', { g: gameId, grant_consent: false })
-        setSharing(false)
-      }
+      await updateLocationConsent({
+        gameId, enabled: next,
+        rpc: (...args) => supabase.rpc(...args),
+        start: startSharing,
+        stop: () => stopSharing(gameId),
+        onStopped: () => setSharing(false),
+      })
+      setSharing(next)
     } catch (toggleError) {
       setError(toggleError.message)
     }
@@ -203,7 +215,7 @@ export default function GameScreen({ gameId, session, onBack }) {
     setError('')
     const result = await flush(gameId)
     if (result?.error) setError(`Send failed: ${result.error}`)
-    queueStatus().then(setQueue)
+    queueStatus(gameId).then(setQueue)
   }, [gameId])
 
   const requestElimination = useCallback(async () => {
@@ -243,6 +255,13 @@ export default function GameScreen({ gameId, session, onBack }) {
   const boundaryWarning = latestBoundaryEvent?.type === 'zone_boundary_warning'
     && now - new Date(latestBoundaryEvent.created_at).getTime() < 120000
 
+  if (loadError) return (
+    <SafeAreaView style={styles.loading}>
+      <Text style={styles.loadingText}>{loadError}</Text>
+      <TouchableOpacity onPress={() => refreshRef.current()}><Text style={styles.loadingText}>Retry</Text></TouchableOpacity>
+      <TouchableOpacity onPress={onBack}><Text style={styles.loadingText}>Back to games</Text></TouchableOpacity>
+    </SafeAreaView>
+  )
   if (!game || character === undefined) {
     return (
       <SafeAreaView style={styles.loading}>
@@ -292,7 +311,7 @@ export default function GameScreen({ gameId, session, onBack }) {
           boundaryWarning={boundaryWarning}
           requestElimination={confirmEliminationRequest}
           respondToElimination={respondToElimination}
-          refresh={loadHunt}
+          refresh={() => refreshRef.current()}
         />
       )}
 
@@ -668,6 +687,7 @@ const SharingTab = memo(function SharingTab({ game, phase, sharing, queue, error
         </Text>
         {phase === 'finished' && <Text style={styles.warningCopy}>The game has finished; location pings are no longer accepted.</Text>}
         {!!error && <Text style={styles.errorText}>{error}</Text>}
+        {!!error && !sharing && <GhostButton label="RETRY STOP SHARING" onPress={() => toggleSharing(false)} />}
       </View>
 
       <View style={styles.telemetryCard}>
@@ -679,7 +699,7 @@ const SharingTab = memo(function SharingTab({ game, phase, sharing, queue, error
         </View>
         <GhostButton label="SEND NOW" onPress={sendNow} />
       </View>
-      <Text style={styles.sharingFootnote}>SHARING STOPS AND LOCATION HISTORY IS DELETED ON ELIMINATION.</Text>
+      <Text style={styles.sharingFootnote}>SHARING STOPS AND YOUR MAP POSITION IS REMOVED ON ELIMINATION. HISTORY FOLLOWS THE RETENTION PERIOD ABOVE.</Text>
     </ScrollView>
   )
 })

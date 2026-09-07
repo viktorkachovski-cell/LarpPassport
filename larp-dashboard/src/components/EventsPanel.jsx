@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react'
 import { timeAgo } from '../lib/geo'
 
-export default function EventsPanel({ events, members, usernameOf, zoneNameOf, confirmEvent, dismissEvent, broadcast, onOpenHunt }) {
+export default function EventsPanel({ events, pendingEvents = [], loadOlder, hasMore, historyBusy, members, usernameOf, zoneNameOf, confirmEvent, dismissEvent, broadcast, onOpenHunt }) {
   const [filter, setFilter] = useState('all')
   const [target, setTarget] = useState('all')
   const [message, setMessage] = useState('')
   const [sendState, setSendState] = useState('')
 
   const shown = useMemo(
-    () => filter === 'pending' ? events.filter((event) => event.status === 'pending') : events,
-    [events, filter],
+    () => filter === 'pending' ? pendingEvents : events,
+    [events, pendingEvents, filter],
   )
 
   function describe(event) {
@@ -88,7 +88,7 @@ export default function EventsPanel({ events, members, usernameOf, zoneNameOf, c
                 <time>{timeAgo(event.created_at)} // {new Date(event.created_at).toLocaleTimeString()}</time>
               </div>
               <h3>{playerMessage ? <><b>{actor}</b>: "{event.payload?.message ?? ''}"</> : <><b>{actor}</b> {describe(event)}</>}</h3>
-              {breach && <p>Any pending claim was rejected automatically. Review GPS drift before making an elimination ruling.</p>}
+              {breach && <p>Claims made before the recorded exit may have been rejected. Review the sample time and GPS drift before ruling.</p>}
               {event.payload?.message && event.type === 'zone_enter' && <p>Player message: "{event.payload.message}"</p>}
               {event.status === 'pending' && (
                 <div className="event-actions">
@@ -101,6 +101,7 @@ export default function EventsPanel({ events, members, usernameOf, zoneNameOf, c
           )
         })}
       </div>
+      {filter === 'all' && hasMore && <button disabled={historyBusy} onClick={loadOlder}>{historyBusy ? 'Loading...' : 'Load older events'}</button>}
       {shown.length === 0 && <p className="hint empty-state">No events match this filter.</p>}
     </div>
   )

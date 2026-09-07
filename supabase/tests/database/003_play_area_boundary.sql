@@ -75,6 +75,10 @@ values (
 );
 
 select public.start_hunt('91000000-0000-0000-0000-000000000001');
+-- Simulate a round already running when these historical fixes were sampled.
+reset role;
+update private.hunt_rounds set started_at = now() - interval '1 minute' where game_id = '91000000-0000-0000-0000-000000000001';
+set local role authenticated;
 
 select set_config('request.jwt.claim.sub', '82000000-0000-0000-0000-000000000002', true);
 select public.set_location_consent('91000000-0000-0000-0000-000000000001', true);
@@ -118,6 +122,7 @@ select extensions.is(
 
 select public.request_elimination('91000000-0000-0000-0000-000000000001');
 reset role;
+update private.hunt_claims set requested_at = now() - interval '15 seconds' where game_id = '91000000-0000-0000-0000-000000000001';
 select extensions.is(
   (select count(*)::integer from private.hunt_claims
    where game_id = '91000000-0000-0000-0000-000000000001'
@@ -164,7 +169,7 @@ select public.ingest_pings(
   '91000000-0000-0000-0000-000000000001',
   jsonb_build_array(jsonb_build_object(
     'lat', 42.6977, 'lng', 23.3236, 'accuracy', 5,
-    'recorded_at', now()::text
+    'recorded_at', (now() - interval '5 seconds')::text
   )),
   0
 );
@@ -184,11 +189,11 @@ select public.ingest_pings(
   jsonb_build_array(
     jsonb_build_object(
       'lat', 42.6977, 'lng', 23.3219, 'accuracy', 5,
-      'recorded_at', (now() + interval '1 second')::text
+      'recorded_at', (now() - interval '4 seconds')::text
     ),
     jsonb_build_object(
       'lat', 42.6977, 'lng', 23.3229, 'accuracy', 5,
-      'recorded_at', (now() + interval '2 seconds')::text
+      'recorded_at', (now() - interval '3 seconds')::text
     )
   ),
   0
@@ -211,7 +216,7 @@ select public.ingest_pings(
   '91000000-0000-0000-0000-000000000001',
   jsonb_build_array(jsonb_build_object(
     'lat', 42.6977, 'lng', 23.32322, 'accuracy', 5,
-    'recorded_at', (now() + interval '3 seconds')::text
+    'recorded_at', (now() - interval '2 seconds')::text
   )),
   0
 );

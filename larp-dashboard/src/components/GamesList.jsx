@@ -13,11 +13,16 @@ export default function GamesList({ session, onOpen }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => { load() }, [])
   async function load() {
-    const { data, error } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
-    if (!error) setGames(data ?? [])
+    setLoading(true); setError('')
+    try {
+      const { data, error } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
+      if (error) throw error
+      setGames(data ?? [])
+    } catch (error) { setError(error.message) } finally { setLoading(false) }
   }
 
   async function createGame() {
@@ -50,7 +55,8 @@ export default function GamesList({ session, onOpen }) {
             <span className="game-card-action">OPEN</span>
           </button>
         ))}
-        {games.length === 0 && <p className="hint" style={{ textAlign: 'center' }}>No games yet. Create your first one below.</p>}
+        {!loading && !error && games.length === 0 && <p className="hint" style={{ textAlign: 'center' }}>No games yet. Create your first one below.</p>}
+        <button onClick={load} disabled={loading}>{loading ? 'Loading games...' : 'Refresh games'}</button>
         <div className="row mt">
           <input placeholder="New game name" value={name} onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && createGame()} style={{ flex: 1 }} />

@@ -6,13 +6,51 @@ import * as SQLite from 'expo-sqlite'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
 import { createPingStore } from './pingStore'
+import { createTrackingSession } from './trackingSession'
+import { createEventDelivery } from './eventDelivery'
 
 export const LOCATION_TASK = 'larp-passport-location'
-const LEGACY_QUEUE_KEY = 'larp_ping_queue_v1' // pre-SQLite queue, imported once
-const GAME_KEY = 'larp_active_game_v1'
-const LAST_SENT_KEY = 'larp_last_sent_v1'
-const SEQ_KEY = 'larp_last_event_seq_v1'
-const PROFILE_KEY = 'larp_gps_profile_v1'
+const OWNER_KEY = 'larp_tracking_owner_v2'
+const scopeOf = (owner) => `${owner.userId}:${owner.gameId}:${owner.id}`
+const session = async () => {
+  const { data, error } = await supabase.auth.getSession()
+  if (error) throw error
+  return data.session
+}
+const tracking = createTrackingSession({
+  storage: AsyncStorage, key: OWNER_KEY,
+  currentUser: async () => (await session())?.user.id,
+  start: startUpdates,
+  stop: async () => {
+    if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK)) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK)
+    }
+  },
+  purge: async (owner) => (await getStore()).purgeGame(scopeOf(owner)),
+})
+export const reconcileTracking = () => tracking.reconcile()
+const delivery = createEventDelivery({
+  storage: AsyncStorage,
+  isCurrent: async (scope) => scope.split(':')[0] === (await session())?.user.id,
+  fetchPage: async (scope, cursor) => {
+    const auth = await session()
+    if (auth?.user.id !== scope.split(':')[0]) return []
+    const { data, error } = await supabase.rpc('get_player_event_delivery', {
+      g: scope.split(':')[1], after_seq: cursor,
+    }).setHeader('Authorization', `Bearer ${auth.access_token}`)
+    if (error) throw error
+    return data ?? []
+  },
+  notify: (event) => Notifications.scheduleNotificationAsync({
+    identifier: `larp-${event.id}-${event.delivery_seq}`,
+    content: { title: notificationTitle(event.type), body: event.payload?.message ?? 'Check your passport.' },
+    trigger: null,
+  }),
+})
+export async function syncNotifications(gameId) {
+  const auth = await session()
+  if (auth && gameId) await delivery.sync(`${auth.user.id}:${gameId}`)
+}
 
 // Server-hinted GPS profiles. 'near' = close to an active zone: precise + frequent.
 // 'far' = nothing nearby: coarse positioning, GPS chip mostly asleep, radio wakes ~1/min.
@@ -34,42 +72,26 @@ let storePromise = null
 function getStore() {
   if (!storePromise) {
     storePromise = (async () => {
-      const db = await SQLite.openDatabaseAsync('larp_pings.db')
+      const db = await SQLite.openDatabaseAsync('larp_owned_pings_v2.db')
       await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 3000;')
       const store = createPingStore({ db })
       await store.init()
-      await migrateLegacyQueue(store)
+      // Unowned legacy points cannot safely be attributed to the signed-in account.
+      await AsyncStorage.removeItem('larp_ping_queue_v1')
       return store
-    })()
+    })().catch((error) => { storePromise = null; throw error })
   }
   return storePromise
-}
-
-// One-time import of the old AsyncStorage JSON queue so an app update does
-// not drop points that were recorded but not yet sent.
-async function migrateLegacyQueue(store) {
-  try {
-    const raw = await AsyncStorage.getItem(LEGACY_QUEUE_KEY)
-    if (raw == null) return
-    const gameId = await AsyncStorage.getItem(GAME_KEY)
-    const items = JSON.parse(raw)
-    if (gameId && Array.isArray(items) && items.length > 0) {
-      await store.enqueue(gameId, items)
-    }
-    await AsyncStorage.removeItem(LEGACY_QUEUE_KEY)
-  } catch {
-    try { await AsyncStorage.removeItem(LEGACY_QUEUE_KEY) } catch {}
-  }
 }
 
 TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
   if (error || !data) return
   try {
-    const gameId = await AsyncStorage.getItem(GAME_KEY)
-    if (!gameId) return
+    const owner = await tracking.read()
+    if (!owner || !await tracking.current(owner)) { await tracking.reconcile(); return }
     let battery = null
     try { battery = Math.round((await Battery.getBatteryLevelAsync()) * 100) } catch {}
-    const pings = (data.locations ?? []).map((l) => ({
+    const pings = (data.locations ?? []).filter((l) => l.timestamp >= owner.startedAt).map((l) => ({
       lat: l.coords.latitude,
       lng: l.coords.longitude,
       accuracy: l.coords.accuracy,
@@ -78,8 +100,10 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
     }))
     if (pings.length === 0) return
     const store = await getStore()
-    await store.enqueue(gameId, pings)
-    await flush(gameId)
+    if (!await tracking.current(owner)) return
+    await store.enqueue(scopeOf(owner), pings)
+    if (!await tracking.current(owner)) { await store.purgeGame(scopeOf(owner)); return }
+    await flush(owner.gameId)
   } catch {
     // never throw from the task — pings stay queued for the next tick
   }
@@ -93,15 +117,19 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
 // keeps claiming batches until nothing is pending.
 export async function flush(gameId) {
   if (!gameId) return { accepted: 0, queued: 0 }
+  const owner = await tracking.read()
+  if (!owner || owner.gameId !== gameId || !await tracking.current(owner)) return { accepted: 0, queued: 0 }
+  const scope = scopeOf(owner)
   const store = await getStore()
   let profileMode = null
   const result = await store.drain({
-    gameId,
+    gameId: scope,
     send: async (pings) => {
-      const lastSeen = Number((await AsyncStorage.getItem(SEQ_KEY)) ?? 0)
+      const auth = await session()
+      if (!await tracking.current(owner) || auth?.user.id !== owner.userId) throw new Error('Tracking session ended.')
       const { data, error } = await supabase.rpc('ingest_pings', {
-        g: gameId, pings, last_seen_seq: lastSeen,
-      })
+        g: gameId, pings, last_seen_seq: null,
+      }).setHeader('Authorization', `Bearer ${auth.access_token}`)
       if (error) {
         const wrapped = new Error(error.message)
         wrapped.code = error.code
@@ -110,19 +138,20 @@ export async function flush(gameId) {
       return data ?? { accepted: pings.length }
     },
     onBatch: async (data) => {
-      await AsyncStorage.setItem(LAST_SENT_KEY, new Date().toISOString())
-      if (Array.isArray(data?.events) && data.events.length > 0) await notifyEvents(data.events)
+      if (!await tracking.current(owner)) return
+      await AsyncStorage.setItem(`larp_last_sent_v2:${scope}`, new Date().toISOString())
+      await syncNotifications(gameId).catch(() => {})
       if (data?.profile?.mode) profileMode = data.profile.mode
     },
   })
   if (result.reason) {
     // Server said no (game finished / consent revoked / removed from game):
     // nothing for this game stays on the device.
-    await store.purgeGame(gameId)
-    await handleRejected(result.reason)
+    await store.purgeGame(scope)
+    await handleRejected(result.reason, owner)
     return { accepted: result.accepted, queued: 0, reason: result.reason }
   }
-  if (profileMode) await applyProfile(profileMode)
+  if (profileMode) await applyProfile(profileMode, owner)
   return result
 }
 
@@ -134,9 +163,9 @@ const REJECT_MESSAGES = {
 
 // Server said no (game finished / consent revoked / removed from game):
 // stop burning GPS and tell the player once, with the actual reason.
-async function handleRejected(reason) {
+async function handleRejected(reason, owner) {
   try {
-    await stopSharing()
+    if (!await tracking.stop(owner)) return
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Location sharing stopped',
@@ -144,32 +173,6 @@ async function handleRejected(reason) {
       },
       trigger: null,
     })
-  } catch {}
-}
-
-// Single notification gate for BOTH delivery paths (realtime + ping piggyback):
-// strictly increasing seq stored on device prevents duplicates.
-export async function notifyEvents(events) {
-  try {
-    let last = Number((await AsyncStorage.getItem(SEQ_KEY)) ?? 0)
-    const sorted = [...events].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
-    for (const e of sorted) {
-      if (!e || typeof e.seq !== 'number' || e.seq <= last) continue
-      last = e.seq
-      const title = notificationTitle(e.type)
-      await Notifications.scheduleNotificationAsync({
-        content: { title, body: e.payload?.message ?? 'Check your passport.' },
-        trigger: null,
-      })
-    }
-    await AsyncStorage.setItem(SEQ_KEY, String(last))
-  } catch {}
-}
-
-export async function markSeenUpTo(seq) {
-  try {
-    const last = Number((await AsyncStorage.getItem(SEQ_KEY)) ?? 0)
-    if (typeof seq === 'number' && seq > last) await AsyncStorage.setItem(SEQ_KEY, String(seq))
   } catch {}
 }
 
@@ -191,16 +194,12 @@ function notificationTitle(type) {
   return 'New passport event'
 }
 
-async function applyProfile(mode) {
-  const cur = (await AsyncStorage.getItem(PROFILE_KEY)) ?? 'near'
-  if (mode === cur || !GPS_PROFILES[mode]) return
-  await AsyncStorage.setItem(PROFILE_KEY, mode)
-  const started = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)
-  if (!started) return
-  try {
-    await Location.stopLocationUpdatesAsync(LOCATION_TASK)
-    await startUpdates(mode)
-  } catch {}
+async function applyProfile(mode, owner) {
+  if (!GPS_PROFILES[mode] || !await tracking.current(owner)) return
+  const key = `larp_profile_v2:${scopeOf(owner)}`
+  if ((await AsyncStorage.getItem(key) ?? 'near') === mode) return
+  await tracking.changeProfile(owner, mode)
+  if (await tracking.current(owner)) await AsyncStorage.setItem(key, mode)
 }
 
 async function startUpdates(mode) {
@@ -217,20 +216,16 @@ async function startUpdates(mode) {
   })
 }
 
-export async function queueStatus() {
-  const store = await getStore()
-  const gameId = await AsyncStorage.getItem(GAME_KEY)
-  const s = await store.status(gameId ?? undefined)
-  const last = await AsyncStorage.getItem(LAST_SENT_KEY)
-  const profile = (await AsyncStorage.getItem(PROFILE_KEY)) ?? 'near'
-  return {
-    queued: s.queued,
-    lastSent: last,
-    profile,
-    // new fields (sync-health surface, additive — nothing existing reads them)
-    oldestPendingAt: s.oldestPendingAt,
-    failed: s.failed,
-    lastError: s.lastError,
+export async function queueStatus(gameId) {
+  const auth = await session()
+  if (!auth || !gameId) return { queued: 0, lastSent: null, profile: 'near' }
+  const owner = await tracking.read()
+  if (!owner || owner.gameId !== gameId || owner.userId !== auth.user.id) return { queued: 0, lastSent: null, profile: 'near' }
+  const scope = scopeOf(owner)
+  const status = await (await getStore()).status(scope)
+  return { ...status,
+    lastSent: await AsyncStorage.getItem(`larp_last_sent_v2:${scope}`),
+    profile: await AsyncStorage.getItem(`larp_profile_v2:${scope}`) ?? 'near',
   }
 }
 
@@ -238,33 +233,19 @@ export async function startSharing(gameId) {
   const fg = await Location.requestForegroundPermissionsAsync()
   if (fg.status !== 'granted') throw new Error('Location permission was denied.')
   const bg = await Location.requestBackgroundPermissionsAsync()
-  if (bg.status !== 'granted') {
-    throw new Error('Background location was denied. Choose "Allow all the time" in system settings so tracking works with the screen off.')
-  }
-  await AsyncStorage.setItem(GAME_KEY, gameId)
-  await AsyncStorage.setItem(PROFILE_KEY, 'near')
-  const already = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)
-  if (already) return
-  await startUpdates('near')
+  if (bg.status !== 'granted') throw new Error('Choose "Allow all the time" in system settings for background location.')
+  const owner = await tracking.start(gameId)
+  await AsyncStorage.setItem(`larp_profile_v2:${scopeOf(owner)}`, 'near')
 }
 
-// Stopping sharing is a consent action: any point recorded for this game that
-// has not reached the server yet is deleted, including in-flight rows (their
-// nack is a no-op after the purge). Previously leftover points survived in
-// AsyncStorage and could even be flushed into a DIFFERENT game joined later.
-export async function stopSharing() {
-  try {
-    const gameId = await AsyncStorage.getItem(GAME_KEY)
-    if (gameId) {
-      const store = await getStore()
-      await store.purgeGame(gameId)
-    }
-  } catch {}
-  await AsyncStorage.removeItem(GAME_KEY)
-  const started = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)
-  if (started) await Location.stopLocationUpdatesAsync(LOCATION_TASK)
+export async function stopSharing(gameId) {
+  const owner = await tracking.read()
+  if (gameId && (!owner || owner.gameId !== gameId || !await tracking.current(owner))) return
+  await tracking.stop(owner)
 }
 
-export async function isSharing() {
-  return Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)
+export async function isSharing(gameId) {
+  const owner = await tracking.read()
+  return !!owner && owner.gameId === gameId && await tracking.current(owner)
+    && await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK).catch(() => false)
 }

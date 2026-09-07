@@ -63,5 +63,8 @@
     "testMatch": [
       "**/*.test.js"
     ]
+  },
+  "overrides": {
+    "postcss": "8.5.28"
   }
 }

@@ -14,6 +14,7 @@ import { IBMPlexSans_700Bold } from '@expo-google-fonts/ibm-plex-sans/700Bold'
 import { IBMPlexMono_400Regular } from '@expo-google-fonts/ibm-plex-mono/400Regular'
 import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono/500Medium'
 import { IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono/600SemiBold'
+import { reconcileTracking } from './src/lib/locationTask'
 import { supabase } from './src/lib/supabase'
 import { C, F } from './src/lib/theme'
 import AuthScreen from './src/screens/AuthScreen'
@@ -31,7 +32,7 @@ Notifications.setNotificationHandler({
 })
 
 export default function App() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     ChakraPetch_500Medium,
     ChakraPetch_600SemiBold,
     ChakraPetch_700Bold,
@@ -47,13 +48,25 @@ export default function App() {
   const [game, setGame] = useState(null)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
-    return () => sub.subscription.unsubscribe()
+    let alive = true
+    let authChanged = false
+    supabase.auth.getSession().then(({ data }) => {
+      if (alive && !authChanged) setSession(data.session ?? null)
+    }).catch(() => { if (alive && !authChanged) setSession(null) })
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      authChanged = true
+      if (alive) setSession(s)
+    })
+    return () => { alive = false; sub.subscription.unsubscribe() }
   }, [])
 
+  useEffect(() => {
+    setGame(null)
+    reconcileTracking().catch(() => {})
+  }, [session?.user.id])
+
   let body
-  if (!fontsLoaded || session === undefined) {
+  if ((!fontsLoaded && !fontError) || session === undefined) {
     body = (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.ink }}>
         <Text style={{ color: C.cyan, fontFamily: F.mono, fontSize: 11, letterSpacing: 2 }}>INITIALIZING...</Text>
@@ -64,7 +77,7 @@ export default function App() {
   } else if (!game) {
     body = <GamesScreen onOpen={setGame} />
   } else {
-    body = <GameScreen key={game.id} gameId={game.id} session={session} onBack={() => setGame(null)} />
+    body = <GameScreen key={`${session.user.id}:${game.id}`} gameId={game.id} session={session} onBack={() => setGame(null)} />
   }
 
   return (

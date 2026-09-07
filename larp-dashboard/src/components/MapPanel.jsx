@@ -23,6 +23,7 @@ const NEW_ZONE = {
 }
 
 export default function MapPanel({
+  active = true,
   zones, positions, members, characters, factions, pendingEvents,
   usernameOf, zoneNameOf, saveZone, deleteZone, confirmEvent, dismissEvent,
 }) {
@@ -133,6 +134,11 @@ export default function MapPanel({
       mapRef.current = null
     }
   }, [])
+
+  // Tab visibility changes do not trigger MapLibre's window resize handler.
+  useEffect(() => {
+    if (active && ready) mapRef.current?.resize()
+  }, [active, ready])
 
   selectRef.current = (id) => {
     setSelectedId(id)
@@ -294,9 +300,9 @@ export default function MapPanel({
       el.querySelector('.pin').style.background = off ? '#3a463c' : factionColorOf(pid)
       el.querySelector('.tag').textContent =
         usernameOf(pid) + (off ? ' · off' : batt != null && batt <= 30 ? ` · ${batt}%` : '')
-      const stale = p.updated_at && Date.now() - new Date(p.updated_at).getTime() > 120000
+      const stale = !p.recorded_at || Date.now() - new Date(p.recorded_at).getTime() > 120000
       el.classList.toggle('stale', !!stale || off)
-      el.title = `${usernameOf(pid)} · ${timeAgo(p.updated_at)} · ±${Math.round(p.accuracy_m ?? 0)}m` +
+      el.title = `${usernameOf(pid)} · ${timeAgo(p.recorded_at)} · ±${Math.round(p.accuracy_m ?? 0)}m` +
         (batt != null ? ` · battery ${batt}%` : '') + (off ? ' · sharing off' : '')
     }
     for (const [pid, marker] of playerMarkers.current.entries()) {

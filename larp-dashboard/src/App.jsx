@@ -9,13 +9,15 @@ export default function App() {
   const [gameId, setGameId] = useState(null)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null)).catch(() => setSession(null))
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  useEffect(() => { setGameId(null) }, [session?.user.id])
+
   if (session === undefined) return <div className="center-screen"><p className="hint">Loading…</p></div>
   if (!session) return <AuthScreen />
   if (!gameId) return <GamesList session={session} onOpen={setGameId} />
-  return <GameView key={gameId} gameId={gameId} session={session} onBack={() => setGameId(null)} />
+  return <GameView key={`${session.user.id}:${gameId}`} gameId={gameId} session={session} onBack={() => setGameId(null)} />
 }

@@ -32,7 +32,7 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
                   : consentActive(m) ? <span className="badge-pill on">sharing</span>
                   : <span className="badge-pill off">not sharing</span>}
               </td>
-              <td className="hint">{timeAgo(positions[m.profile_id]?.updated_at)}</td>
+              <td className="hint">{timeAgo(positions[m.profile_id]?.recorded_at)}</td>
               <td className="hint">{positions[m.profile_id]?.battery_pct != null ? Math.round(positions[m.profile_id].battery_pct) + '%' : '—'}</td>
               <td>{m.profile_id !== uid && <button className="danger" onClick={() => removeMember(m.profile_id)}>Remove</button>}</td>
             </tr>

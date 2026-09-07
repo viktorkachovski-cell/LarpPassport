@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   channel: vi.fn(),
   from: vi.fn(),
+  mapError: null,
   mutationPatches: [],
   mutationResults: {},
   queryResults: {},
@@ -22,7 +23,10 @@ vi.mock('../lib/supabase', () => ({
   },
 }))
 
-vi.mock('./MapPanel', () => ({ default: () => <div>Map panel</div> }))
+vi.mock('./MapPanel', () => ({ default: () => {
+  if (mocks.mapError) throw mocks.mapError
+  return <div>Map panel</div>
+} }))
 vi.mock('./CharactersPanel', () => ({ default: () => <div>Characters panel</div> }))
 vi.mock('./TemplatePanel', () => ({ default: () => <div>Template panel</div> }))
 vi.mock('./EventsPanel', () => ({ default: () => <div>Events panel</div> }))
@@ -88,6 +92,7 @@ function game(gmId = 'gm-user') {
 }
 
 beforeEach(() => {
+  mocks.mapError = null
   mocks.mutationPatches.length = 0
   mocks.mutationResults = {}
   mocks.queryResults = {}
@@ -113,6 +118,33 @@ afterEach(() => {
 })
 
 describe('GameView access and mutation errors', () => {
+  it('keeps the hunt usable when the map fails to initialize', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      mocks.mapError = new Error('WebGL unavailable')
+      mocks.queryResults.games = { data: game(), error: null }
+      render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+      await screen.findByText('Test game')
+      fireEvent.click(screen.getByRole('button', { name: 'MAP', exact: true }))
+      await screen.findByText('The map could not load. Check your connection and reload to try again.')
+      fireEvent.click(screen.getByRole('button', { name: 'HUNT', exact: true }))
+      expect(screen.getByText('Hunt panel')).toBeTruthy()
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('loads the map on first use and keeps it mounted between tabs', async () => {
+    mocks.queryResults.games = { data: game(), error: null }
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Test game')
+    expect(screen.queryByText('Map panel')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'MAP', exact: true }))
+    await screen.findByText('Map panel')
+    fireEvent.click(screen.getByRole('button', { name: 'HUNT', exact: true }))
+    expect(screen.getByText('Map panel')).toBeTruthy()
+  })
+
   it('does not fetch dashboard data or subscribe for a non-GM', async () => {
     mocks.queryResults = {
       game_players: {

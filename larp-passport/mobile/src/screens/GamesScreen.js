@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
+import { stopSharing } from '../lib/locationTask'
 import { C, F } from '../lib/theme'
 
 const STATUS_COLORS = { active: C.green, draft: C.amber, finished: C.muted }
@@ -11,12 +12,17 @@ export default function GamesScreen({ onOpen }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => { load() }, [])
 
   async function load() {
-    const { data } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
-    setGames(data ?? [])
+    setLoading(true); setError('')
+    try {
+      const { data, error } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
+      if (error) throw error
+      setGames(data ?? [])
+    } catch (error) { setError(error.message) } finally { setLoading(false) }
   }
 
   async function join() {
@@ -69,7 +75,8 @@ export default function GamesScreen({ onOpen }) {
         data={games}
         keyExtractor={(game) => game.id}
         contentContainerStyle={games.length === 0 ? styles.emptyList : styles.list}
-        ListEmptyComponent={<Text style={styles.empty}>NO ACTIVE PASSPORTS FOUND</Text>}
+        refreshing={loading} onRefresh={load}
+        ListEmptyComponent={<Text style={styles.empty}>{loading ? 'Loading games...' : error ? 'Could not load games. Pull to retry.' : 'NO ACTIVE PASSPORTS FOUND'}</Text>}
         renderItem={({ item }) => {
           const color = STATUS_COLORS[item.status] ?? C.muted
           return (
@@ -84,7 +91,10 @@ export default function GamesScreen({ onOpen }) {
           )
         }}
       />
-      <TouchableOpacity onPress={() => supabase.auth.signOut()} style={styles.signout}>
+      <TouchableOpacity onPress={async () => {
+        try { await stopSharing(); const { error } = await supabase.auth.signOut(); if (error) throw error }
+        catch (error) { setError(error.message) }
+      }} style={styles.signout}>
         <Text style={styles.signoutText}>DISCONNECT FIELD ID</Text>
       </TouchableOpacity>
     </SafeAreaView>

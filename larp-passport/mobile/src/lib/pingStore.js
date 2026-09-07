@@ -97,7 +97,7 @@ export function createPingStore({ db, now = () => Date.now(), ...options } = {})
   if (!db) throw new Error('createPingStore requires a db handle')
   const config = { ...DEFAULTS, ...options }
   let initialized = null
-  let draining = null
+  const draining = new Map()
 
   async function init() {
     if (!initialized) {
@@ -110,7 +110,7 @@ export function createPingStore({ db, now = () => Date.now(), ...options } = {})
           [PING_STATUS.PENDING, PING_STATUS.IN_FLIGHT],
         )
         await pruneStale()
-      })()
+      })().catch((error) => { initialized = null; throw error })
     }
     return initialized
   }
@@ -288,8 +288,8 @@ export function createPingStore({ db, now = () => Date.now(), ...options } = {})
   // an Error (optionally carrying .code) on transport/server failure.
   // onBatch(data) fires after each accepted batch (event/profile piggyback).
   function drain({ gameId, send, onBatch }) {
-    if (draining) return draining
-    draining = (async () => {
+    if (draining.has(gameId)) return draining.get(gameId)
+    const work = (async () => {
       await init()
       let accepted = 0
       let batches = 0
@@ -322,10 +322,11 @@ export function createPingStore({ db, now = () => Date.now(), ...options } = {})
         }
         return { accepted, queued: await pendingCount(gameId) }
       } finally {
-        draining = null
+        draining.delete(gameId)
       }
     })()
-    return draining
+    draining.set(gameId, work)
+    return work
   }
 
   return {
