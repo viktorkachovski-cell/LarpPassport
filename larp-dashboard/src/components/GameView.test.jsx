@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   channel: vi.fn(),
   from: vi.fn(),
+  handlers: {},
+  huntProps: null,
   mapError: null,
   subscribed: null,
   mutationPatches: [],
@@ -32,7 +34,10 @@ vi.mock('./CharactersPanel', () => ({ default: () => <div>Characters panel</div>
 vi.mock('./TemplatePanel', () => ({ default: () => <div>Template panel</div> }))
 vi.mock('./EventsPanel', () => ({ default: ({ pendingEvents }) => <div>Events panel {pendingEvents.map((e) => <span key={e.id}>{e.id}</span>)}</div> }))
 vi.mock('./PlayersPanel', () => ({ default: () => <div>Players panel</div> }))
-vi.mock('./HuntPanel', () => ({ default: () => <div>Hunt panel</div> }))
+vi.mock('./HuntPanel', () => ({ default: (props) => {
+  mocks.huntProps = props
+  return <div>Hunt panel</div>
+} }))
 
 import GameView from './GameView'
 
@@ -111,7 +116,10 @@ beforeEach(() => {
     on: vi.fn(),
     subscribe: vi.fn(),
   }
-  realtimeChannel.on.mockReturnValue(realtimeChannel)
+  realtimeChannel.on.mockImplementation((_kind, { table }, handler) => {
+    mocks.handlers[table] = handler
+    return realtimeChannel
+  })
   realtimeChannel.subscribe.mockImplementation((cb) => { mocks.subscribed = cb; return realtimeChannel })
   mocks.channel.mockReturnValue(realtimeChannel)
 })
@@ -203,6 +211,47 @@ describe('GameView access and mutation errors', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('permission denied')
     expect(mocks.mutationPatches).toEqual([{ patch: { status: 'active' }, table: 'games' }])
+  })
+})
+
+describe('GameView hunt actions', () => {
+  it('moves the game row with the returned hunt phase and leaves failures to the panel', async () => {
+    mocks.queryResults.games = { data: { ...game(), location_visibility: 'all' }, error: null }
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Hunt panel')
+    mocks.rpc.mockImplementation((fn) => Promise.resolve(fn === 'start_hunt'
+      ? { data: { phase: 'active', players: [], claims: [] }, error: null }
+      : { data: null, error: { message: 'hunt is not active' } }))
+
+    await act(() => mocks.huntProps.startHunt())
+    expect(screen.getByRole('combobox', { name: 'Game status' }).value).toBe('active')
+    expect(screen.getByRole('combobox', { name: 'Position visibility' }).value).toBe('gm_only')
+
+    await act(async () => {
+      await expect(mocks.huntProps.eliminatePlayer('p1')).rejects.toMatchObject({ message: 'hunt is not active' })
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('GameView realtime', () => {
+  it('moves a ruled or deleted event out of the pending queue', async () => {
+    mocks.queryResults.games = { data: game(), error: null }
+    mocks.queryResults.game_events_pending = { data: [
+      { id: 'a', seq: 2, status: 'pending', type: 'zone_enter' },
+      { id: 'b', seq: 1, status: 'pending', type: 'zone_enter' },
+    ], error: null }
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Hunt panel')
+    fireEvent.click(screen.getByRole('tab', { name: /EVENTS/ }))
+    expect(await screen.findByText('a')).toBeTruthy()
+
+    act(() => mocks.handlers.game_events({ eventType: 'UPDATE', new: { id: 'a', seq: 2, status: 'confirmed', type: 'zone_enter' }, old: {} }))
+    expect(screen.queryByText('a')).toBeNull()
+    act(() => mocks.handlers.game_events({ eventType: 'INSERT', new: { id: 'c', seq: 3, status: 'pending', type: 'zone_enter' }, old: {} }))
+    expect(screen.getByText('c')).toBeTruthy()
+    act(() => mocks.handlers.game_events({ eventType: 'DELETE', new: {}, old: { id: 'b' } }))
+    expect(screen.queryByText('b')).toBeNull()
   })
 })
 

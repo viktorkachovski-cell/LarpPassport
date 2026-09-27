@@ -60,7 +60,7 @@ describe('EventsPanel', () => {
   })
 
   it('keeps a failed broadcast visible with the draft intact', async () => {
-    const panelProps = props({ broadcast: vi.fn().mockResolvedValue(new Error('permission denied')) })
+    const panelProps = props({ broadcast: vi.fn().mockRejectedValue(new Error('permission denied')) })
     render(<EventsPanel {...panelProps} />)
     fireEvent.change(screen.getByPlaceholderText(/appears in their app/), { target: { value: 'Regroup.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))

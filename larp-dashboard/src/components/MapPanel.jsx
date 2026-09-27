@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { circlePolygon, haversine, pointEwkt, polygonEwkt, centroidOf, timeAgo } from '../lib/geo'
+import { circlePolygon, haversine, pointEwkt, polygonEwkt, centroidOf } from '../lib/geo'
+import { formatAge } from '../lib/time'
 import { canFinishPolygon, dedupeVertices } from '../lib/draw'
+import { eventInfo } from '../lib/events'
+import { useAction } from '../lib/useAction'
+import { useNow } from '../lib/useNow'
+import Outcome from './Outcome'
 
 const MAP_STYLE = {
   version: 8,
@@ -34,10 +39,10 @@ export default function MapPanel({
   const [selectedId, setSelectedId] = useState(null)
   const [draw, setDraw] = useState(null) // {type:'circle',center,radiusM} | {type:'polygon',points,cursor}
   const [editing, setEditing] = useState(null) // zone editor form state
-  const [saveError, setSaveError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveOutcome, setSaveOutcome] = useState('')
-  const [tick, setTick] = useState(0)
+  // Errors show beside the open editor; a success shows under the zone list
+  // once the editor has closed.
+  const { busy: saving, outcome, clear, run } = useAction()
+  const now = useNow(30000) // marker staleness and ages
   const playerMarkers = useRef(new Map())
   const zoneMarkers = useRef([])
   const drawRef = useRef(null)
@@ -127,11 +132,9 @@ export default function MapPanel({
 
     const onKey = (e) => { if (e.key === 'Escape') cancelDraw() }
     window.addEventListener('keydown', onKey)
-    const interval = setInterval(() => setTick((t) => t + 1), 30000)
 
     return () => {
       window.removeEventListener('keydown', onKey)
-      clearInterval(interval)
       playerMarkers.current.forEach((m) => m.remove())
       playerMarkers.current.clear()
       zoneMarkers.current.forEach((m) => m.remove())
@@ -163,7 +166,7 @@ export default function MapPanel({
   }
 
   function startDraw(type) {
-    setSaveError('')
+    clear()
     setEditing(null)
     setSelectedId(null)
     setDraw(type === 'circle' ? { type: 'circle', center: null, radiusM: 0 } : { type: 'polygon', points: [], cursor: null })
@@ -195,7 +198,7 @@ export default function MapPanel({
   }
 
   function openEditor(z) {
-    setSaveError('')
+    clear()
     setEditing({
       id: z.id, shape: z.shape, name: z.name, trigger_mode: z.trigger_mode,
       dwell_seconds: z.dwell_seconds, exit_buffer_m: z.exit_buffer_m,
@@ -205,9 +208,8 @@ export default function MapPanel({
     })
   }
 
-  async function submitEditor() {
+  function submitEditor() {
     if (!editing || saving) return
-    setSaveError(''); setSaveOutcome('')
     const base = {
       id: editing.id,
       name: editing.name.trim() || 'Unnamed zone',
@@ -227,27 +229,18 @@ export default function MapPanel({
         ? pointEwkt(editing.center.lng, editing.center.lat)
         : polygonEwkt(editing.points)
     }
-    setSaving(true)
-    try {
-      const err = await saveZone(base)
-      if (err) { setSaveError(err.message); return }
-      setSaveOutcome(`Zone "${base.name}" ${editing.id ? 'saved' : 'created'}.`)
-      setEditing(null)
-      setSelectedId(null)
-    } catch (err) { setSaveError(err.message) } finally { setSaving(false) }
+    run(() => saveZone(base), { success: `Zone "${base.name}" ${editing.id ? 'saved' : 'created'}.`, onSuccess: closeEditor })
   }
 
-  async function removeZone() {
+  function removeZone() {
     if (!editing?.id || saving) return
     if (!window.confirm(`Delete zone "${editing.name}"?`)) return
-    setSaving(true); setSaveError(''); setSaveOutcome('')
-    try {
-      const err = await deleteZone(editing.id)
-      if (err) { setSaveError(err.message); return }
-      setSaveOutcome(`Zone "${editing.name}" deleted.`)
-      setEditing(null)
-      setSelectedId(null)
-    } catch (err) { setSaveError(err.message) } finally { setSaving(false) }
+    run(() => deleteZone(editing.id), { success: `Zone "${editing.name}" deleted.`, onSuccess: closeEditor })
+  }
+
+  function closeEditor() {
+    setEditing(null)
+    setSelectedId(null)
   }
 
   // ---- zones layer + labels ----
@@ -295,12 +288,10 @@ export default function MapPanel({
   }, [ready, draw])
 
   // ---- player markers ----
+  // sharing_enabled implies live consent (game_players CHECK constraint).
   const sharingActive = (pid) => {
     const m = members.find((x) => x.profile_id === pid)
-    if (!m) return true
-    if (m.role === 'gm') return true
-    return !!(m.sharing_enabled && m.location_consent_at &&
-      (!m.consent_revoked_at || new Date(m.consent_revoked_at) < new Date(m.location_consent_at)))
+    return !m || m.role === 'gm' || m.sharing_enabled
   }
 
   const factionColorOf = (profileId) => {
@@ -331,15 +322,15 @@ export default function MapPanel({
       el.querySelector('.pin').style.background = off ? '#3a463c' : factionColorOf(pid)
       el.querySelector('.tag').textContent =
         usernameOf(pid) + (off ? ' · off' : batt != null && batt <= 30 ? ` · ${batt}%` : '')
-      const stale = !p.recorded_at || Date.now() - new Date(p.recorded_at).getTime() > 120000
+      const stale = !p.recorded_at || now - new Date(p.recorded_at).getTime() > 120000
       el.classList.toggle('stale', !!stale || off)
-      el.title = `${usernameOf(pid)} · ${timeAgo(p.recorded_at)} · ±${Math.round(p.accuracy_m ?? 0)}m` +
+      el.title = `${usernameOf(pid)} · ${formatAge(p.recorded_at) ?? '—'} · ±${Math.round(p.accuracy_m ?? 0)}m` +
         (batt != null ? ` · battery ${batt}%` : '') + (off ? ' · sharing off' : '')
     }
     for (const [pid, marker] of playerMarkers.current.entries()) {
       if (!seen.has(pid)) { marker.remove(); playerMarkers.current.delete(pid) }
     }
-  }, [ready, positions, members, characters, factions, tick])
+  }, [ready, positions, members, characters, factions, now])
 
   // ---- initial fit ----
   useEffect(() => {
@@ -409,12 +400,7 @@ export default function MapPanel({
             </button>
           ))}
           {zones.length === 0 && !draw && <p className="hint">No zones yet. Draw one to trigger events when players arrive.</p>}
-          {saveOutcome && (
-            <div className="outcome outcome-ok" role="status">
-              <span>{saveOutcome}</span>
-              <button type="button" className="ghost" onClick={() => setSaveOutcome('')} aria-label="Dismiss message">Dismiss</button>
-            </div>
-          )}
+          {outcome?.tone === 'ok' && <Outcome outcome={outcome} onDismiss={clear} />}
         </div>
 
         {editing && (
@@ -459,10 +445,10 @@ export default function MapPanel({
               <textarea id="zone-message" rows="2" style={{ width: '100%' }} value={editing.message} onChange={(e) => setEditing({ ...editing, message: e.target.value })} /></div>}
             <div className="row">
               <button className="primary" disabled={saving} onClick={submitEditor}>{saving ? 'Saving…' : editing.id ? 'Save zone' : 'Create zone'}</button>
-              <button className="ghost" disabled={saving} onClick={() => { setEditing(null); setSelectedId(null) }}>Close</button>
+              <button className="ghost" disabled={saving} onClick={closeEditor}>Close</button>
               {editing.id && <button className="danger" disabled={saving} onClick={removeZone}>Delete</button>}
             </div>
-            {saveError && <p className="error" role="alert">{saveError}</p>}
+            {outcome?.tone === 'error' && <Outcome outcome={outcome} onDismiss={clear} />}
           </div>
         )}
 
@@ -471,7 +457,7 @@ export default function MapPanel({
           {pendingEvents.map((ev) => (
             <div key={ev.id} className="pending-card">
               <div className="who">{usernameOf(ev.profile_id)}</div>
-              <div className="what">{ev.type === 'zone_boundary_exit' ? 'left' : 'entered'} {zoneNameOf(ev.zone_id)} · {timeAgo(ev.created_at)}</div>
+              <div className="what">{eventInfo(ev.type).describe(ev, zoneNameOf)} · {formatAge(ev.created_at)}</div>
               <div className="actions">
                 <button className="primary" aria-label={`Confirm event for ${usernameOf(ev.profile_id)}`} onClick={() => confirmEvent(ev)}>Confirm</button>
                 <button className="ghost" aria-label={`Dismiss event for ${usernameOf(ev.profile_id)}`} onClick={() => dismissEvent(ev)}>Dismiss</button>

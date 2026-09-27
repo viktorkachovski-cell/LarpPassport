@@ -1,42 +1,22 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Animated, AppState, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { Alert, AppState, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
-import * as Location from 'expo-location'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
-import { C, F, S, T } from '../lib/theme'
+import { C, F, S, T, toneColor } from '../lib/theme'
 import { readGameSnapshot } from '../lib/gameSnapshot'
-import { useReducedMotion } from '../lib/useReducedMotion'
-import { arrowRotation, describeDirection, headingQuality, shortestAngleDelta, showsMetres, usableTrueHeading } from '../lib/direction'
+import { eventInfo } from '../lib/events'
 import { updateLocationConsent } from '../lib/locationConsent'
 import { flush, isSharing, locationPermissionStatus, syncNotifications, queueStatus, startSharing, stopSharing } from '../lib/locationTask'
-import { describeServerSync, describeSharing, formatAge, realtimeStateFromStatus } from '../lib/syncStatus'
-
-const BANDS = ['immediate', 'close', 'nearby', 'distant', 'far']
-
-function timeAgo(timestamp) {
-  if (!timestamp) return '--'
-  const seconds = Math.max(0, (Date.now() - new Date(timestamp).getTime()) / 1000)
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
-}
-
-function remainingMinutes(timestamp) {
-  if (!timestamp) return 0
-  return Math.max(0, Math.ceil((new Date(timestamp).getTime() - Date.now()) / 60000))
-}
-
-function countdown(timestamp, now) {
-  if (!timestamp) return '--'
-  const remaining = Math.max(0, new Date(timestamp).getTime() - now)
-  if (!remaining) return '--'
-  const totalSeconds = Math.ceil(remaining / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-}
+import { describeServerSync, realtimeStateFromStatus } from '../lib/syncStatus'
+import { countdown } from '../lib/time'
+import { useNow } from '../lib/useNow'
+import { common } from '../ui/common'
+import { LiveDot } from '../ui/primitives'
+import { HuntPanel } from './game/HuntPanel'
+import { CharacterSheet, CreateCharacter } from './game/CharacterTab'
+import { EventsTab } from './game/EventsTab'
+import { SharingTab } from './game/SharingTab'
 
 // Self-ticking countdown. The one-second timer lives HERE, so it re-renders
 // this single <Text> instead of the whole game screen; it also stops itself
@@ -85,7 +65,7 @@ export default function GameScreen({ gameId, session, onBack }) {
   const refreshRef = useRef(() => {})
   const huntRequest = useRef(0)
   const loadedOnce = useRef(false)
-  const [now, setNow] = useState(Date.now())
+  const now = useNow(30000)
   const recordOk = useCallback(() => setSync((current) => ({ ...current, lastOkAt: Date.now() })), [])
   const recordError = useCallback((message) => setSync((current) => ({ ...current, lastErrorAt: Date.now(), lastError: String(message ?? 'Request failed') })), [])
 
@@ -115,11 +95,6 @@ export default function GameScreen({ gameId, session, onBack }) {
   // Relative timestamps ("5m ago") and the boundary banner only need coarse
   // time. Live countdowns tick per-second inside <Countdown /> instead of
   // re-rendering the whole screen every second.
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30000)
-    return () => clearInterval(timer)
-  }, [])
-
   useEffect(() => {
     let alive = true
     let version = 0
@@ -156,33 +131,14 @@ export default function GameScreen({ gameId, session, onBack }) {
     readDeviceFacts()
     Notifications.requestPermissionsAsync().catch(() => {})
 
+    // Any change only wakes the debounced refresh, which reloads the snapshot,
+    // the hunt and the notification feed together. An in-flight snapshot
+    // predates the change, so it is discarded.
+    const changed = () => { ++version; scheduleRefresh() }
     const channel = supabase
       .channel(`m-game-${gameId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
-        if (payload.eventType === 'DELETE') { load(); return }
-        ++version; scheduleRefresh()
-        if (payload.new?.user_id === uid && !payload.new?.is_npc) setCharacter(payload.new)
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${gameId}` }, (payload) => {
-        if (payload.eventType === 'DELETE') { load(); return }
-        ++version; scheduleRefresh()
-        const row = payload.new
-        if (!row?.id) return
-        setEvents((previous) => {
-          const index = previous.findIndex((event) => event.id === row.id)
-          if (index === -1) return [row, ...previous].slice(0, 100)
-          const next = [...previous]
-          next[index] = row
-          return next
-        })
-        if (row.player_visible && row.profile_id === uid && row.type !== 'player_message') syncNotifications(gameId).catch(() => {})
-        if (row.profile_id === uid && (
-          row.type?.startsWith('hunt_')
-          || row.type?.startsWith('elimination_')
-          || row.type === 'eliminated'
-          || row.type === 'zone_boundary_exit'
-        )) loadHunt()
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, changed)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${gameId}` }, changed)
       .subscribe((status) => {
         if (!alive) return
         setRealtime(realtimeStateFromStatus(status))
@@ -289,7 +245,7 @@ export default function GameScreen({ gameId, session, onBack }) {
   }, [incomingClaimId])
 
   const visibleEvents = events.filter((event) => event.player_visible && event.profile_id === uid)
-  const latestBoundaryEvent = visibleEvents.find((event) => event.type === 'zone_boundary_warning' || event.type === 'zone_boundary_exit')
+  const latestBoundaryEvent = visibleEvents.find((event) => eventInfo(event.type).boundary)
   const boundaryWarning = latestBoundaryEvent?.type === 'zone_boundary_warning'
     && now - new Date(latestBoundaryEvent.created_at).getTime() < 120000
 
@@ -391,39 +347,16 @@ export default function GameScreen({ gameId, session, onBack }) {
   )
 }
 
-// Decorative pulse. Static when reduced motion is on; always hidden from
-// assistive tech because the adjacent text carries the meaning.
-function LiveDot({ color }) {
-  const opacity = useRef(new Animated.Value(1)).current
-  const reduced = useReducedMotion()
-
-  useEffect(() => {
-    if (reduced) { opacity.setValue(1); return undefined }
-    const animation = Animated.loop(Animated.sequence([
-      Animated.timing(opacity, { toValue: 0.35, duration: 1000, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 1000, useNativeDriver: true }),
-    ]))
-    animation.start()
-    return () => { animation.stop(); opacity.setValue(1) }
-  }, [opacity, reduced])
-
-  return <Animated.View importantForAccessibility="no" accessibilityElementsHidden style={[styles.liveDot, { backgroundColor: color, opacity }]} />
-}
-
-// Self-ticking (10 s) so "12 s ago" stays honest without re-rendering the
+// Self-ticking (10 s) so "12s ago" stays honest without re-rendering the
 // screen. The age line is deliberately not a live region: announcing every
 // tick would be noise. Only the error detail is announced.
 function SyncStatusLine({ sync, realtime, onRetry }) {
-  const [tick, setTick] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setTick(Date.now()), 10000)
-    return () => clearInterval(timer)
-  }, [])
-  const status = describeServerSync({ ...sync, realtime, now: tick })
-  const color = status.tone === 'ok' ? C.green : status.tone === 'error' ? C.red : status.tone === 'warning' ? C.amber : C.muted
+  const now = useNow(10000)
+  const status = describeServerSync({ ...sync, realtime, now })
+  const color = toneColor(status.tone)
   return (
     <View style={styles.syncLine}>
-      <View style={styles.flex}>
+      <View style={common.flex}>
         <Text style={[styles.syncText, { color }]}>{status.text}</Text>
         <Text style={styles.syncDetail} accessibilityLiveRegion={status.tone === 'error' ? 'polite' : 'none'}>{status.detail}</Text>
       </View>
@@ -446,637 +379,7 @@ const StateCell = memo(function StateCell({ value, label, color = C.text, border
   )
 })
 
-const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, outcome, dismissOutcome, boundaryWarning, requestElimination, respondToElimination, refresh }) {
-  function confirmDefeat() {
-    Alert.alert(
-      'Confirm your elimination?',
-      'This removes you from the hunt. A GM can restore you if the app or ruling is inconsistent.',
-      [
-        { text: 'Not confirmed', style: 'cancel', onPress: () => respondToElimination(false) },
-        { text: 'Confirm elimination', style: 'destructive', onPress: () => respondToElimination(true) },
-      ],
-    )
-  }
-
-  if (!hunt) {
-    return (
-      <View style={styles.centerState}>
-        <Text style={[styles.centerCopy, error && styles.errorText]}>{error || 'Loading hunt status...'}</Text>
-        {!!error && <GhostButton label="RETRY" onPress={refresh} />}
-      </View>
-    )
-  }
-
-  if (hunt.phase === 'not_started') {
-    return (
-      <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.neutralCard}>
-          <Text style={styles.cyanKicker}>O AWAITING THE HUNT</Text>
-          <Text style={styles.sectionTitle}>Hunt not started</Text>
-          <Text style={styles.bodyCopy}>The GM will lock the roster and assign one secret target to every traveller.</Text>
-          {!hasCharacter && (
-            <View style={styles.warningInset}>
-              <Text style={styles.warningInsetText}>Create your character before the hunt can start.</Text>
-            </View>
-          )}
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
-          <GhostButton label="REFRESH" onPress={refresh} />
-        </View>
-      </ScrollView>
-    )
-  }
-
-  if (!hunt.participant) {
-    return (
-      <View style={styles.centerState}>
-        <View style={styles.neutralIcon}><Text style={styles.neutralIconText}>O</Text></View>
-        <Text style={styles.sectionTitle}>Observer</Text>
-        <Text style={styles.centerCopy}>You are not part of this hunt's target chain.</Text>
-      </View>
-    )
-  }
-
-  if (hunt.phase === 'finished') return <FinishedState hunt={hunt} />
-  if (!hunt.alive) return <EliminatedState aliveCount={hunt.alive_count} />
-
-  const cloakMinutes = remainingMinutes(hunt.hidden_until)
-  const awaitingTarget = !hunt.target
-  const claimPending = !!hunt.outgoing_claim
-  const disabled = busy || claimPending || awaitingTarget
-
-  return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
-      {!!hunt.incoming_claim && (
-        <View style={styles.claimAlert} accessibilityLiveRegion="polite">
-          <Text style={styles.redKicker}>! ELIMINATION CLAIMED</Text>
-          <Text style={styles.claimTitle}>A hunter claims they defeated you</Text>
-          <Text style={styles.bodyCopy}>The hunter remains anonymous. Confirm only after the live battle is resolved.</Text>
-          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={confirmDefeat} style={[styles.redButton, busy && styles.disabled]}>
-            <Text style={styles.filledButtonText}>REVIEW CONFIRMATION</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {boundaryWarning && (
-        <View style={styles.boundaryBanner} accessibilityLiveRegion="polite">
-          <Text style={styles.amberKicker}>! ANOMALY BOUNDARY AHEAD</Text>
-          <Text style={styles.boundaryCopy}>Move toward the safe interior. Leaving forfeits any pending claim and alerts the GM.</Text>
-        </View>
-      )}
-
-      {cloakMinutes > 0 && (
-        <View style={styles.cloakCard}>
-          <View style={styles.kickerRow}><LiveDot color={C.cyan} /><Text style={styles.cyanKicker}>TEMPORAL CLOAK ACTIVE</Text></View>
-          <Text style={styles.cloakCopy}>Your hunter cannot read your proximity for about {cloakMinutes} minute{cloakMinutes === 1 ? '' : 's'}.</Text>
-        </View>
-      )}
-
-      <View style={[styles.targetCard, awaitingTarget && styles.awaitingCard]}>
-        <View style={[styles.targetHeader, awaitingTarget && styles.awaitingHeader]}>
-          <Text style={[styles.targetKicker, awaitingTarget && styles.mutedKicker]}>+ YOUR TARGET</Text>
-          {!!hunt.direction_enabled && <Text style={styles.directionChip}>DIRECTION ON</Text>}
-          {!!hunt.target?.proximity?.last_seen_at && (
-            <Text style={[styles.signalAge, hunt.target.proximity.state === 'stale' && styles.amberText]}>{timeAgo(hunt.target.proximity.last_seen_at)}</Text>
-          )}
-        </View>
-        <View style={styles.targetBody}>
-          <Text style={[styles.targetName, awaitingTarget && styles.awaitingName]}>{hunt.target?.character_name ?? 'NO TARGET YET'}</Text>
-          {awaitingTarget ? (
-            <Text style={styles.bodyCopy}>Elimination confirmed. Waiting for the GM to assign your next target. No claim can start until then.</Text>
-          ) : (
-            <ProximitySignal proximity={hunt.target.proximity} />
-          )}
-
-          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={requestElimination} style={[disabled ? styles.disabledClaimButton : styles.claimButton, busy && styles.disabled]}>
-            <Text style={disabled ? styles.disabledButtonText : styles.filledButtonText}>
-              {awaitingTarget ? 'WAITING FOR GM TARGET ASSIGNMENT' : claimPending ? 'WAITING FOR TARGET CONFIRMATION' : 'CLAIM ELIMINATION'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.claimCaption}>
-            {claimPending ? 'TARGET RESPONSE PENDING' : 'CLAIM ONLY AFTER THE LIVE BATTLE IS RESOLVED\nYOUR TARGET MUST CONFIRM // YOU STAY ANONYMOUS'}
-          </Text>
-          {!!error && <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text>}
-          {!!outcome && <OutcomeNote text={outcome} onDismiss={dismissOutcome} />}
-        </View>
-      </View>
-      <Text style={styles.hunterWarning}>SOMEONE IS HUNTING YOU. THEIR NAME IS NEVER SHOWN.</Text>
-    </ScrollView>
-  )
-})
-
-function ProximitySignal({ proximity }) {
-  if (!proximity || proximity.state === 'waiting_for_location') {
-    return (
-      <View style={styles.signalState}>
-        <Text style={styles.signalNeutral}>WAITING</Text>
-        <Text style={styles.bodyCopy}>Waiting for both devices to report location.</Text>
-      </View>
-    )
-  }
-
-  if (proximity.state === 'stale') {
-    return (
-      <View style={styles.signalState}>
-        <Text style={styles.signalStale}>STALE</Text>
-        <Text style={styles.bodyCopy}>Signal older than 2 minutes. Keep moving and try again.</Text>
-      </View>
-    )
-  }
-
-  if (proximity.state === 'cloaked') {
-    return (
-      <View style={styles.signalState}>
-        <Text style={styles.signalMasked}>MASKED</Text>
-        <Text style={styles.bodyCopy}>Target signal hidden for about {remainingMinutes(proximity.available_at)} minute(s).</Text>
-      </View>
-    )
-  }
-
-  if (proximity.state !== 'available') {
-    return <Text style={styles.bodyCopy}>Target signal unavailable.</Text>
-  }
-
-  const activeBand = String(proximity.band ?? '').toLowerCase()
-  return (
-    <View style={styles.signalAvailable}>
-      <View style={styles.distanceRow}>
-        <Text style={styles.bandWord} accessibilityLabel={`Target is ${activeBand}`}>{activeBand.toUpperCase()}</Text>
-        {showsMetres(proximity) && <Text style={styles.distance}>~{Math.round(Number(proximity.distance_m) / 10) * 10} m</Text>}
-      </View>
-      <View style={styles.meterRow} importantForAccessibility="no-hide-descendants">
-        {BANDS.map((band) => {
-          const active = band === activeBand
-          return (
-            <View key={band} style={styles.meterItem}>
-              <View style={[styles.meterBar, active && styles.meterBarActive]} />
-              <Text style={[styles.meterLabel, active && styles.meterLabelActive]}>{band.toUpperCase()}</Text>
-            </View>
-          )
-        })}
-      </View>
-      <DirectionSignal proximity={proximity} />
-    </View>
-  )
-}
-
-// Foreground-only compass subscription. Active only while an arrow can be
-// shown (direction available, app active); removed on background, unmount
-// (tab switch, account/game change) and whenever direction goes away. No
-// GPS settings are touched here.
-function useTrueHeading(enabled) {
-  const [heading, setHeading] = useState(null)
-  useEffect(() => {
-    if (!enabled) { setHeading(null); return undefined }
-    let subscription = null
-    let alive = true
-    const stop = () => { subscription?.remove?.(); subscription = null; if (alive) setHeading(null) }
-    const start = async () => {
-      if (!alive || subscription || AppState.currentState !== 'active') return
-      try {
-        const sub = await Location.watchHeadingAsync((value) => { if (alive) setHeading(value) })
-        if (!alive || AppState.currentState !== 'active') { sub.remove(); return }
-        subscription = sub
-      } catch { if (alive) setHeading(null) }
-    }
-    start()
-    const appState = AppState.addEventListener('change', (state) => { if (state === 'active') start(); else stop() })
-    return () => { alive = false; appState.remove(); subscription?.remove?.() }
-  }, [enabled])
-  return heading
-}
-
-// Direction to the target, north-referenced. The label never assumes the
-// screen top points north; the arrow appears only with a usable true heading.
-function DirectionSignal({ proximity }) {
-  const [tick, setTick] = useState(() => Date.now())
-  const validUntil = proximity?.valid_until
-  useEffect(() => {
-    if (!validUntil) return undefined
-    const timer = setInterval(() => setTick(Date.now()), 5000)
-    return () => clearInterval(timer)
-  }, [validUntil])
-  const direction = describeDirection(proximity, tick)
-  const reduced = useReducedMotion()
-  const heading = useTrueHeading(direction.state === 'available')
-  const trueHeading = usableTrueHeading(heading)
-  const quality = headingQuality(heading)
-  const rotation = direction.state === 'available' ? arrowRotation(direction.bearing, trueHeading) : null
-
-  // Visual smoothing only: shortest-angle interpolation across 359/0. It does
-  // not extend authorization or freshness; the bearing itself comes untouched
-  // from the server.
-  const shown = useRef(new Animated.Value(0)).current
-  const lastRotation = useRef(0)
-  useEffect(() => {
-    if (rotation == null) return
-    const next = lastRotation.current + shortestAngleDelta(lastRotation.current, rotation)
-    lastRotation.current = next
-    if (reduced) { shown.setValue(next); return }
-    Animated.timing(shown, { toValue: next, duration: 250, useNativeDriver: true }).start()
-  }, [rotation, reduced, shown])
-
-  if (direction.state === 'none' || direction.state === 'not_enabled') return null
-
-  if (direction.state === 'expired') {
-    return <Text style={[styles.directionNote, styles.amberText]}>Direction expired. Waiting for a fresh fix.</Text>
-  }
-  if (direction.state === 'unavailable') {
-    return <Text style={styles.directionNote}>Direction unavailable: both fixes are on the same spot.</Text>
-  }
-
-  const spin = shown.interpolate({ inputRange: [-360, 0, 360], outputRange: ['-360deg', '0deg', '360deg'] })
-  return (
-    <View style={styles.directionRow} accessibilityLabel={`Bearing ${direction.label}, measured from true north`}>
-      <View style={styles.directionCopy}>
-        <Text style={styles.directionKicker}>BEARING FROM NORTH</Text>
-        <Text style={styles.directionValue}>{direction.label}</Text>
-        {rotation == null
-          ? <Text style={styles.directionNote}>{quality === 'none' && heading ? 'Compass unavailable on this phone. Face ' : 'Face '}{direction.cardinal} ({direction.bearing}° from true north).</Text>
-          : <Text style={styles.directionNote}>{quality === 'low' ? 'Compass calibration is low; the arrow is approximate.' : 'Arrow is relative to where your phone points.'}</Text>}
-      </View>
-      {rotation != null && (
-        <View style={styles.compassDial} importantForAccessibility="no-hide-descendants">
-          <Animated.Text style={[styles.compassArrow, { transform: [{ rotate: spin }] }]}>▲</Animated.Text>
-        </View>
-      )}
-    </View>
-  )
-}
-
-function FinishedState({ hunt }) {
-  const won = hunt.winner?.is_self
-  return (
-    <View style={styles.centerState}>
-      <View style={[styles.resultIcon, won ? styles.winnerIcon : styles.otherIcon]}>
-        <Text style={[styles.resultIconText, { color: won ? C.cyan : C.muted }]}>{won ? '*' : 'O'}</Text>
-      </View>
-      <Text style={[styles.resultTitle, won && styles.winnerTitle]}>{won ? 'TIMELINE SECURED' : 'THE TIMELINE BELONGS TO ANOTHER'}</Text>
-      <Text style={styles.resultCopy}><Text style={!won && styles.targetInline}>{hunt.winner?.character_name ?? 'The final traveller'}</Text> is the last traveller standing.</Text>
-      <View style={[styles.resultChip, won && styles.winnerChip]}>
-        <Text style={[styles.resultChipText, won && styles.winnerChipText]}>ROUND COMPLETE</Text>
-      </View>
-    </View>
-  )
-}
-
-function EliminatedState({ aliveCount }) {
-  return (
-    <View style={styles.centerState}>
-      <View style={styles.eliminatedIcon}><Text style={styles.eliminatedIconText}>X</Text></View>
-      <Text style={styles.eliminatedTitle}>ELIMINATED</Text>
-      <Text style={styles.resultCopy}>Location sharing has stopped. Your latest map position is removed and no target is revealed.</Text>
-      <View style={styles.resultChip}><Text style={styles.resultChipText}>{aliveCount} TRAVELLERS REMAIN</Text></View>
-      <Text style={styles.restoreNote}>THE GM CAN RESTORE YOU TO THE CHAIN</Text>
-    </View>
-  )
-}
-
-const EventsTab = memo(function EventsTab({ gameId, events }) {
-  return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      <PlayerMessageBox gameId={gameId} />
-      {events.length === 0 && <Text style={styles.emptyText}>No events yet.</Text>}
-      {events.map((event) => {
-        const meta = eventMeta(event.type)
-        const message = event.payload?.message || eventBody(event.type)
-        return (
-          <View key={event.id} style={[styles.eventCard, meta.borderColor && { borderColor: meta.borderColor }]}>
-            <View style={styles.eventTopRow}>
-              <Text style={[styles.eventTag, { color: meta.color }]}>{meta.label}</Text>
-              <Text style={styles.eventTime}>{timeAgo(event.created_at)}</Text>
-            </View>
-            <Text style={[styles.eventTitle, meta.titleColor && { color: meta.titleColor }]}>{eventTitle(event.type)}</Text>
-            {!!message && <Text style={styles.eventBody}>{message}</Text>}
-          </View>
-        )
-      })}
-    </ScrollView>
-  )
-})
-
-function eventMeta(type) {
-  if (type === 'zone_boundary_warning' || type === 'zone_boundary_exit') {
-    return { label: 'BOUNDARY', color: C.amber, borderColor: C.amberBorder, titleColor: C.amber }
-  }
-  if (type === 'gm_note') return { label: 'GM NOTE', color: C.cyan, borderColor: C.cyanBorder }
-  if (type === 'player_message') return { label: 'PLAYER MESSAGE', color: C.cyan, borderColor: C.cyanBorder }
-  if (type === 'elimination_rejected' || type === 'eliminated') return { label: 'HUNT', color: C.red }
-  if (type?.startsWith('elimination_')) return { label: 'HUNT', color: type === 'elimination_confirmed' ? C.green : C.amber }
-  if (type?.startsWith('hunt_')) return { label: 'HUNT', color: C.green }
-  return { label: 'FIELD EVENT', color: C.muted }
-}
-
-function eventTitle(type) {
-  if (type === 'gm_note') return 'Message from your GM'
-  if (type === 'consent_granted') return 'Location sharing on'
-  if (type === 'consent_revoked') return 'Location sharing off'
-  if (type === 'hunt_started') return 'The hunt has begun'
-  if (type === 'elimination_requested') return 'Elimination confirmation requested'
-  if (type === 'elimination_claimed') return 'Waiting for target confirmation'
-  if (type === 'elimination_rejected') return 'Elimination claim rejected'
-  if (type === 'elimination_confirmed') return 'Timeline correction confirmed'
-  if (type === 'eliminated') return 'You have been eliminated'
-  if (type === 'hunt_finished') return 'The hunt is over'
-  if (type === 'hunt_player_restored') return 'The GM restored a traveller'
-  if (type === 'hunt_chain_changed') return 'The GM corrected the target chain'
-  if (type === 'hunt_target_assigned') return 'New target assigned'
-  if (type === 'player_message') return 'Message sent to your GM'
-  if (type === 'zone_boundary_warning') return 'Anomaly boundary ahead'
-  if (type === 'zone_boundary_exit') return 'You left the time anomaly'
-  return 'Field state changed'
-}
-
-function eventBody(type) {
-  if (type === 'elimination_confirmed') return 'Wait for the GM to assign your next target. A 10-minute temporal cloak is active.'
-  if (type === 'zone_boundary_warning') return 'Move back toward the safe interior.'
-  if (type === 'zone_boundary_exit') return 'Claims active at the recorded exit may have been forfeited. The GM was alerted.'
-  return ''
-}
-
-function PlayerMessageBox({ gameId }) {
-  const [message, setMessage] = useState('')
-  const [status, setStatus] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  async function send() {
-    const clean = message.trim()
-    if (!clean) return
-    setBusy(true); setStatus('')
-    try {
-    const { error } = await supabase.rpc('send_gm_message', { g: gameId, message: clean })
-    setBusy(false)
-    if (error) { setStatus(error.message); return }
-    setMessage('')
-    setStatus('Sent to the GM.')
-    } catch (error) { setStatus(error.message) } finally { setBusy(false) }
-  }
-
-  const sendDisabled = busy || !message.trim()
-  return (
-    <View style={styles.messageCard}>
-      <Text style={styles.messageTitle}>Message GM</Text>
-      <TextInput
-        style={[styles.input, styles.messageInput]}
-        accessibilityLabel="Message to the GM"
-        value={message}
-        onChangeText={setMessage}
-        maxLength={100}
-        placeholder="Short in-game message"
-        placeholderTextColor={C.muted}
-      />
-      <View style={styles.messageFooter}>
-        <Text style={styles.charCount}>{message.length}/100</Text>
-        <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={send} style={[styles.smallCyanButton, sendDisabled && styles.disabled]}>
-          <Text style={styles.smallCyanButtonText}>{busy ? 'SENDING...' : 'SEND TO GM'}</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.privateCaption}>ONLY YOU AND THE GMS SEE THIS // 3s COOLDOWN</Text>
-      {!!status && <OutcomeNote text={status} tone={status === 'Sent to the GM.' ? 'ok' : 'error'} onDismiss={() => setStatus('')} />}
-    </View>
-  )
-}
-
-const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, queue, error, sharingBusy, toggleSharing, sendNow }) {
-  const status = describeSharing({
-    sharing, permission, lastFixAt: queue.lastFixAt, queued: queue.queued ?? 0, failed: queue.failed ?? 0, lastError: queue.lastError,
-  })
-  const stateColor = status.tone === 'ok' ? C.green : status.tone === 'error' ? C.red : status.tone === 'warning' ? C.amber : C.muted
-  return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent}>
-      <View style={styles.neutralCard}>
-        <View style={styles.sharingHeader}>
-          <View style={styles.flex}>
-            <Text style={styles.sharingTitle}>Location sharing</Text>
-            <Text style={[styles.sharingState, { color: stateColor }]}>{status.text}</Text>
-          </View>
-          <Switch
-            accessibilityLabel="Location sharing"
-            accessibilityRole="switch"
-            value={sharing}
-            disabled={sharingBusy}
-            onValueChange={toggleSharing}
-            trackColor={{ true: C.cyan, false: C.lineStrong }}
-            thumbColor={sharing ? C.ink : C.muted}
-          />
-        </View>
-        {status.lines.map((line) => (
-          <Text key={line} style={[styles.sharingFact, status.tone === 'error' && styles.errorText, status.tone === 'warning' && styles.amberText]}>{line}</Text>
-        ))}
-        <Text style={styles.bodyCopy}>
-          While enabled, your phone sends its position roughly every 15 seconds, including with the screen off. GMs see it on their map and a permanent notification stays visible.
-        </Text>
-        <Text style={[styles.bodyCopy, styles.sharingDetails]}>
-          Position history is deleted automatically after {game.purge_after_days} day{game.purge_after_days === 1 ? '' : 's'}. You can stop at any time.
-        </Text>
-        {phase === 'finished' && <Text style={styles.warningCopy}>The game has finished; location pings are no longer accepted.</Text>}
-        {!!error && <Text style={styles.errorText}>{error}</Text>}
-        {!!error && !sharing && <GhostButton label="RETRY STOP SHARING" onPress={() => toggleSharing(false)} />}
-      </View>
-
-      <View style={styles.telemetryCard}>
-        <Text style={styles.telemetryKicker}>SYNC DETAILS</Text>
-        <View style={styles.telemetryRow}>
-          <TelemetryCell label="QUEUED" value={queue.queued ?? 0} color={C.cyan} />
-          <TelemetryCell label="LAST SENT" value={(formatAge(queue.lastSent) ?? 'never').toUpperCase()} color={queue.lastSent ? C.green : C.muted} />
-          <TelemetryCell label="GPS FIX" value={(formatAge(queue.lastFixAt) ?? 'none').toUpperCase()} color={queue.lastFixAt ? C.text : C.muted} />
-          <TelemetryCell label="GPS MODE" value={queue.profile === 'far' ? 'RELAXED' : 'PRECISE'} />
-        </View>
-        {(queue.failed ?? 0) > 0 && (
-          <Text style={styles.errorText}>{queue.failed} update{queue.failed === 1 ? '' : 's'} rejected by the server and will not be retried{queue.lastError ? `: ${queue.lastError}` : '.'}</Text>
-        )}
-        <Text style={styles.telemetryNote}>Queued updates are sent automatically. "Last sent" is about location updates only; it does not prove the rest of the game data is current.</Text>
-        <GhostButton label="SEND NOW" onPress={sendNow} />
-      </View>
-      <Text style={styles.sharingFootnote}>Sharing stops and your map position is removed on elimination. History follows the retention period above.</Text>
-    </ScrollView>
-  )
-})
-
-const TelemetryCell = memo(function TelemetryCell({ label, value, color = C.text }) {
-  return (
-    <View style={styles.telemetryCell}>
-      <Text style={[styles.telemetryValue, { color }]}>{String(value)}</Text>
-      <Text style={styles.telemetryLabel}>{label}</Text>
-    </View>
-  )
-})
-
-const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
-  const [draft, setDraft] = useState(null)
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const fields = character.fields ?? {}
-  const editable = stats.filter((stat) => stat.player_editable)
-  const locked = stats.filter((stat) => !stat.player_editable)
-  const values = draft ?? {}
-  const valueOf = (key) => key in values ? values[key] : fields[key]
-  const dirty = draft && Object.keys(draft).some((key) => String(draft[key]) !== String(fields[key] ?? ''))
-
-  async function save() {
-    if (busy) return
-    setBusy(true); setError(''); setSaved(false)
-    try {
-    const next = { ...fields }
-    for (const stat of editable) {
-      if (!(stat.key in values)) continue
-      next[stat.key] = stat.type === 'number' ? Number(values[stat.key]) : String(values[stat.key] ?? '')
-      if (stat.type === 'number' && !Number.isFinite(next[stat.key])) next[stat.key] = stat.default ?? 0
-    }
-    const { error: saveError } = await supabase.from('characters').update({ fields: next }).eq('id', character.id)
-    if (saveError) { setError(saveError.message); return }
-    setDraft(null)
-    setSaved(true)
-    } catch (error) { setError(error.message) } finally { setBusy(false) }
-  }
-
-  return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      <View style={styles.identityRow}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{initials(character.name)}</Text></View>
-        <View style={styles.flex}>
-          <Text style={styles.characterName}>{character.name}</Text>
-          {!!character.bio && <Text style={styles.characterBio}>{character.bio}</Text>}
-        </View>
-      </View>
-
-      {locked.length > 0 && (
-        <>
-          <Text style={styles.sheetLabel}>SET BY YOUR GM // UPDATES LIVE</Text>
-          <View style={styles.statGrid}>
-            {locked.map((stat) => (
-              <View key={stat.key} style={styles.statCard}>
-                <Text style={[styles.statValue, { color: statColor(stat, fields[stat.key]) }]}>{String(fields[stat.key] ?? '--')}</Text>
-                <Text style={styles.statLabel}>{String(stat.label || stat.key).toUpperCase()}</Text>
-              </View>
-            ))}
-          </View>
-        </>
-      )}
-
-      {editable.length > 0 && (
-        <View style={styles.editSection}>
-          <Text style={styles.sheetLabel}>YOURS TO EDIT</Text>
-          {editable.map((stat) => (
-            <View key={stat.key} style={styles.field}>
-              <Text style={styles.inputLabel}>{String(stat.label || stat.key).toUpperCase()}{stat.type === 'number' && stat.min !== undefined && stat.max !== undefined ? ` // ${stat.min}-${stat.max}` : ''}</Text>
-              <TextInput
-                style={styles.input}
-                accessibilityLabel={String(stat.label || stat.key)}
-                keyboardType={stat.type === 'number' ? 'numeric' : 'default'}
-                value={String(valueOf(stat.key) ?? '')}
-                onChangeText={(value) => setDraft({ ...(draft ?? {}), [stat.key]: value })}
-              />
-            </View>
-          ))}
-          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: !dirty || busy }} disabled={!dirty || busy} onPress={save} style={[styles.cyanButton, (!dirty || busy) && styles.disabled]}>
-            <Text style={styles.filledButtonText}>{busy ? 'SAVING...' : 'SAVE CHANGES'}</Text>
-          </TouchableOpacity>
-          {!!error && <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text>}
-          {saved && <OutcomeNote text="Changes saved." onDismiss={() => setSaved(false)} />}
-        </View>
-      )}
-    </ScrollView>
-  )
-})
-
-function CreateCharacter({ game, uid, onCreated }) {
-  const stats = game.template?.stats ?? []
-  const editable = stats.filter((stat) => stat.player_editable)
-  const [name, setName] = useState('')
-  const [bio, setBio] = useState('')
-  const [values, setValues] = useState(() => Object.fromEntries(editable.map((stat) => [stat.key, stat.default ?? (stat.type === 'number' ? 0 : '')])))
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  async function create() {
-    if (!name.trim()) { setError('Your character needs a name.'); return }
-    setBusy(true); setError('')
-    try {
-    const fields = {}
-    for (const stat of editable) fields[stat.key] = stat.type === 'number' ? Number(values[stat.key]) || 0 : String(values[stat.key] ?? '')
-    const { data, error: createError } = await supabase.from('characters')
-      .insert({ game_id: game.id, user_id: uid, name: name.trim(), bio: bio.trim(), fields })
-      .select().single()
-    setBusy(false)
-    if (createError) { setError(createError.message); return }
-    onCreated(data)
-    } catch (error) { setError(error.message) } finally { setBusy(false) }
-  }
-
-  return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      <View style={styles.neutralCard}>
-        <Text style={styles.cyanKicker}>IDENTITY REGISTRY</Text>
-        <Text style={styles.sectionTitle}>Create your character</Text>
-        <Text style={styles.bodyCopy}>This is who you will be in {game.name}.</Text>
-        <View style={styles.editSection}>
-          <Field label="NAME" value={name} onChangeText={setName} placeholder="Agent name" />
-          <Field label="BIO" value={bio} onChangeText={setBio} multiline placeholder="A short field record" style={styles.bioInput} />
-          {editable.map((stat) => (
-            <Field
-              key={stat.key}
-              label={String(stat.label || stat.key).toUpperCase()}
-              keyboardType={stat.type === 'number' ? 'numeric' : 'default'}
-              value={String(values[stat.key] ?? '')}
-              onChangeText={(value) => setValues({ ...values, [stat.key]: value })}
-            />
-          ))}
-          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={create} style={[styles.cyanButton, busy && styles.disabled]}>
-            <Text style={styles.filledButtonText}>{busy ? 'CREATING...' : 'CREATE CHARACTER'}</Text>
-          </TouchableOpacity>
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
-          <Text style={styles.privateCaption}>GM-CONTROLLED STATS ARE ADDED AUTOMATICALLY.</Text>
-        </View>
-      </View>
-    </ScrollView>
-  )
-}
-
-function Field({ label, style, ...props }) {
-  return (
-    <View style={styles.field}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput style={[styles.input, style]} accessibilityLabel={label} placeholderTextColor={C.muted} {...props} />
-    </View>
-  )
-}
-
-// Consequential outcome that stays until the player dismisses it. Dismissing
-// only clears local state; it never confirms, resolves or acknowledges anything
-// on the server.
-function OutcomeNote({ text, tone = 'ok', onDismiss }) {
-  return (
-    <View style={[styles.outcomeNote, tone === 'error' && styles.outcomeNoteError]} accessibilityLiveRegion="polite">
-      <Text style={[styles.outcomeText, tone === 'error' && styles.errorText, tone === 'error' && styles.outcomeErrorText]}>{text}</Text>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Dismiss message" onPress={onDismiss} style={styles.outcomeDismiss}>
-        <Text style={styles.outcomeDismissText}>DISMISS</Text>
-      </TouchableOpacity>
-    </View>
-  )
-}
-
-function GhostButton({ label, onPress }) {
-  return (
-    <TouchableOpacity accessibilityRole="button" onPress={onPress} style={styles.ghostButton}>
-      <Text style={styles.ghostButtonText}>{label}</Text>
-    </TouchableOpacity>
-  )
-}
-
-function initials(name) {
-  return String(name ?? '?').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
-}
-
-function statColor(stat, value) {
-  const identity = `${stat.key} ${stat.label ?? ''}`.toLowerCase()
-  if (identity.includes('paradox')) return C.amber
-  if ((identity.includes('life') || identity.includes('health')) && Number(value) <= 1) return C.red
-  return C.cyan
-}
-
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: C.ink },
   loading: { flex: 1, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center', gap: 6 },
   loadingAction: { minHeight: S.touch, justifyContent: 'center', paddingHorizontal: 16 },
@@ -1087,7 +390,6 @@ const styles = StyleSheet.create({
   gameName: { flex: 1, color: C.text, fontFamily: F.displayBold, fontSize: 17, letterSpacing: 1.35 },
   phaseChip: { minWidth: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 6 },
   phaseText: { fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.1 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, marginRight: 6 },
   syncLine: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingBottom: 8, gap: 10 },
   syncText: { fontFamily: F.bodyMedium, fontSize: T.body },
   syncDetail: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, marginTop: 1 },
@@ -1103,139 +405,8 @@ const styles = StyleSheet.create({
   activeTab: { borderBottomColor: C.cyan },
   tabText: { color: C.muted, fontFamily: F.displaySemiBold, fontSize: 13, letterSpacing: 0.4, textAlign: 'center' },
   activeTabText: { color: C.text },
-  scrollContent: { padding: 15, paddingBottom: 32 },
-  centerState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  centerCopy: { color: C.muted, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: 22, textAlign: 'center', marginTop: 9 },
-  neutralCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 17 },
-  cyanKicker: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.3 },
-  redKicker: { color: C.red, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.3 },
-  amberKicker: { color: C.amber, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.2 },
-  kickerRow: { flexDirection: 'row', alignItems: 'center' },
-  sectionTitle: { color: C.text, fontFamily: F.displayBold, fontSize: 20, marginTop: 7 },
-  bodyCopy: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 7 },
-  warningInset: { backgroundColor: 'rgba(255,176,32,0.08)', borderColor: C.amberBorder, borderWidth: 1, borderRadius: 6, padding: 11, marginTop: 14 },
-  warningInsetText: { color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody },
-  neutralIcon: { width: 60, height: 60, borderRadius: 30, borderColor: C.lineStrong, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  neutralIconText: { color: C.muted, fontFamily: F.displayBold, fontSize: 21 },
-  claimAlert: { backgroundColor: C.panel, borderColor: C.red, borderWidth: 1, borderRadius: 10, padding: 15, marginBottom: 11 },
-  claimTitle: { color: C.text, fontFamily: F.displayBold, fontSize: 19, lineHeight: 24, marginTop: 7 },
-  redButton: { minHeight: S.touch, backgroundColor: C.red, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 12, marginTop: 14 },
-  boundaryBanner: { backgroundColor: 'rgba(255,176,32,0.08)', borderColor: C.amberBorder, borderWidth: 1, borderRadius: 10, padding: 13, marginBottom: 11 },
-  boundaryCopy: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 5 },
-  cloakCard: { backgroundColor: C.panel, borderColor: C.cyanBorder, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 11 },
-  cloakCopy: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 4 },
-  targetCard: { backgroundColor: C.panel, borderColor: C.orange, borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
-  awaitingCard: { borderColor: C.line },
-  targetHeader: { backgroundColor: 'rgba(255,122,51,0.10)', borderBottomColor: 'rgba(255,122,51,0.40)', borderBottomWidth: 1, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' },
-  awaitingHeader: { backgroundColor: C.panel2, borderBottomColor: C.line },
-  targetKicker: { flex: 1, color: C.orangeBright, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.3 },
-  mutedKicker: { color: C.muted },
-  signalAge: { color: C.muted, fontFamily: F.mono, fontSize: T.label },
-  amberText: { color: C.amber },
-  targetBody: { padding: 14 },
-  targetName: { color: C.orangeBright, fontFamily: F.displayBold, fontSize: 24, letterSpacing: 0.35 },
-  awaitingName: { color: C.muted },
-  signalState: { marginTop: 11 },
-  signalNeutral: { color: C.text, fontFamily: F.displayBold, fontSize: 22 },
-  signalStale: { color: C.amber, fontFamily: F.displayBold, fontSize: 22 },
-  signalMasked: { color: C.cyan, fontFamily: F.displayBold, fontSize: 22 },
-  signalAvailable: { marginTop: 10 },
-  distanceRow: { flexDirection: 'row', alignItems: 'baseline' },
-  bandWord: { flex: 1, color: C.orangeBright, fontFamily: F.displayBold, fontSize: 29 },
-  distance: { color: C.text, fontFamily: F.monoSemiBold, fontSize: T.body },
-  meterRow: { flexDirection: 'row', gap: 5, marginTop: 12 },
-  meterItem: { flex: 1, alignItems: 'center' },
-  meterBar: { width: '100%', height: 5, borderRadius: 3, backgroundColor: C.line },
-  meterBarActive: { backgroundColor: C.orange },
-  meterLabel: { color: C.muted, fontFamily: F.mono, fontSize: 10, marginTop: 5, textAlign: 'center' },
-  meterLabelActive: { color: C.orangeBright, fontFamily: F.monoSemiBold },
-  directionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14, paddingTop: 12, borderTopColor: C.line, borderTopWidth: 1 },
-  directionCopy: { flex: 1 },
-  directionKicker: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.1 },
-  directionValue: { color: C.text, fontFamily: F.displayBold, fontSize: 24, marginTop: 2 },
-  directionNote: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, marginTop: 6 },
-  directionChip: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1, marginRight: 10 },
-  compassDial: { width: 64, height: 64, borderRadius: 32, borderColor: C.lineStrong, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  compassArrow: { color: C.orangeBright, fontSize: 30, lineHeight: 34 },
-  claimButton: { minHeight: S.touch, backgroundColor: C.orange, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 12, marginTop: 18 },
-  disabledClaimButton: { minHeight: S.touch, backgroundColor: C.panel2, borderColor: C.line, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 12, marginTop: 18 },
-  cyanButton: { minHeight: S.touch, backgroundColor: C.cyan, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 12 },
-  filledButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: T.button, letterSpacing: 1, textAlign: 'center' },
-  disabledButtonText: { color: C.muted, fontFamily: F.displayBold, fontSize: T.button, letterSpacing: 0.7, textAlign: 'center' },
-  disabled: { opacity: 0.55 },
-  outcomeNote: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(63,214,143,0.08)', borderColor: C.greenBorder, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, marginTop: 12 },
-  outcomeNoteError: { backgroundColor: 'rgba(255,84,73,0.08)', borderColor: C.redBorder },
-  outcomeText: { flex: 1, color: C.green, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody },
-  outcomeErrorText: { marginTop: 0 },
-  outcomeDismiss: { minHeight: S.touch, justifyContent: 'center', paddingHorizontal: 8 },
-  outcomeDismissText: { color: C.text, fontFamily: F.displaySemiBold, fontSize: 12, letterSpacing: 0.8 },
   decisionBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,176,32,0.10)', borderTopColor: C.amberBorder, borderTopWidth: 1, borderBottomColor: C.amberBorder, borderBottomWidth: 1, paddingHorizontal: 13, paddingVertical: 8 },
   decisionText: { flex: 1, color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody },
   decisionButton: { minHeight: S.touch, justifyContent: 'center', backgroundColor: C.amber, borderRadius: 6, paddingHorizontal: 12 },
   decisionButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: 12.5, letterSpacing: 0.8 },
-  claimCaption: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, lineHeight: T.lineLabel, letterSpacing: 0.3, textAlign: 'center', marginTop: 8 },
-  hunterWarning: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, lineHeight: T.lineLabel, letterSpacing: 0.5, textAlign: 'center', marginTop: 13 },
-  errorText: { color: C.red, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 10 },
-  resultIcon: { width: 64, height: 64, borderRadius: 32, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 17 },
-  winnerIcon: { borderColor: C.cyan },
-  otherIcon: { borderColor: C.lineStrong },
-  resultIconText: { fontFamily: F.displayBold, fontSize: 26 },
-  resultTitle: { color: C.text, fontFamily: F.displayBold, fontSize: 26, lineHeight: 31, textAlign: 'center' },
-  winnerTitle: { color: C.cyan, fontSize: 30 },
-  resultCopy: { color: C.muted, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: 22, textAlign: 'center', marginTop: 10 },
-  targetInline: { color: C.orangeBright, fontFamily: F.bodySemiBold },
-  resultChip: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 15, paddingHorizontal: 13, paddingVertical: 7, marginTop: 18 },
-  winnerChip: { borderColor: C.cyanBorder },
-  resultChipText: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1 },
-  winnerChipText: { color: C.cyan },
-  eliminatedIcon: { width: 64, height: 64, borderRadius: 32, borderColor: C.red, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 17 },
-  eliminatedIconText: { color: C.red, fontFamily: F.displayBold, fontSize: 24 },
-  eliminatedTitle: { color: C.red, fontFamily: F.displayBold, fontSize: 30, letterSpacing: 1 },
-  restoreNote: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, letterSpacing: 0.8, marginTop: 17, textAlign: 'center' },
-  messageCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 13, marginBottom: 13 },
-  messageTitle: { color: C.text, fontFamily: F.bodyBold, fontSize: T.bodyLarge },
-  messageInput: { marginTop: 9 },
-  messageFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  charCount: { flex: 1, color: C.muted, fontFamily: F.mono, fontSize: T.label },
-  smallCyanButton: { minHeight: S.touch, justifyContent: 'center', backgroundColor: C.cyan, borderRadius: 5, paddingHorizontal: 17, paddingVertical: 8 },
-  smallCyanButtonText: { color: C.ink, fontFamily: F.displayBold, fontSize: T.button, letterSpacing: 0.8 },
-  privateCaption: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, lineHeight: T.lineLabel, letterSpacing: 0.5, marginTop: 9 },
-  eventCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 9 },
-  eventTopRow: { flexDirection: 'row', alignItems: 'center' },
-  eventTag: { flex: 1, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.1 },
-  eventTime: { color: C.muted, fontFamily: F.mono, fontSize: T.label },
-  eventTitle: { color: C.text, fontFamily: F.bodySemiBold, fontSize: T.bodyLarge, lineHeight: 21, marginTop: 7 },
-  eventBody: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 4 },
-  emptyText: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, textAlign: 'center', marginVertical: 28 },
-  sharingHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  sharingTitle: { color: C.text, fontFamily: F.bodySemiBold, fontSize: 16 },
-  sharingState: { color: C.cyan, fontFamily: F.bodyMedium, fontSize: T.body, marginTop: 3 },
-  sharingDetails: { marginTop: 9 },
-  sharingFact: { color: C.text, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 4 },
-  telemetryNote: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, marginTop: 10 },
-  warningCopy: { color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 11 },
-  telemetryCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 14, marginTop: 12 },
-  telemetryKicker: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.2 },
-  telemetryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 11 },
-  telemetryCell: { flexGrow: 1, flexBasis: '45%', minHeight: 60, backgroundColor: C.ink, borderColor: C.line, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 8 },
-  telemetryValue: { fontFamily: F.displayBold, fontSize: T.bodyLarge, textAlign: 'center' },
-  telemetryLabel: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, letterSpacing: 0.6, marginTop: 3 },
-  sharingFootnote: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, textAlign: 'center', marginTop: 14 },
-  ghostButton: { minHeight: S.touch, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, paddingHorizontal: 12, marginTop: 14 },
-  ghostButtonText: { color: C.text, fontFamily: F.displaySemiBold, fontSize: T.button, letterSpacing: 0.8, textAlign: 'center' },
-  identityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  avatar: { width: 46, height: 46, borderRadius: 6, backgroundColor: C.panel, borderColor: C.cyanBorder, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  avatarText: { color: C.cyan, fontFamily: F.displayBold, fontSize: 17 },
-  characterName: { color: C.text, fontFamily: F.displayBold, fontSize: 22 },
-  characterBio: { color: C.muted, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, marginTop: 2 },
-  sheetLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.1, marginBottom: 9 },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  statCard: { minWidth: 94, flexGrow: 1, backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 8, alignItems: 'center', paddingHorizontal: 12, paddingVertical: 13 },
-  statValue: { fontFamily: F.displayBold, fontSize: 23 },
-  statLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 0.7, marginTop: 3, textAlign: 'center' },
-  editSection: { marginTop: 22 },
-  field: { marginBottom: 12 },
-  inputLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1, marginBottom: 5 },
-  input: { minHeight: S.touch, backgroundColor: C.ink, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, color: C.text, fontFamily: F.body, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10 },
-  bioInput: { minHeight: 76, textAlignVertical: 'top' },
 })

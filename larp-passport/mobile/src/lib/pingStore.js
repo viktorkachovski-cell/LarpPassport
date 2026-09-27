@@ -286,7 +286,7 @@ export function createPingStore({ db, now = () => Date.now(), ...options } = {})
   //
   // send(pings) must resolve with the parsed ingest_pings response, or throw
   // an Error (optionally carrying .code) on transport/server failure.
-  // onBatch(data) fires after each accepted batch (event/profile piggyback).
+  // onBatch(data) fires after each accepted batch (profile hint).
   function drain({ gameId, send, onBatch }) {
     if (draining.has(gameId)) return draining.get(gameId)
     const work = (async () => {

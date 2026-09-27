@@ -1,27 +1,27 @@
 import { useState } from 'react'
+import { useAction } from '../lib/useAction'
+import Outcome from './Outcome'
 import TableScroll from './TableScroll'
 
 const KEY_RE = /^[a-z0-9_]{1,32}$/
 
 export default function TemplatePanel({ game, hasCharacters, updateGame }) {
   const [stats, setStats] = useState((game.template?.stats ?? []).map((s) => ({ ...s })))
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const { busy, outcome, setOutcome, clear, run } = useAction()
 
   const patch = (i, p) => setStats((prev) => prev.map((s, j) => (j === i ? { ...s, ...p } : s)))
   const remove = (i) => setStats((prev) => prev.filter((_, j) => j !== i))
   const add = () => setStats((prev) => [...prev, { key: '', label: '', type: 'number', default: 0, min: 0, max: 10, player_editable: false }])
 
-  async function save() {
+  function save() {
     if (busy) return
-    setError(''); setSaved(false)
+    const invalid = (text) => setOutcome({ tone: 'error', text })
     const keys = new Set()
     const cleaned = []
     for (const s of stats) {
       const key = (s.key ?? '').trim()
-      if (!KEY_RE.test(key)) { setError(`"${key || '(empty)'}" is not a valid key — lowercase letters, digits and _ only.`); return }
-      if (keys.has(key)) { setError(`Duplicate key "${key}".`); return }
+      if (!KEY_RE.test(key)) { invalid(`"${key || '(empty)'}" is not a valid key — lowercase letters, digits and _ only.`); return }
+      if (keys.has(key)) { invalid(`Duplicate key "${key}".`); return }
       keys.add(key)
       const out = { key, label: (s.label ?? '').trim() || key, type: s.type, player_editable: !!s.player_editable }
       if (s.type === 'number') {
@@ -33,12 +33,7 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
       }
       cleaned.push(out)
     }
-    setBusy(true)
-    try {
-      const err = await updateGame({ template: { stats: cleaned } })
-      if (err) setError(err.message)
-      else setSaved(true)
-    } catch (err) { setError(err.message) } finally { setBusy(false) }
+    run(() => updateGame({ template: { stats: cleaned } }), { success: 'Template saved.' })
   }
 
   return (
@@ -75,13 +70,7 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
         <button onClick={add}>Add stat</button>
         <button className="primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save template'}</button>
       </div>
-      {saved && (
-        <div className="outcome outcome-ok" role="status">
-          <span>Template saved.</span>
-          <button type="button" className="ghost" onClick={() => setSaved(false)} aria-label="Dismiss message">Dismiss</button>
-        </div>
-      )}
-      {error && <p className="error" role="alert">{error}</p>}
+      <Outcome outcome={outcome} onDismiss={clear} />
     </div>
   )
 }
