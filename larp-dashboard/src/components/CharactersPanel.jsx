@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatAge } from '../lib/time'
+import { unwrap } from '../lib/unwrap'
 import { useAction } from '../lib/useAction'
 import Outcome from './Outcome'
 import TableScroll from './TableScroll'
@@ -42,12 +43,14 @@ export default function CharactersPanel({ game, characters, members, factions, u
     })
   }
 
-  async function showAudit(c) {
+  function showAudit(c) {
     if (auditFor === c.id) { setAuditFor(null); return }
-    const { data } = await supabase.from('character_changes').select('*').eq('character_id', c.id)
-      .order('changed_at', { ascending: false }).limit(25)
-    setAudit(data ?? [])
-    setAuditFor(c.id)
+    run(async () => {
+      const rows = unwrap(await supabase.from('character_changes').select('*').eq('character_id', c.id)
+        .order('changed_at', { ascending: false }).limit(25))
+      setAudit(rows ?? [])
+      setAuditFor(c.id)
+    }, { key: c.id, failure: (reason) => `History for ${c.name} failed to load: ${reason}` })
   }
 
   function diffText(row) {
