@@ -285,12 +285,17 @@ npm run android
 or a UI/authentication smoke test, but it must not be treated as proof that
 background sharing works.
 
-Build an installable Android preview APK with:
+Time Hunt is its own app (**LARP Time Hunt**, `com.larppassport.timehunt`); the
+default mobile build is the Pirate app. Build an installable Time Hunt preview
+APK with:
 
 ```powershell
 npx eas-cli login
-npx eas-cli build -p android --profile preview
+npx eas-cli build -p android --profile preview-hunt
 ```
+
+For `npm run android` or any other local build, set `$env:APP_VARIANT='hunt'`
+first. See the [mobile README](../larp-passport/mobile/README.md).
 
 The hosted Supabase backend is already internet-accessible. Do not expose a
 development laptop port or add a VPS for mobile testing.

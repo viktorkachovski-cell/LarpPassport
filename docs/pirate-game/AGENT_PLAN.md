@@ -6,14 +6,14 @@ Game date: Saturday 2026-10-31, 16:30 to 23:00. Test run, 12 to 16 players, 2 GM
 
 **This file is a plan, not an implementation or deployment record.** Every task card starts unchecked. Rules are defined in [GAME_GUIDE.md](GAME_GUIDE.md); where this brief and the guide disagree on a rule, the guide wins and the disagreement must be reported to the owner. Do not update `docs/SUPABASE_ARCHITECTURE.md` until a change is applied and verified; that file records verified state only.
 
-Owner clarification, 2026-10-07: the guide's `public.games.phase` is authoritative; Pirate-specific pause and PvP controls remain in `private.pirate_games`. Treasure coordinates may change in `setup` or `charting`, then lock before `cursed` enables readings. The dedicated Pirate APK uses the existing Android package ID and replaces the regular app on a phone. The guide calls for three Safe Harbours. These clarifications supersede older task-card wording below where it has not yet been implemented.
+Owner clarification, 2026-10-07: the guide's `public.games.phase` is authoritative; Pirate-specific pause and PvP controls remain in `private.pirate_games`. Treasure coordinates may change in `setup` or `charting`, then lock before `cursed` enables readings. The dedicated Pirate APK uses the existing Android package ID and replaces the regular app on a phone. Owner decision, 2026-10-07 (later): Time Hunt ships as a separate app with its own package ID; see section 8. The guide calls for three Safe Harbours. These clarifications supersede older task-card wording below where it has not yet been implemented.
 
 ---
 
 ## 1. Instructions for the implementing agent
 
 1. Work in the `LarpPassport` repository. Check the working tree and read any `AGENTS.md` before editing.
-2. Read, in order: [GAME_GUIDE.md](GAME_GUIDE.md), this brief, [../SUPABASE_ARCHITECTURE.md](../SUPABASE_ARCHITECTURE.md), [../TIME_HUNT_GAMEPLAY.md](../TIME_HUNT_GAMEPLAY.md), [../RELEASE.md](../RELEASE.md), and [../AGENT_PLAN_UI_BONUSES_QR_DIRECTION.md](../AGENT_PLAN_UI_BONUSES_QR_DIRECTION.md) section 3 (its invariants still apply).
+2. Read, in order: [GAME_GUIDE.md](GAME_GUIDE.md), this brief, [../SUPABASE_ARCHITECTURE.md](../SUPABASE_ARCHITECTURE.md), [../TIME_HUNT_GAMEPLAY.md](../TIME_HUNT_GAMEPLAY.md), [../RELEASE.md](../RELEASE.md), and [../TIME_HUNT_BACKLOG.md](../TIME_HUNT_BACKLOG.md) section 1 (its invariants still apply).
 3. Compare the current code with the baseline. For every SQL function you touch or call, find its **latest** definition across migrations; later `create or replace` definitions win.
 4. Implement one task card at a time in the delivery order (section 10). Each card is a separate commit with its tests.
 5. **Existing** marks inspected code. **Proposed** marks names that do not exist yet. Never call a proposed RPC from a client before its migration and pgTAP tests exist and pass.
@@ -72,7 +72,7 @@ The four-week release freeze is **waived by the owner** for this test run. A sho
 
 ## 4. Invariants
 
-All invariants in `AGENT_PLAN_UI_BONUSES_QR_DIRECTION.md` section 3 and in the `larp-passport-supabase` / `larp-passport-mobile` skills still apply. In particular: never edit an applied migration; RLS and policies in the same migration as each new table; schema-qualify everything with `search_path = ''`; the location queue data-loss invariant; Realtime publication stays at its current five tables.
+All invariants in `TIME_HUNT_BACKLOG.md` section 1 and in the `larp-passport-supabase` / `larp-passport-mobile` skills still apply. In particular: never edit an applied migration; RLS and policies in the same migration as each new table; schema-qualify everything with `search_path = ''`; the location queue data-loss invariant; Realtime publication stays at its current five tables.
 
 Pirate-specific invariants:
 
@@ -91,101 +91,9 @@ Pirate-specific invariants:
 
 ## 5. Architecture
 
-### 5.1 Data model (Proposed, schema `private`)
+### 5.1 Data model
 
-```sql
-private.pirate_games (
-  game_id uuid primary key references public.games(id) on delete cascade,
-  paused boolean not null default false,
-  pvp_enabled boolean not null default true,           -- GM kill switch, independent of phase
-  treasure_geog extensions.geography(Point, 4326),     -- null until set
-  treasure_value integer not null default 40 check (treasure_value between 0 and 1000),
-  hmac_secret bytea not null default extensions.gen_random_bytes(32),
-  settings jsonb not null default '{}'::jsonb,          -- tunables, see 5.4
-  updated_at timestamptz not null default now()
-);
-
-private.pirate_sites (
-  zone_id uuid primary key references public.zones(id) on delete cascade,
-  game_id uuid not null references public.games(id) on delete cascade,
-  kind text not null check (kind in ('riddle','cache','lighthouse','harbour','treasure')),
-  reward text check (reward in ('bearing','oath')),                 -- riddle only
-  oath_index smallint check (oath_index between 1 and 4),          -- reward='oath' only
-  oath_word text check (char_length(oath_word) between 1 and 40),  -- reward='oath' only
-  prompt text check (char_length(prompt) <= 500),                  -- question shown on site
-  answer_hash text,                                                -- riddle and cache only
-  check (kind <> 'riddle' or reward is not null),
-  check (reward is distinct from 'oath' or (oath_index is not null and oath_word is not null))
-);
-
-private.pirate_claims (
-  id uuid primary key default gen_random_uuid(),
-  game_id uuid not null, zone_id uuid not null, faction_id uuid not null,
-  claimed_by uuid not null references public.profiles(id),
-  rank smallint,                          -- caches only
-  via_gm boolean not null default false,
-  voided_at timestamptz, voided_by uuid, void_reason text,
-  created_at timestamptz not null default now()
-);
-create unique index on private.pirate_claims (zone_id, faction_id) where voided_at is null;
-
-private.pirate_attempts (            -- wrong-answer rate limiting
-  game_id uuid, zone_id uuid, faction_id uuid, profile_id uuid,
-  ok boolean, created_at timestamptz default now()
-);
-
-private.pirate_ledger (
-  id bigint generated always as identity primary key,
-  game_id uuid not null, faction_id uuid not null,
-  currency text not null check (currency in ('bearing','doubloon')),
-  delta integer not null check (delta <> 0),
-  source text not null check (source in ('riddle','cache','parley','treasure','gm')),
-  ref_id uuid,                         -- claim, parley session or correction id
-  reason text,                         -- required when source='gm'
-  actor_id uuid not null references public.profiles(id),
-  created_at timestamptz not null default now(),
-  check (source <> 'gm' or char_length(trim(reason)) between 3 and 300)
-);
-
-private.pirate_readings (
-  id uuid primary key default gen_random_uuid(),
-  game_id uuid not null, zone_id uuid not null, faction_id uuid not null,
-  shards smallint not null check (shards between 1 and 5),   -- clamped level
-  centre_deg smallint not null check (centre_deg between 0 and 359),
-  half_width_deg smallint not null,
-  taken_by uuid not null, voided_at timestamptz, voided_by uuid, void_reason text,
-  created_at timestamptz not null default now()
-);
-create unique index on private.pirate_readings (zone_id, faction_id, shards) where voided_at is null;
-
-private.pirate_parleys (
-  id uuid primary key default gen_random_uuid(),
-  game_id uuid not null,
-  target_faction uuid not null, target_profile uuid not null,
-  attacker_faction uuid, attacker_profile uuid,
-  code text not null, code_expires_at timestamptz not null,
-  state text not null check (state in
-    ('open','joined','yielded','fighting','awaiting_choice','resolved','disputed','expired','voided')),
-  choice text check (choice in ('yield','fight')),
-  target_report uuid, attacker_report uuid,          -- reported winner faction
-  winner_faction uuid, plunder text check (plunder in ('bearing','doubloon')),
-  far_apart boolean not null default false,          -- GPS sanity flag, never a block
-  resolved_by uuid, resolution_reason text,
-  voided_at timestamptz, voided_by uuid, void_reason text,
-  created_at timestamptz not null default now(), updated_at timestamptz not null default now()
-);
-
-private.pirate_mercy (
-  game_id uuid, faction_id uuid, until_at timestamptz not null, primary key (game_id, faction_id)
-);
-
-private.pirate_treasure_awards (
-  id uuid primary key, game_id uuid not null, faction_id uuid not null,
-  awarded_by uuid not null, voided_at timestamptz,
-  voided_by uuid, void_reason text, created_at timestamptz default now()
-);
-create unique index on private.pirate_treasure_awards (game_id) where voided_at is null;
-```
+The schema lives in `supabase/migrations/20261007144147_pirate_mode_foundation.sql` (all Pirate tables are in `private`) and is not repeated here.
 
 Add nullable `public.games.phase` with a constraint allowing the eight Pirate phases. It remains null for ordinary and Time Hunt games. Pirate mode is still identified by a `private.pirate_games` row. The foundation migration uses game-scoped foreign keys for sites and crews, so cross-game claims and awards are rejected by the database. All Pirate tables: RLS enabled, no grants to `anon` or `authenticated` (private schema, RPC access only), cascades from `games` so retention needs no new cron job. Store answers as `encode(extensions.digest(lower(trim(answer)) || ':' || zone_id::text, 'sha256'), 'hex')`; normalise both sides identically: lowercase, trim, collapse internal whitespace, strip punctuation. The game is English only (O3, decided), so no transliteration or diacritic handling.
 
@@ -280,12 +188,14 @@ Tests (Vitest): PiratePanel hidden for non-pirate games; readiness failures rend
 
 ## 8. Mobile task cards (`larp-passport/mobile`)
 
-New code goes in new files under `M/src/pirate/` (components) and `M/src/lib/pirate*.js` (pure logic) with their own `StyleSheet` built from theme tokens. Do **not** split `GameScreen.js`; add one mode switch that renders the pirate tab set when `get_pirate_state` says `is_pirate`, and hides the Time Hunt tab. Keep the Sharing/consent tab, sync status and event delivery untouched.
+New code goes in new files under `M/src/pirate/` (components) and `M/src/lib/pirate*.js` (pure logic) with their own `StyleSheet` built from theme tokens. Keep the Sharing/consent tab, sync status and event delivery untouched.
+
+**App split (implemented 2026-10-07).** One Expo project builds two apps. `APP_VARIANT` (`pirate` by default, or `hunt`) selects the name and Android package in `app.config.js`, and `metro.config.js` resolves `*.pirate.js` / `*.hunt.js` before `*.js`. `GameScreen.pirate.js` and `GameScreen.hunt.js` share `screens/game/GameFrame.js` (layout and the character, logbook and sharing tabs) and `screens/game/session.js` (snapshot, Realtime, recovery polling, sharing). `lib/brand.<variant>.js` holds the palette and app-specific copy. Neither bundle contains the other game's screens; each app lists only its own games.
 
 **Exactly one new native module is approved: `react-native-svg`** (owner decision 2026-10-07), for the compass only (P-M0, P-M3). Nothing else native: no `react-native-reanimated`, no Skia, no `expo-sensors`, no Lottie. The pirate APK is a separate build (O4), so the native rebuild is expected.
 
 - [ ] **P-M0 Install and prove `react-native-svg` (do this first, in week one).** Run `npx expo install react-native-svg` from `larp-passport/mobile` (lets Expo pick the SDK 53 version, 15.11.2 at the time of writing; never hand-pin), then `npx expo-doctor@latest`. Render a trivial `<Svg>` behind a dev-only flag, then produce an **EAS preview APK** and confirm it boots on a real device. This catches the known autolinking / `babel-preset-expo` boot-crash pattern while there is still time; do not leave the first native build to game week. Jest: add the `react-native-svg` mock (or a manual mock under `__mocks__`) so existing suites keep running.
-- [ ] **P-M1 Pirate theme.** Turn `theme.js` into a small theme registry (`tachyon` default, `pirate`) selected at bundle time by `EXPO_PUBLIC_APP_THEME` (absent = `tachyon`, so existing builds and CI are unchanged). Export the same `C`/`F` names so no call sites change. Pirate palette: parchment/ink on dark sea, lantern amber accent, blood red for danger; keep the existing contrast rules (text ≥ 4.5:1, borders ≥ 3:1). Optional pirate display font via an `@expo-google-fonts/*` package installed with `npx expo install` (JS + asset only); body text stays IBM Plex for legibility. Add the env var to EAS environments only for the pirate build profile.
+- [ ] **P-M1 Pirate theme.** Palette per app in `lib/brand.pirate.js` / `lib/brand.hunt.js`, selected at bundle time by `APP_VARIANT` (superseded the original `EXPO_PUBLIC_APP_THEME` switch). Export the same `C`/`F` names so no call sites change. Pirate palette: parchment/ink on dark sea, lantern amber accent, blood red for danger; keep the existing contrast rules (text ≥ 4.5:1, borders ≥ 3:1). Optional pirate display font via an `@expo-google-fonts/*` package installed with `npx expo install` (JS + asset only); body text stays IBM Plex for legibility. 
 - [ ] **P-M2 State hook.** `usePirateState(gameId)`: calls `get_pirate_state`, refreshes on relevant `game_events` types and with the existing foreground/visibility polling rules (no polling in background, 30–60 s fallback). Pure reducer in `lib/pirateState.js` with Jest tests.
 - [ ] **P-M3 Compass tab (`react-native-svg` + built-in `Animated`).**
   - **Structure.** `M/src/pirate/CompassDial.js`, a memoized component isolated like `<Countdown/>`, so heading updates never rerender the rest of `GameScreen`. Inside it, one `<Svg>` with two layers:
@@ -369,8 +279,8 @@ Done per card: code changed, tests added and run green, edge cases above covered
 | O1 | Treasure point and 6 lighthouse locations (use S01), still to be decided | P-D1 data entry, rehearsal |
 | O2 | Oath words 1–4, riddle prompts and answers, cache codes, still to be decided | Data entry |
 | O3 | ~~Answer normalisation~~ **Decided:** English only; lowercase, trim, whitespace, punctuation | Closed |
-| O4 | ~~Shared or separate APK~~ **Decided:** separate pirate APK built with `EXPO_PUBLIC_APP_THEME=pirate` in a dedicated EAS `pirate` profile | Closed |
-| O6 | **Decided:** Pirate APK replaces the regular app on the same phone, using the same Android package id | P-M1 build profile |
+| O4 | ~~Shared or separate APK~~ **Decided:** separate apps. `APP_VARIANT=pirate` (default; EAS `preview`/`production`) builds the Pirate app; `APP_VARIANT=hunt` (EAS `preview-hunt`/`production-hunt`) builds Time Hunt | Closed |
+| O6 | **Decided:** Pirate APK keeps `com.larppassport.app`, so it replaces an installed LARP Passport. Time Hunt uses `com.larppassport.timehunt` and installs beside it | Closed |
 | O5 | Printed chart design and scale | Rehearsal |
 
 **Out of scope for this test run:** QR codes and camera, in-app map for players, moving treasure, Ghost Fleet player mechanics, app-enforced oath trading, items (spyglass, rum, parrot), iOS.

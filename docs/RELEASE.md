@@ -6,8 +6,9 @@
 `main`. It fails the check when any of the following fails:
 
 - dashboard: `npm ci`, `npm test` (vitest), `npm run build`
-- mobile: `npm ci`, `npx expo-doctor@latest`, `npm test` (location queue
-  suite), `npx expo export --platform android`
+- mobile: `npm ci`, `npx expo-doctor@1.20.4`, `npm test`, and
+  `npx expo export --platform android` for both apps (`APP_VARIANT=pirate`
+  and `APP_VARIANT=hunt`)
 - database: `supabase start` + `supabase test db supabase/tests/database`
   (the full pgTAP suite against a clean local stack)
 
@@ -25,7 +26,8 @@ the gate.
 1. Confirm the gate is green on `main`.
 2. Tag the exact commit: `git tag game-2026-v1.0.0 && git push origin game-2026-v1.0.0`
 3. `.github/workflows/release.yml` re-runs the full gate, then builds the
-   production APK on EAS and publishes a GitHub Release containing:
+   production **Pirate** APK on EAS (`production` profile; Time Hunt uses
+   `production-hunt` and is built manually) and publishes a GitHub Release containing:
    - Git commit SHA and tag
    - app version and Android build number
    - latest database migration filename
