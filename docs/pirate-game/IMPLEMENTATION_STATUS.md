@@ -20,6 +20,7 @@ Updated 2026-10-07. Source status for `codex/pirate-game`, based on `origin/main
 
 - Dashboard: 51 Vitest tests pass; Vite production build succeeds.
 - Mobile: 78 Jest tests pass; Expo Doctor previously reported 18/18 checks. Android exports with the latest Parley UI pass both with and without Hermes bytecode. These exports are not APK or device tests.
+- A standalone local arm64 release APK built successfully with the Pirate theme and public Supabase configuration. APK metadata confirms `com.larppassport.app`, min SDK 24, target SDK 35, an embedded JavaScript bundle and a valid v2 signature. It is signed with the generated local Android debug certificate, so it may require removing an EAS-signed installation before installing. It has not booted on a device.
 - PostgreSQL syntax parser: 31 PL/pgSQL functions across the 12 new migrations parse. This does not validate catalog references, policies, extension behavior, or transactions.
 - Simulator: four Python tests pass. Its area estimates are approximate planning inputs.
 
@@ -27,6 +28,6 @@ Updated 2026-10-07. Source status for `codex/pirate-game`, based on `origin/main
 
 - Run all pgTAP suites against an isolated Postgres/PostGIS/Supabase database, including concurrent joins and transfers. No local Docker, PostgreSQL, or Supabase CLI runtime is available in this checkout. Do not apply the migrations to production as a substitute for an isolated test.
 - Reconcile the hosted migration history: the hosted latest version is `20260907185433_hunt_direction_bearing`, while the repository file is `20260907180000_hunt_direction_bearing.sql`. No Pirate migration has been applied to the hosted project.
-- The SVG probe EAS build `cb7b5e30-94c3-45b5-b4c7-9be4e1d2cbf1` was still queued at the last check. It is a native dependency probe, not a completed Pirate APK. A final APK and real-device boot/gameplay QA remain.
+- The earlier SVG probe EAS build `cb7b5e30-94c3-45b5-b4c7-9be4e1d2cbf1` was still queued at the last check. The owner declined uploading the reviewed Pirate source to EAS, so no final EAS build was submitted. The local APK is a QA artifact; real-device boot/gameplay QA and a distribution signing plan remain.
 - Complete GM correction tools for claims, balances and readings, richer ledger/claim/reading drill-down, and remaining documented edge-case and concurrency tests. Review site placement with the simulator before live setup.
 - Deploy only after database tests and migration-history reconciliation, then verify the exact Vercel deployment and APK against the same backend. No Vercel deployment or production Supabase write has occurred.
