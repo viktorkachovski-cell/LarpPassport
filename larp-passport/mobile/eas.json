@@ -5,6 +5,11 @@
       "distribution": "internal",
       "android": { "buildType": "apk" }
     },
+    "pirate": {
+      "extends": "preview",
+      "environment": "production",
+      "env": { "EXPO_PUBLIC_APP_THEME": "pirate" }
+    },
     "production": {
       "android": { "buildType": "apk" }
     }

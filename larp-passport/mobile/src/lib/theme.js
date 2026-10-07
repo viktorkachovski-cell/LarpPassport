@@ -1,4 +1,4 @@
-export const C = {
+const tachyon = {
   ink: '#0A0E15',
   panel: '#131A26',
   panel2: '#1B2434',
@@ -17,6 +17,29 @@ export const C = {
   green: '#3FD68F',
   greenBorder: '#2B6B4F',
 }
+
+const pirate = {
+  ink: '#0D1C24',
+  panel: '#142A32',
+  panel2: '#1E3540',
+  line: '#48636A',
+  lineStrong: '#83A6A5',
+  text: '#F4E8CB',
+  muted: '#C8C6B3',
+  cyan: '#80DDD0',
+  cyanBorder: '#5C9993',
+  orange: '#F3AF69',
+  orangeBright: '#FFC482',
+  amber: '#FFD080',
+  amberBorder: '#A57C42',
+  red: '#FF8279',
+  redBorder: '#B35D57',
+  green: '#96D9A7',
+  greenBorder: '#59956D',
+}
+
+// Expo inlines EXPO_PUBLIC_* at bundle time. The default keeps existing builds.
+export const C = process.env.EXPO_PUBLIC_APP_THEME === 'pirate' ? pirate : tachyon
 
 export const F = {
   displayMedium: 'ChakraPetch_500Medium',
