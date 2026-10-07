@@ -93,7 +93,7 @@ Pirate-specific invariants:
 
 ### 5.1 Data model
 
-The schema lives in `supabase/migrations/20261007144147_pirate_game.sql` (all Pirate tables are in `private`) and is not repeated here.
+The schema lives in `supabase/migrations/20261007181043_pirate_game.sql` (all Pirate tables are in `private`) and is not repeated here.
 
 Add nullable `public.games.phase` with a constraint allowing the eight Pirate phases. It remains null for ordinary and Time Hunt games. Pirate mode is still identified by a `private.pirate_games` row. The foundation migration uses game-scoped foreign keys for sites and crews, so cross-game claims and awards are rejected by the database. All Pirate tables: RLS enabled, no grants to `anon` or `authenticated` (private schema, RPC access only), cascades from `games` so retention needs no new cron job. Store answers as `encode(extensions.digest(lower(trim(answer)) || ':' || zone_id::text, 'sha256'), 'hex')`; normalise both sides identically: lowercase, trim, collapse internal whitespace, strip punctuation. The game is English only (O3, decided), so no transliteration or diacritic handling.
 
