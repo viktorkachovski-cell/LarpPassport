@@ -24,11 +24,12 @@ alter table private.pirate_games
   alter column treasure_value drop not null,
   alter column treasure_value drop default,
   add column treasure_basis integer check (treasure_basis >= 0),
-  add column treasure_frozen_at timestamptz,
+  add column treasure_frozen_at timestamptz;
+update private.pirate_games set treasure_value = null;
+alter table private.pirate_games
   add constraint pirate_games_treasure_frozen_check check (
     (treasure_frozen_at is null and treasure_basis is null and treasure_value is null)
     or (treasure_frozen_at is not null and treasure_basis is not null and treasure_value is not null));
-update private.pirate_games set treasure_value = null where treasure_frozen_at is null;
 
 create or replace function public.pirate_set_site(
   g uuid, zone_id uuid, kind text, reward text,
