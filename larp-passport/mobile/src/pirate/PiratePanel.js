@@ -5,7 +5,7 @@ import { C, F, S, T } from '../lib/theme'
 import { pirateRequestId } from '../lib/pirateRequestId'
 import { CompassDial } from './CompassDial'
 
-const ordinal = (n) => ['first', 'second', 'third', 'fourth'][n - 1] ?? `#${n}`
+const ordinal = (n) => ['first', 'second', 'third', 'fourth', 'fifth'][n - 1] ?? `#${n}`
 
 function claimMessage(result) {
   if (!result) return ''
@@ -94,7 +94,7 @@ export function PiratePanel({ mode, state, error, gameId, refresh }) {
         {mode === 'chart' ? <>
           <Text style={styles.caption}>CURRENT SITE</Text>
           <Text style={styles.body}>{site?.site_name ?? 'No marked site in range.'}</Text>
-          {!!site?.reward && <Text style={styles.body}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}, plus doubloons for the first four crews to solve it (20 / 15 / 10 / 5).</Text>}
+          {!!site?.reward && <Text style={styles.body}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}, plus doubloons by the order crews answer it (20 / 15 / 10 / 5 / 5).</Text>}
           {!!site?.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
           {site?.claimed_by_my_crew && <Text style={styles.warning}>Your crew has claimed this site.</Text>}
           {site?.kind === 'riddle' && !site.claimed_by_my_crew && <>

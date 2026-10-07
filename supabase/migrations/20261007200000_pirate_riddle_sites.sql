@@ -1,14 +1,34 @@
--- Owner decision 2026-10-07: the Pirate map has only riddles and lighthouses.
--- 5 bearing riddles, 4 oath riddles and 3 lighthouses. Caches, Safe Harbours
--- and the treasure site are gone. A riddle gives its configured reward
--- (bearing shard or oath word) and doubloons by the order in which crews
--- solve it: 20 / 15 / 10 / 5. The secret treasure point stays on
--- private.pirate_games for compass readings and the GM award.
+-- Owner decisions 2026-10-07 (game guide v3.3, plus the owner's instruction to
+-- drop the treasure site kind):
+--   * five crews of up to four;
+--   * the map has only riddles and lighthouses: 5 bearing riddles, 4 oath
+--     riddles, 3 reading-only lighthouses. Caches, Safe Harbours and the
+--     treasure site kind are gone; the treasure stays a secret GM-set point
+--     on private.pirate_games, used by the compass and staffed by the NPC;
+--   * a solved riddle gives its configured shard or oath word plus doubloons
+--     by the order of correct answers: 20 / 15 / 10 / 5 / 5;
+--   * the treasure is worth round(0.40 x the highest crew doubloon balance),
+--     frozen once on the first entry into `hoard`.
 
 drop index private.pirate_sites_one_treasure_idx;
 alter table private.pirate_sites drop constraint pirate_sites_kind_check;
 alter table private.pirate_sites
   add constraint pirate_sites_kind_check check (kind in ('riddle', 'lighthouse'));
+
+alter table private.pirate_claims drop constraint pirate_claims_rank_check;
+alter table private.pirate_claims
+  add constraint pirate_claims_rank_check check (rank between 1 and 5);
+
+-- treasure_value is null until the first `hoard` opening freezes it.
+alter table private.pirate_games
+  alter column treasure_value drop not null,
+  alter column treasure_value drop default,
+  add column treasure_basis integer check (treasure_basis >= 0),
+  add column treasure_frozen_at timestamptz,
+  add constraint pirate_games_treasure_frozen_check check (
+    (treasure_frozen_at is null and treasure_basis is null and treasure_value is null)
+    or (treasure_frozen_at is not null and treasure_basis is not null and treasure_value is not null));
+update private.pirate_games set treasure_value = null where treasure_frozen_at is null;
 
 create or replace function public.pirate_set_site(
   g uuid, zone_id uuid, kind text, reward text,
@@ -147,8 +167,8 @@ begin
   end if;
 
   select count(*)::integer into crew_count from public.factions where game_id = g;
-  if crew_count <> 4 then
-    issues := pg_catalog.array_append(issues, 'Exactly four crews are required');
+  if crew_count <> 5 then
+    issues := pg_catalog.array_append(issues, 'Exactly five crews are required');
   end if;
   select count(*)::integer into missing_crew_count
   from public.game_players gp
@@ -163,10 +183,10 @@ begin
     left join public.characters c on c.faction_id = f.id and c.game_id = g and not c.is_npc
     left join public.game_players gp on gp.game_id = g and gp.profile_id = c.user_id and gp.role = 'player'
     where f.game_id = g
-    group by f.id having count(gp.profile_id) not between 3 and 4
+    group by f.id having count(gp.profile_id) not between 1 and 4
   ) wrong_sizes;
   if wrong_size_count > 0 then
-    issues := pg_catalog.array_append(issues, 'Each crew needs three or four players');
+    issues := pg_catalog.array_append(issues, 'Each crew needs one to four players');
   end if;
 
   select count(*) filter (where s.kind = 'riddle' and s.reward = 'bearing'),
@@ -224,7 +244,8 @@ begin
 end;
 $$;
 
--- A solved riddle gives its configured reward plus doubloons by solve order.
+-- A solved riddle gives its configured reward plus doubloons by the order of
+-- correct answers.
 create or replace function public.claim_site(g uuid, answer text, idem uuid)
 returns jsonb
 language plpgsql
@@ -324,9 +345,9 @@ begin
 
   select count(*)::integer + 1 into solve_rank from private.pirate_claims claim
   where claim.zone_id = site.zone_id and claim.voided_at is null;
-  payout := coalesce((array[20, 15, 10, 5])[solve_rank], 0);
+  payout := coalesce((array[20, 15, 10, 5, 5])[solve_rank], 0);
   insert into private.pirate_claims (game_id, zone_id, faction_id, claimed_by, rank)
-  values (g, site.zone_id, crew_id, caller, case when solve_rank <= 4 then solve_rank end)
+  values (g, site.zone_id, crew_id, caller, case when solve_rank <= 5 then solve_rank end)
   returning id into claim_id;
   if payout > 0 then
     insert into private.pirate_ledger (game_id, faction_id, currency, delta, source, ref_id, actor_id)
@@ -370,5 +391,292 @@ begin
     return 'treasure_exclusion';
   end if;
   return null;
+end;
+$$;
+
+-- The GM sets only the secret point; its value is frozen at `hoard`.
+drop function public.pirate_set_treasure(uuid, double precision, double precision, integer);
+create function public.pirate_set_treasure(g uuid, lat double precision, lng double precision)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare caller uuid := auth.uid();
+begin
+  if caller is null then
+    raise exception using errcode = '28000', message = 'not authenticated';
+  end if;
+  if g is null or lat is null or lng is null
+     or lat < -90 or lat > 90 or lng < -180 or lng > 180 then
+    raise exception using errcode = '22023', message = 'invalid treasure point';
+  end if;
+  if not private.is_game_gm(g, caller) then
+    raise exception using errcode = '42501', message = 'GM access required';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('pirate:' || g::text, 0));
+  if (select phase from public.games where id = g) not in ('setup', 'charting')
+     or exists (select 1 from private.pirate_readings where game_id = g) then
+    raise exception using errcode = '55000', message = 'treasure point is locked';
+  end if;
+  update private.pirate_games
+  set treasure_geog = extensions.st_setsrid(extensions.st_makepoint(lng, lat), 4326)::extensions.geography,
+      updated_at = now()
+  where game_id = g;
+  if not found then
+    raise exception using errcode = '55000', message = 'Pirate mode is not enabled';
+  end if;
+  return pg_catalog.jsonb_build_object('status', 'ok');
+end;
+$$;
+revoke all on function public.pirate_set_treasure(uuid, double precision, double precision) from public, anon;
+grant execute on function public.pirate_set_treasure(uuid, double precision, double precision) to authenticated;
+
+create or replace function public.pirate_set_phase(g uuid, next_phase text, message text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller uuid := auth.uid();
+  phases constant text[] := array['setup', 'charting', 'cursed', 'truce', 'hunt', 'hoard', 'recall', 'finished'];
+  current_phase text;
+  current_index integer;
+  next_index integer;
+  clean_message text := pg_catalog.btrim(message);
+begin
+  if caller is null then
+    raise exception using errcode = '28000', message = 'not authenticated';
+  end if;
+  if g is null or next_phase is null then
+    raise exception using errcode = '22023', message = 'game and phase are required';
+  end if;
+  if not private.is_game_gm(g, caller) then
+    raise exception using errcode = '42501', message = 'GM access required';
+  end if;
+  next_index := pg_catalog.array_position(phases, next_phase);
+  if next_index is null then
+    raise exception using errcode = '22023', message = 'invalid Pirate phase';
+  end if;
+  if clean_message is not null and pg_catalog.char_length(clean_message) > 300 then
+    raise exception using errcode = '22023', message = 'phase message is too long';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('pirate:' || g::text, 0));
+  select game.phase into current_phase from public.games game
+  join private.pirate_games pirate on pirate.game_id = game.id
+  where game.id = g;
+  if not found then
+    raise exception using errcode = '55000', message = 'Pirate mode is not enabled';
+  end if;
+  current_index := pg_catalog.array_position(phases, current_phase);
+  if current_index is null then
+    raise exception using errcode = '55000', message = 'invalid current Pirate phase';
+  end if;
+  if current_phase = next_phase then
+    return pg_catalog.jsonb_build_object('status', 'ok', 'phase', current_phase);
+  end if;
+  if current_phase = 'finished' or pg_catalog.abs(next_index - current_index) <> 1 then
+    raise exception using errcode = '55000', message = 'Pirate phase can move only one step';
+  end if;
+  if current_phase = 'setup' and next_phase = 'charting'
+     and not (public.pirate_validate(g)->>'ready')::boolean then
+    raise exception using errcode = '55000', message = 'Pirate setup is not ready';
+  end if;
+  -- The first entry into `hoard` freezes the treasure value from the leading
+  -- crew's doubloons. Re-entering `hoard` later reuses the frozen value.
+  if next_phase = 'hoard' then
+    update private.pirate_games pirate
+    set treasure_basis = leader.balance,
+        treasure_value = least(1000, pg_catalog.round(leader.balance * 0.40)::integer),
+        treasure_frozen_at = now(), updated_at = now()
+    from (
+      select coalesce(max(crew.balance), 0)::integer as balance
+      from (
+        select coalesce(sum(ledger.delta), 0) as balance
+        from public.factions faction
+        left join private.pirate_ledger ledger
+          on ledger.game_id = g and ledger.faction_id = faction.id and ledger.currency = 'doubloon'
+        where faction.game_id = g
+        group by faction.id
+      ) crew
+    ) leader
+    where pirate.game_id = g and pirate.treasure_frozen_at is null;
+  end if;
+  update public.games
+  set phase = next_phase,
+      status = case when next_phase = 'finished' then 'finished'
+                    when next_phase = 'setup' then 'draft'
+                    when next_phase = 'charting' then 'active'
+                    else status end
+  where id = g;
+  perform private.emit_pirate_event(g, 'pirate_phase', pg_catalog.jsonb_build_object(
+    'phase', next_phase, 'message', coalesce(nullif(clean_message, ''),
+      'Pirate phase: ' || next_phase)
+  ));
+  return pg_catalog.jsonb_build_object('status', 'ok', 'phase', next_phase);
+end;
+$$;
+
+create or replace function public.gm_award_treasure(g uuid, faction_id uuid, reason text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller uuid := auth.uid();
+  clean_reason text := pg_catalog.btrim(reason);
+  phase_name text;
+  amount integer;
+  crew_name text;
+  award_id uuid;
+begin
+  if caller is null then
+    raise exception using errcode = '28000', message = 'not authenticated';
+  end if;
+  if g is null or faction_id is null or clean_reason is null
+     or pg_catalog.char_length(clean_reason) not between 3 and 300 then
+    raise exception using errcode = '22023', message = 'game, crew and reason are required';
+  end if;
+  if not private.is_game_gm(g, caller) then
+    raise exception using errcode = '42501', message = 'GM access required';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('pirate:' || g::text, 0));
+  select game.phase, pirate.treasure_value into phase_name, amount
+  from private.pirate_games pirate join public.games game on game.id = pirate.game_id
+  where pirate.game_id = g;
+  if not found then raise exception using errcode = '55000', message = 'Pirate mode is not enabled'; end if;
+  if phase_name <> 'hoard' then return pg_catalog.jsonb_build_object('status', 'wrong_phase'); end if;
+  if amount is null then return pg_catalog.jsonb_build_object('status', 'not_frozen'); end if;
+  select faction.name into crew_name from public.factions faction
+  where faction.game_id = g and faction.id = gm_award_treasure.faction_id;
+  if crew_name is null then
+    raise exception using errcode = '22023', message = 'crew is not in this game';
+  end if;
+  if exists (select 1 from private.pirate_treasure_awards award
+             where award.game_id = g and award.voided_at is null) then
+    return pg_catalog.jsonb_build_object('status', 'already_awarded');
+  end if;
+  insert into private.pirate_treasure_awards (game_id, faction_id, awarded_by)
+  values (g, faction_id, caller) returning id into award_id;
+  if amount > 0 then
+    insert into private.pirate_ledger (game_id, faction_id, currency, delta, source, ref_id, reason, actor_id)
+    values (g, faction_id, 'doubloon', amount, 'treasure', award_id, clean_reason, caller);
+  end if;
+  perform private.emit_pirate_event(g, 'pirate_treasure',
+    pg_catalog.jsonb_build_object('crew_name', crew_name, 'amount', amount,
+      'message', crew_name || ' claimed the hoard.'));
+  return pg_catalog.jsonb_build_object('status', 'ok', 'award_id', award_id,
+    'crew_name', crew_name, 'amount', amount);
+end;
+$$;
+
+create or replace function public.gm_pirate_overview(g uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  caller uuid := auth.uid();
+  game_phase text;
+  game_paused boolean;
+  pvp_on boolean;
+  treasure extensions.geography;
+  treasure_amount integer;
+  treasure_basis_amount integer;
+  treasure_frozen timestamptz;
+  crew_rows jsonb;
+  site_rows jsonb;
+  award_info jsonb;
+  parley_rows jsonb;
+begin
+  if caller is null then
+    raise exception using errcode = '28000', message = 'not authenticated';
+  end if;
+  if g is null then
+    raise exception using errcode = '22023', message = 'game is required';
+  end if;
+  if not private.is_game_gm(g, caller) then
+    raise exception using errcode = '42501', message = 'GM access required';
+  end if;
+  select game.phase, pirate.paused, pirate.pvp_enabled,
+         pirate.treasure_geog, pirate.treasure_value, pirate.treasure_basis, pirate.treasure_frozen_at
+    into game_phase, game_paused, pvp_on, treasure, treasure_amount, treasure_basis_amount, treasure_frozen
+  from private.pirate_games pirate join public.games game on game.id = pirate.game_id
+  where pirate.game_id = g;
+  if not found then return pg_catalog.jsonb_build_object('is_pirate', false); end if;
+
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'id', faction.id, 'name', faction.name, 'color', faction.color,
+    'shards', coalesce((select sum(delta)::integer from private.pirate_ledger ledger
+                       where ledger.game_id = g and ledger.faction_id = faction.id
+                         and ledger.currency = 'bearing'), 0),
+    'doubloons', coalesce((select sum(delta)::integer from private.pirate_ledger ledger
+                          where ledger.game_id = g and ledger.faction_id = faction.id
+                            and ledger.currency = 'doubloon'), 0),
+    'oath_count', (select count(*) from private.pirate_claims claim
+                   join private.pirate_sites site on site.zone_id = claim.zone_id
+                   where claim.game_id = g and claim.faction_id = faction.id
+                     and claim.voided_at is null and site.reward = 'oath'),
+    'reading_count', (select count(*) from private.pirate_readings reading
+                      where reading.game_id = g and reading.faction_id = faction.id
+                        and reading.voided_at is null),
+    'last_claim_at', (select max(claim.created_at) from private.pirate_claims claim
+                      where claim.game_id = g and claim.faction_id = faction.id
+                        and claim.voided_at is null),
+    'mercy_until', (select mercy.until_at from private.pirate_mercy mercy
+                    where mercy.game_id = g and mercy.faction_id = faction.id)
+  ) order by faction.name), '[]'::jsonb) into crew_rows
+  from public.factions faction where faction.game_id = g;
+
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'zone_id', site.zone_id, 'name', zone.name, 'kind', site.kind,
+    'reward', site.reward, 'oath_index', site.oath_index,
+    'answer_set', site.answer_hash is not null,
+    'active', zone.active,
+    'claims', coalesce((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'id', claim.id, 'faction_id', claim.faction_id, 'rank', claim.rank,
+      'claimed_at', claim.created_at) order by claim.created_at)
+      from private.pirate_claims claim
+      where claim.game_id = g and claim.zone_id = site.zone_id and claim.voided_at is null), '[]'::jsonb)
+  ) order by zone.name), '[]'::jsonb) into site_rows
+  from private.pirate_sites site join public.zones zone on zone.id = site.zone_id
+  where site.game_id = g;
+
+  select pg_catalog.jsonb_build_object('id', award.id, 'faction_id', award.faction_id,
+    'crew_name', faction.name, 'awarded_at', award.created_at)
+    into award_info
+  from private.pirate_treasure_awards award
+  join public.factions faction on faction.id = award.faction_id
+  where award.game_id = g and award.voided_at is null;
+
+  select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'id', parley.id, 'state', parley.state, 'choice', parley.choice,
+    'target_faction', parley.target_faction, 'target_name', target.name,
+    'attacker_faction', parley.attacker_faction, 'attacker_name', attacker.name,
+    'target_report', parley.target_report, 'attacker_report', parley.attacker_report,
+    'winner_faction', parley.winner_faction, 'plunder', parley.plunder,
+    'far_apart', parley.far_apart, 'created_at', parley.created_at
+  ) order by parley.created_at desc), '[]'::jsonb) into parley_rows
+  from private.pirate_parleys parley
+  join public.factions target on target.id = parley.target_faction
+  left join public.factions attacker on attacker.id = parley.attacker_faction
+  where parley.game_id = g and parley.voided_at is null
+    and private.pirate_parley_live(parley.state);
+
+  return pg_catalog.jsonb_build_object(
+    'is_pirate', true, 'phase', game_phase, 'paused', game_paused,
+    'pvp_enabled', pvp_on,
+    'treasure', case when treasure is null then null else pg_catalog.jsonb_build_object(
+      'lat', extensions.st_y(treasure::extensions.geometry),
+      'lng', extensions.st_x(treasure::extensions.geometry),
+      'value', treasure_amount, 'basis', treasure_basis_amount,
+      'frozen_at', treasure_frozen) end,
+    'crews', crew_rows, 'sites', site_rows, 'treasure_award', award_info,
+    'parleys', parley_rows);
 end;
 $$;

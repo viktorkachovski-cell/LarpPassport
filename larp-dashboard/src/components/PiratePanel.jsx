@@ -79,7 +79,6 @@ export default function PiratePanel({ game, state, zones, refresh }) {
   const [answer, setAnswer] = useState('')
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
-  const [value, setValue] = useState('40')
   const [phaseMessage, setPhaseMessage] = useState('')
   const [awardCrew, setAwardCrew] = useState('')
   const [awardReason, setAwardReason] = useState('')
@@ -126,7 +125,7 @@ export default function PiratePanel({ game, state, zones, refresh }) {
     event.preventDefault()
     run(async () => {
       await rpc('pirate_set_treasure', {
-        g: game.id, lat: Number(lat), lng: Number(lng), value: Number(value),
+        g: game.id, lat: Number(lat), lng: Number(lng),
       })
       refresh()
       setReadiness(null)
@@ -209,7 +208,7 @@ export default function PiratePanel({ game, state, zones, refresh }) {
       </section>
       {canSetSite && <section className="command-card pirate-section">
         <h3>Register a Pirate site</h3>
-        <p className="hint">Create the zone on the map first. Setup needs 5 bearing riddles, 4 oath riddles and 3 lighthouses. Each riddle also pays 20 / 15 / 10 / 5 doubloons to the first four crews to solve it. Answers are write only and disappear after save.</p>
+        <p className="hint">Create the zone on the map first. Setup needs 5 bearing riddles, 4 oath riddles and 3 lighthouses. Each riddle also pays 20 / 15 / 10 / 5 / 5 doubloons in the order crews answer it correctly. Answers are write only and disappear after save.</p>
         <form onSubmit={saveSite}>
           <div className="pirate-form-grid">
             <div className="field"><label htmlFor="pirate-zone">Zone</label>
@@ -249,11 +248,10 @@ export default function PiratePanel({ game, state, zones, refresh }) {
       </section>}
       {canSetTreasure && <section className="command-card pirate-section">
         <h3>Treasure point</h3>
-        <p className="hint">Coordinates can be changed through charting. They lock at cursed, or after a reading exists.</p>
+        <p className="hint">Coordinates can be changed through charting. They lock at cursed, or after a reading exists. The treasure's value is set when the hoard opens: 40% of the leading crew's doubloons, rounded.</p>
         <form onSubmit={saveTreasure} className="pirate-form-grid">
           <div className="field"><label htmlFor="pirate-lat">Latitude</label><input id="pirate-lat" type="number" step="any" required min="-90" max="90" value={lat} onChange={(event) => setLat(event.target.value)} /></div>
           <div className="field"><label htmlFor="pirate-lng">Longitude</label><input id="pirate-lng" type="number" step="any" required min="-180" max="180" value={lng} onChange={(event) => setLng(event.target.value)} /></div>
-          <div className="field"><label htmlFor="pirate-value">Doubloons</label><input id="pirate-value" type="number" required min="0" max="1000" value={value} onChange={(event) => setValue(event.target.value)} /></div>
           <button type="submit" disabled={!!busy}>Save treasure</button>
         </form>
       </section>}
@@ -272,6 +270,9 @@ export default function PiratePanel({ game, state, zones, refresh }) {
       </section>
       {state.phase === 'hoard' && <section className="command-card pirate-section">
         <h3>Treasure award</h3>
+        {state.treasure?.value != null
+          ? <p className="hint">Worth {state.treasure.value} doubloons (40% of the leading {state.treasure.basis}, frozen when the hoard opened).</p>
+          : <p className="hint">No value frozen yet. Open the hoard with the phase control to set it.</p>}
         {state.treasure_award ? <>
           <p>{state.treasure_award.crew_name} holds the hoard.</p>
           <form onSubmit={voidTreasure} className="pirate-form-grid">
