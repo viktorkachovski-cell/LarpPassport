@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(13);
+select extensions.plan(22);
 
 select extensions.has_column('public', 'games', 'phase', 'games has a nullable Pirate phase');
 select extensions.has_table('private', 'pirate_games', 'Pirate mode marker is private');
@@ -21,6 +21,41 @@ select extensions.ok(
 select extensions.ok(
   not has_table_privilege('anon', 'private.pirate_games', 'SELECT'),
   'anonymous clients have no direct Pirate table access'
+);
+select extensions.ok(
+  (select count(*) = 9 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'private' and c.relkind = 'r' and c.relname in (
+     'pirate_games', 'pirate_sites', 'pirate_claims', 'pirate_attempts',
+     'pirate_ledger', 'pirate_readings', 'pirate_parleys', 'pirate_mercy',
+     'pirate_treasure_awards'
+   )),
+  'all nine Pirate tables exist'
+);
+select extensions.ok(
+  not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'private' and c.relname like 'pirate_%' and c.relkind = 'r'
+      and not c.relrowsecurity
+  ),
+  'all Pirate tables enable RLS'
+);
+select extensions.ok(
+  not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'private' and c.relname like 'pirate_%' and c.relkind = 'r'
+      and not exists (select 1 from pg_policy p where p.polrelid = c.oid)
+  ),
+  'all Pirate tables have an explicit deny policy'
+);
+select extensions.ok(
+  not exists (
+    select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'private' and c.relname like 'pirate_%' and c.relkind = 'r'
+      and (has_table_privilege('authenticated', c.oid, 'SELECT')
+           or has_table_privilege('authenticated', c.oid, 'INSERT')
+           or has_table_privilege('anon', c.oid, 'SELECT'))
+  ),
+  'no Pirate table grants direct client access'
 );
 
 insert into auth.users (
@@ -52,6 +87,45 @@ select extensions.is(
 insert into private.pirate_games (game_id)
 values ('b4000000-0000-0000-0000-000000000004');
 
+insert into public.factions (id, game_id, name)
+values ('b6000000-0000-0000-0000-000000000006',
+        'b4000000-0000-0000-0000-000000000004', 'Black Crew');
+insert into public.zones (id, game_id, name, geog, radius_m)
+values ('b7000000-0000-0000-0000-000000000007',
+        'b5000000-0000-0000-0000-000000000005', 'Ordinary Zone',
+        extensions.st_setsrid(extensions.st_makepoint(30, 50), 4326)::extensions.geography, 40);
+select extensions.throws_ok(
+  $$ insert into private.pirate_sites (zone_id, game_id, kind)
+     values ('b7000000-0000-0000-0000-000000000007',
+             'b4000000-0000-0000-0000-000000000004', 'lighthouse') $$,
+  '23503', null,
+  'Pirate sites cannot reference a zone in another game'
+);
+
+insert into private.pirate_treasure_awards (game_id, faction_id, awarded_by)
+values ('b4000000-0000-0000-0000-000000000004',
+        'b6000000-0000-0000-0000-000000000006',
+        'b1000000-0000-0000-0000-000000000001');
+select extensions.throws_ok(
+  $$ insert into private.pirate_treasure_awards (game_id, faction_id, awarded_by)
+     values ('b4000000-0000-0000-0000-000000000004',
+             'b6000000-0000-0000-0000-000000000006',
+             'b1000000-0000-0000-0000-000000000001') $$,
+  '23505', null,
+  'one active treasure award per game'
+);
+update private.pirate_treasure_awards
+set voided_at = now(), voided_by = 'b1000000-0000-0000-0000-000000000001',
+    void_reason = 'test correction'
+where game_id = 'b4000000-0000-0000-0000-000000000004';
+select extensions.lives_ok(
+  $$ insert into private.pirate_treasure_awards (game_id, faction_id, awarded_by)
+     values ('b4000000-0000-0000-0000-000000000004',
+             'b6000000-0000-0000-0000-000000000006',
+             'b1000000-0000-0000-0000-000000000001') $$,
+  'voiding keeps history and permits one new award'
+);
+
 select extensions.is(
   (select phase from public.games where id = 'b4000000-0000-0000-0000-000000000004'),
   'setup',
@@ -64,6 +138,12 @@ select extensions.throws_ok(
      where id = 'b4000000-0000-0000-0000-000000000004' $$,
   '42501', 'Pirate phase must be changed through a GM action',
   'GM direct table update cannot skip Pirate phase gates'
+);
+select extensions.throws_ok(
+  $$ update public.games set status = 'finished'
+     where id = 'b4000000-0000-0000-0000-000000000004' $$,
+  '42501', 'Pirate status follows the GM phase action',
+  'GM direct table update cannot desynchronise Pirate status'
 );
 reset role;
 select extensions.throws_ok(
@@ -101,6 +181,12 @@ select extensions.throws_ok(
      values ('b5000000-0000-0000-0000-000000000005') $$,
   '55000', 'Pirate mode cannot be enabled on a Time Hunt game',
   'existing Time Hunt state blocks Pirate mode'
+);
+select extensions.is(
+  (select count(*)::integer from private.pirate_treasure_awards
+   where game_id = 'b4000000-0000-0000-0000-000000000004'),
+  2,
+  'treasure award history retains both rows after a correction'
 );
 
 select * from extensions.finish();

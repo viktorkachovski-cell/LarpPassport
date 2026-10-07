@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, AppState, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Alert, AppState, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Notifications from 'expo-notifications'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
@@ -17,6 +17,8 @@ import { HuntPanel } from './game/HuntPanel'
 import { CharacterSheet, CreateCharacter } from './game/CharacterTab'
 import { EventsTab } from './game/EventsTab'
 import { SharingTab } from './game/SharingTab'
+import { PiratePanel } from '../pirate/PiratePanel'
+import { ParleyPanel } from '../pirate/ParleyPanel'
 
 // Self-ticking countdown. The one-second timer lives HERE, so it re-renders
 // this single <Text> instead of the whole game screen; it also stops itself
@@ -52,6 +54,8 @@ export default function GameScreen({ gameId, session, onBack }) {
   const [tab, setTab] = useState('hunt')
   const [sharing, setSharing] = useState(false)
   const [hunt, setHunt] = useState(null)
+  const [pirate, setPirate] = useState(null)
+  const [pirateError, setPirateError] = useState('')
   const [huntBusy, setHuntBusy] = useState(false)
   const [huntError, setHuntError] = useState('')
   const [queue, setQueue] = useState({ queued: 0, failed: 0, lastError: null, lastSent: null, lastFixAt: null, profile: 'near' })
@@ -64,6 +68,7 @@ export default function GameScreen({ gameId, session, onBack }) {
   const [realtime, setRealtime] = useState('connecting')
   const refreshRef = useRef(() => {})
   const huntRequest = useRef(0)
+  const pirateRequest = useRef(0)
   const loadedOnce = useRef(false)
   const now = useNow(30000)
   const recordOk = useCallback(() => setSync((current) => ({ ...current, lastOkAt: Date.now() })), [])
@@ -91,6 +96,25 @@ export default function GameScreen({ gameId, session, onBack }) {
     }
   }, [gameId, recordOk, recordError])
 
+  const loadPirate = useCallback(async () => {
+    const request = ++pirateRequest.current
+    try {
+      const { data, error: stateError } = await supabase.rpc('get_pirate_state', { g: gameId })
+      if (request !== pirateRequest.current) return null
+      if (stateError) throw stateError
+      setPirate(data)
+      setPirateError('')
+      recordOk()
+      return data
+    } catch (stateError) {
+      if (request === pirateRequest.current) {
+        setPirateError(stateError.message)
+        recordError(stateError.message)
+      }
+      return null
+    }
+  }, [gameId, recordOk, recordError])
+
 
   // Relative timestamps ("5m ago") and the boundary banner only need coarse
   // time. Live countdowns tick per-second inside <Countdown /> instead of
@@ -111,6 +135,8 @@ export default function GameScreen({ gameId, session, onBack }) {
       setEvents(snapshot.events)
       loadedOnce.current = true
       recordOk()
+      if (snapshot.game.phase) loadPirate()
+      else loadHunt()
       await syncNotifications(gameId).catch(() => {})
       } catch (error) {
         if (!alive || request !== version) return
@@ -119,7 +145,7 @@ export default function GameScreen({ gameId, session, onBack }) {
         if (!loadedOnce.current) setLoadError(error.message)
       }
     }
-    const refresh = () => { load(); loadHunt() }
+    const refresh = () => { load() }
     refreshRef.current = refresh
     const readDeviceFacts = () => {
       queueStatus(gameId).then((status) => { if (alive) setQueue(status) }).catch((error) => { if (alive) setError(error.message) })
@@ -127,7 +153,6 @@ export default function GameScreen({ gameId, session, onBack }) {
       locationPermissionStatus().then((value) => { if (alive) setPermission(value) }).catch(() => {})
     }
     load()
-    loadHunt()
     readDeviceFacts()
     Notifications.requestPermissionsAsync().catch(() => {})
 
@@ -159,18 +184,18 @@ export default function GameScreen({ gameId, session, onBack }) {
     })
 
     return () => {
-      alive = false; ++version; ++huntRequest.current
+      alive = false; ++version; ++huntRequest.current; ++pirateRequest.current
       refreshRef.current = () => {}
       clearInterval(interval); clearTimeout(refreshTimer)
       appStateSub.remove()
       supabase.removeChannel(channel)
     }
-  }, [gameId, uid, loadHunt, recordOk, recordError])
+  }, [gameId, uid, loadHunt, loadPirate, recordOk, recordError])
 
   useEffect(() => {
-    if (!hunt?.participant || hunt.alive || !sharing) return
+    if (pirate?.is_pirate || !hunt?.participant || hunt.alive || !sharing) return
     stopSharing(gameId).then(() => setSharing(false)).catch(() => {})
-  }, [gameId, hunt?.alive, hunt?.participant, sharing])
+  }, [gameId, hunt?.alive, hunt?.participant, pirate?.is_pirate, sharing])
 
   const [sharingBusy, setSharingBusy] = useState(false)
   const toggleSharing = useCallback(async (next) => {
@@ -264,10 +289,24 @@ export default function GameScreen({ gameId, session, onBack }) {
     )
   }
 
-  const phase = hunt?.phase ?? game.status
+  const isPirate = !!game.phase
+  const phase = isPirate ? (pirate?.phase ?? game.phase) : (hunt?.phase ?? game.status)
   const playerStatus = getPlayerStatus(hunt)
-  const phaseColor = phase === 'active' ? C.green : phase === 'finished' ? C.muted : C.amber
-  const phaseLabel = phase === 'active' ? 'ACTIVE' : phase === 'finished' ? 'FINISHED' : 'DRAFT'
+  const phaseColor = isPirate
+    ? (pirate?.paused ? C.red : phase === 'finished' ? C.muted : C.amber)
+    : phase === 'active' ? C.green : phase === 'finished' ? C.muted : C.amber
+  const phaseLabel = isPirate ? phase.toUpperCase()
+    : phase === 'active' ? 'ACTIVE' : phase === 'finished' ? 'FINISHED' : 'DRAFT'
+  const tabChoices = isPirate
+    ? [['hunt', 'CHART'], ['compass', 'COMPASS'], ['parley', 'PARLEY'], ['sheet', 'CHARACTER'], ['events', 'LOGBOOK'], ['share', 'SHARING']]
+    : [['hunt', 'HUNT'], ['sheet', 'CHARACTER'], ['events', 'EVENTS'], ['share', 'SHARING']]
+  const tabButtons = tabChoices.map(([key, label]) => (
+    <TouchableOpacity key={key} accessibilityRole="tab" accessibilityState={{ selected: tab === key }}
+      accessibilityLabel={label.toLowerCase()} onPress={() => setTab(key)}
+      style={[styles.tab, isPirate && styles.pirateTab, tab === key && styles.activeTab]}>
+      <Text style={[styles.tabText, tab === key && styles.activeTabText]}>{label}</Text>
+    </TouchableOpacity>
+  ))
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -285,12 +324,18 @@ export default function GameScreen({ gameId, session, onBack }) {
       <SyncStatusLine sync={sync} realtime={realtime} onRetry={() => refreshRef.current()} />
 
       <View style={styles.stateStrip}>
-        <StateCell value={hunt?.alive_count ?? '--'} label={phase === 'not_started' ? 'PLAYERS JOINED' : 'TRAVELLERS LEFT'} />
-        <StateCell value={playerStatus.value} label="YOUR STATUS" color={playerStatus.color} bordered />
-        <StateCell value={<Countdown to={hunt?.hidden_until} />} label="CLOAK LEFT" color={C.cyan} />
+        {isPirate ? <>
+          <StateCell value={pirate?.shards ?? '--'} label="BEARING SHARDS" />
+          <StateCell value={pirate?.doubloons ?? '--'} label="DOUBLOONS" color={C.amber} bordered />
+          <StateCell value={pirate?.paused ? 'PAUSED' : phase.toUpperCase()} label="THE TIDE" color={pirate?.paused ? C.red : C.cyan} />
+        </> : <>
+          <StateCell value={hunt?.alive_count ?? '--'} label={phase === 'not_started' ? 'PLAYERS JOINED' : 'TRAVELLERS LEFT'} />
+          <StateCell value={playerStatus.value} label="YOUR STATUS" color={playerStatus.color} bordered />
+          <StateCell value={<Countdown to={hunt?.hidden_until} />} label="CLOAK LEFT" color={C.cyan} />
+        </>}
       </View>
 
-      {!!hunt?.incoming_claim && tab !== 'hunt' && (
+      {!isPirate && !!hunt?.incoming_claim && tab !== 'hunt' && (
         <View style={styles.decisionBanner} accessibilityLiveRegion="polite">
           <Text style={styles.decisionText}>1 decision waiting: a hunter claims they defeated you.</Text>
           <TouchableOpacity accessibilityRole="button" onPress={() => setTab('hunt')} style={styles.decisionButton}>
@@ -299,15 +344,19 @@ export default function GameScreen({ gameId, session, onBack }) {
         </View>
       )}
 
-      <View style={styles.tabs}>
-        {[['hunt', 'HUNT'], ['sheet', 'CHARACTER'], ['events', 'EVENTS'], ['share', 'SHARING']].map(([key, label]) => (
-          <TouchableOpacity key={key} accessibilityRole="tab" accessibilityState={{ selected: tab === key }} accessibilityLabel={label.toLowerCase()} onPress={() => setTab(key)} style={[styles.tab, tab === key && styles.activeTab]}>
-            <Text style={[styles.tabText, tab === key && styles.activeTabText]}>{label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {isPirate
+        ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pirateTabsWrap}
+            contentContainerStyle={styles.pirateTabs}>{tabButtons}</ScrollView>
+        : <View style={styles.tabs}>{tabButtons}</View>}
 
-      {tab === 'hunt' && (
+      {isPirate && (tab === 'hunt' || tab === 'compass') && (
+        <PiratePanel mode={tab} state={pirate} error={pirateError}
+          gameId={gameId} refresh={loadPirate} />
+      )}
+      {isPirate && tab === 'parley' && <ParleyPanel state={pirate} error={pirateError}
+        gameId={gameId} refresh={loadPirate} />}
+
+      {!isPirate && tab === 'hunt' && (
         <HuntPanel
           hunt={hunt}
           hasCharacter={character !== null}
@@ -334,6 +383,7 @@ export default function GameScreen({ gameId, session, onBack }) {
         <SharingTab
           game={game}
           phase={phase}
+          isPirate={isPirate}
           sharing={sharing}
           permission={permission}
           queue={queue}
@@ -401,7 +451,10 @@ const styles = StyleSheet.create({
   stateValue: { fontFamily: F.displayBold, fontSize: 18 },
   stateLabel: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 0.6, marginTop: 3, textAlign: 'center' },
   tabs: { minHeight: S.touch, flexDirection: 'row', borderBottomColor: C.line, borderBottomWidth: 1, backgroundColor: C.ink },
+  pirateTabsWrap: { flexGrow: 0, borderBottomColor: C.line, borderBottomWidth: 1, backgroundColor: C.ink },
+  pirateTabs: { flexDirection: 'row' },
   tab: { flex: 1, minHeight: S.touch, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', paddingHorizontal: 2 },
+  pirateTab: { flex: 0, minWidth: 86, paddingHorizontal: 8 },
   activeTab: { borderBottomColor: C.cyan },
   tabText: { color: C.muted, fontFamily: F.displaySemiBold, fontSize: 13, letterSpacing: 0.4, textAlign: 'center' },
   activeTabText: { color: C.text },

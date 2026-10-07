@@ -1,37 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import { Animated, AppState, StyleSheet, Text, View } from 'react-native'
-import * as Location from 'expo-location'
+import { useEffect, useRef } from 'react'
+import { Animated, StyleSheet, Text, View } from 'react-native'
 import { C, F, T } from '../../lib/theme'
 import { useNow } from '../../lib/useNow'
 import { useReducedMotion } from '../../lib/useReducedMotion'
+import { useTrueHeading } from '../../lib/useTrueHeading'
 import { arrowRotation, describeDirection, headingQuality, shortestAngleDelta, usableTrueHeading } from '../../lib/direction'
 import { common } from '../../ui/common'
-
-// Foreground-only compass subscription. Active only while an arrow can be
-// shown (direction available, app active); removed on background, unmount
-// (tab switch, account/game change) and whenever direction goes away. No
-// GPS settings are touched here.
-function useTrueHeading(enabled) {
-  const [heading, setHeading] = useState(null)
-  useEffect(() => {
-    if (!enabled) { setHeading(null); return undefined }
-    let subscription = null
-    let alive = true
-    const stop = () => { subscription?.remove?.(); subscription = null; if (alive) setHeading(null) }
-    const start = async () => {
-      if (!alive || subscription || AppState.currentState !== 'active') return
-      try {
-        const sub = await Location.watchHeadingAsync((value) => { if (alive) setHeading(value) })
-        if (!alive || AppState.currentState !== 'active') { sub.remove(); return }
-        subscription = sub
-      } catch { if (alive) setHeading(null) }
-    }
-    start()
-    const appState = AppState.addEventListener('change', (state) => { if (state === 'active') start(); else stop() })
-    return () => { alive = false; appState.remove(); subscription?.remove?.() }
-  }, [enabled])
-  return heading
-}
 
 // Direction to the target, north-referenced. The label never assumes the
 // screen top points north; the arrow appears only with a usable true heading.

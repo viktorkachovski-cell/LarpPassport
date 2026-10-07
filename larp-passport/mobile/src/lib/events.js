@@ -15,6 +15,7 @@ const MESSAGE = (label) => ({ label, color: C.cyan, borderColor: C.cyanBorder })
 const HUNT_GOOD = { label: 'HUNT', color: C.green }
 const HUNT_OPEN = { label: 'HUNT', color: C.amber }
 const HUNT_BAD = { label: 'HUNT', color: C.red }
+const PIRATE = { label: 'PIRATE', color: C.amber, borderColor: C.amberBorder }
 
 const DEFAULTS = {
   tag: FIELD,
@@ -60,6 +61,12 @@ const EVENTS = {
     body: 'Wait for the GM to assign your next target. A 10-minute temporal cloak is active.',
   },
   eliminated: { tag: HUNT_BAD, affectsHunt: true, title: 'You have been eliminated', notification: 'You have been eliminated' },
+  pirate_phase: { tag: PIRATE, title: 'The tide has changed', notification: 'The tide has changed', body: 'Open your logbook for the current phase.' },
+  pirate_claim: { tag: PIRATE, title: 'Your crew claimed a site', notification: 'Site claimed', body: 'A reward has been added to your crew logbook.' },
+  pirate_reading: { tag: PIRATE, title: 'New lighthouse reading', notification: 'New bearing recorded', body: 'A new arc is in your compass logbook.' },
+  pirate_parley: { tag: PIRATE, title: 'Parley changed', notification: 'Parley update', body: 'Open the Parley screen to review the result.' },
+  pirate_ruling: { tag: PIRATE, title: 'Admiralty ruling', notification: 'Admiralty ruling', body: 'The GM has corrected a Pirate result.' },
+  pirate_treasure: { tag: PIRATE, title: 'The hoard was claimed', notification: 'The hoard was claimed', body: 'A crew has claimed the treasure.' },
 }
 
 // Installed APKs lag the server, so a hunt or elimination type added later
@@ -67,6 +74,7 @@ const EVENTS = {
 function fallback(type) {
   if (type.startsWith('elimination_')) return { tag: HUNT_OPEN, affectsHunt: true }
   if (type.startsWith('hunt_')) return { tag: HUNT_GOOD, affectsHunt: true }
+  if (type.startsWith('pirate_')) return { tag: PIRATE }
   return {}
 }
 

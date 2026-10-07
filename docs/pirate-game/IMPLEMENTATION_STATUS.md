@@ -1,23 +1,32 @@
 # Pirate game implementation status
 
-Updated 2026-10-07. This is source status for the `codex/pirate-game` branch, not a release record.
+Updated 2026-10-07. Source status for `codex/pirate-game`, based on `origin/main` commit `17a1d02`. This is not a release record.
 
-## Implemented in this branch
+## Decisions and source of truth
 
-- Imported the game guide and agent plan. Reconciled phase storage, treasure edit lock, three Safe Harbours and the replacement APK decision with the owner; removed stale duplicate naming and conflicting treasure instructions.
-- Added an additive Supabase foundation migration: nullable `games.phase`, a private Pirate mode marker, direct client denial, and a serialized guard that prevents Pirate and Time Hunt state from coexisting. Added 13 pgTAP assertions; database execution is pending a Docker-backed CI run. The migration file was created manually because the Supabase CLI is unavailable on this machine.
-- Added the stdlib lighthouse placement simulator (`tools/pirate/simulate_triangulation.py`). It samples arc intersections at every shard level and flags weak crossing angles and distance outliers. Four unit tests pass. Its area figures depend on the grid, search radius and simulation seed; they are for site planning, not exact game readings.
-- Added a bundle-time Pirate colour palette and a dedicated internal APK profile using the existing Android package ID. The ordinary build defaults to the existing palette. `pirate` reads the production EAS environment and sets `EXPO_PUBLIC_APP_THEME=pirate`.
+- `GAME_GUIDE.md` controls phase storage in `public.games.phase` and treasure editing through `charting`, with a lock from `cursed`.
+- The Pirate Android profile uses the existing `com.larppassport.app` package ID, so its APK replaces the ordinary app on a phone.
+- The two exact players in a Parley independently confirm the result after the physical exchange, for both Yield and Fight. The first report moves no currency. Conflicting reports go to the GM.
 
-## Remaining implementation
+## Implemented in the branch
 
-The foundation migration is only the first part of P-DB1. Pirate site, claim, ledger, compass, Parley, correction and award tables and all Pirate RPCs remain to be built. The dashboard and Pirate mobile screens are not yet implemented. `react-native-svg` is not installed and no APK has been built or tested on a device. No migration has been applied to a hosted project and no Vercel deployment has occurred.
+- Twelve additive Pirate migrations: private game/site/reward/reading/Parley tables, setup and phase controls, claims, deterministic compass readings, player state, GM overview, treasure award/correction, and Parley open/join/report/plunder/GM ruling/void. Private data is exposed through scoped RPCs. Ordinary Time Hunt remains routed through its existing RPCs.
+- `009`–`018` pgTAP source suites cover foundation, setup, phase, claims, compass, state, treasure, Parley confirmations, GM dispute ruling, and transfer reversal. These have **not** executed against Postgres yet.
+- Dashboard Pirate tab for setup, treasure, phases, pause/PvP, crews, sites, treasure award/void, and disputed Parley ruling/void. Pirate games no longer load Hunt admin state.
+- Mobile Pirate theme, Landfall/hold/compass and Parley screens, shared true-heading sensor hook, React Native SVG compass, scoped state refresh, and a `pirate` EAS profile. The app keeps the same Android package ID.
+- Lighthouse placement simulator and four Python unit tests.
 
-Read-only inspection of the hosted `Passport` project found the latest migration version is `20260907185433_hunt_direction_bearing`. The repository file is named `20260907180000_hunt_direction_bearing.sql`; reconcile that history mismatch before any database push. Run the database pgTAP suite and concurrency checks on the exact commit, then verify Vercel and EAS environment identities before release. Preserve the existing Time Hunt, location queue and event delivery behaviour while adding Pirate paths.
+## Verified locally
 
-## Verification in this checkout
+- Dashboard: 51 Vitest tests pass; Vite production build succeeds.
+- Mobile: 78 Jest tests pass; Expo Doctor previously reported 18/18 checks. Android exports with the latest Parley UI pass both with and without Hermes bytecode. These exports are not APK or device tests.
+- PostgreSQL syntax parser: 31 PL/pgSQL functions across the 12 new migrations parse. This does not validate catalog references, policies, extension behavior, or transactions.
+- Simulator: four Python tests pass. Its area estimates are approximate planning inputs.
 
-- Simulator: 4 unit tests passed.
-- Pirate colour contrast: key text colours exceed 4.5:1 and border colours exceed 3:1 against both main dark surfaces by calculated WCAG ratios.
-- Mobile Jest: 41 passed, 22 failed because `better-sqlite3` had no native binding after an offline install with scripts disabled. Rebuild was blocked by local `spawn EPERM`.
-- Android export: the Pirate bundle exported successfully with one Metro worker and `--no-bytecode`. The normal Hermes bytecode step hit local `spawn EPERM`. The debug export is not an APK or device result.
+## Release gates and remaining work
+
+- Run all pgTAP suites against an isolated Postgres/PostGIS/Supabase database, including concurrent joins and transfers. No local Docker, PostgreSQL, or Supabase CLI runtime is available in this checkout. Do not apply the migrations to production as a substitute for an isolated test.
+- Reconcile the hosted migration history: the hosted latest version is `20260907185433_hunt_direction_bearing`, while the repository file is `20260907180000_hunt_direction_bearing.sql`. No Pirate migration has been applied to the hosted project.
+- The SVG probe EAS build `cb7b5e30-94c3-45b5-b4c7-9be4e1d2cbf1` was still queued at the last check. It is a native dependency probe, not a completed Pirate APK. A final APK and real-device boot/gameplay QA remain.
+- Complete GM correction tools for claims, balances and readings, richer ledger/claim/reading drill-down, and remaining documented edge-case and concurrency tests. Review site placement with the simulator before live setup.
+- Deploy only after database tests and migration-history reconciliation, then verify the exact Vercel deployment and APK against the same backend. No Vercel deployment or production Supabase write has occurred.

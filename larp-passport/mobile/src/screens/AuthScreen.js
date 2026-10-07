@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
-import { C, F, S, T } from '../lib/theme'
+import { C, F, IS_PIRATE_BUILD, S, T } from '../lib/theme'
 
 export default function AuthScreen() {
   const [mode, setMode] = useState('signin')
@@ -50,7 +50,7 @@ export default function AuthScreen() {
       <ScrollView contentContainerStyle={styles.keyboard} keyboardShouldPersistTaps="handled">
         <View style={styles.identityBlock}>
           <View style={styles.markOuter}><View style={styles.markInner} /></View>
-          <Text style={styles.eyebrow}>TEMPORAL FIELD AUTHORITY</Text>
+          <Text style={styles.eyebrow}>{IS_PIRATE_BUILD ? 'THE ADMIRALTY' : 'TEMPORAL FIELD AUTHORITY'}</Text>
           <Text style={styles.brand}>LARP PASSPORT</Text>
           <Text style={styles.tagline}>PLAYER APP // SIGN IN TO JOIN A GAME</Text>
         </View>

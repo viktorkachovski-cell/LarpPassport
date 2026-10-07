@@ -20,3 +20,11 @@ test('unknown or missing types fall back to neutral wording', () => {
     })
   }
 })
+
+test('pirate events have crew-safe wording and never reload Time Hunt', () => {
+  expect(eventInfo('pirate_claim')).toMatchObject({
+    title: 'Your crew claimed a site', affectsHunt: false, tag: { label: 'PIRATE' },
+  })
+  expect(eventInfo('pirate_reading').body).toContain('compass logbook')
+  expect(eventInfo('pirate_ruling')).toMatchObject({ affectsHunt: false, tag: { label: 'PIRATE' } })
+})

@@ -121,6 +121,7 @@ Plunder and protections are unchanged:
 | Outcome | Winner takes |
 | --- | --- |
 | Yield | 10% of doubloons (minimum 3), never a shard |
+After the physical exchange, the two players in that Parley independently confirm the result in the app. Yield requires both to confirm the attacker as winner. Fight requires both to report the same winning crew. No currency or shard moves after only one report. A disagreement or timeout goes to the GM for a reasoned ruling or void.
 | Lose a Fight | Winner's choice: 1 shard or 25% of doubloons (minimum 5) |
 
 - Davy's Mercy: 15 minutes of immunity after being plundered.

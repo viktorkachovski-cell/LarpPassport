@@ -39,7 +39,8 @@ const pirate = {
 }
 
 // Expo inlines EXPO_PUBLIC_* at bundle time. The default keeps existing builds.
-export const C = process.env.EXPO_PUBLIC_APP_THEME === 'pirate' ? pirate : tachyon
+export const IS_PIRATE_BUILD = process.env.EXPO_PUBLIC_APP_THEME === 'pirate'
+export const C = IS_PIRATE_BUILD ? pirate : tachyon
 
 export const F = {
   displayMedium: 'ChakraPetch_500Medium',
