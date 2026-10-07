@@ -1,6 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ErrorBoundary } from '@sentry/react'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
+import { unwrap } from '../lib/unwrap'
+import { eventInfo } from '../lib/events'
 import { parseWkbPoint } from '../lib/geo'
 import CharactersPanel from './CharactersPanel'
 import TemplatePanel from './TemplatePanel'
@@ -11,6 +13,28 @@ import SyncStatus from './SyncStatus'
 import { realtimeStateFromStatus } from '../lib/syncStatus'
 
 const MapPanel = lazy(() => import('./MapPanel'))
+
+const ZONE_FIELDS = [
+  'name', 'zone_type', 'trigger_mode', 'dwell_seconds', 'exit_buffer_m', 'one_shot', 'active',
+  'radius_m', 'warning_distance_m', 'payload',
+]
+
+// The database keeps a game 'active' and GM-only for as long as its hunt
+// round is active (protect_active_hunt_game), draft after a reset and
+// finished with the round.
+const GAME_FOR_HUNT_PHASE = {
+  not_started: { status: 'draft' },
+  active: { status: 'active', location_visibility: 'gm_only' },
+  finished: { status: 'finished' },
+}
+
+const withoutId = (rows, id) => rows.filter((row) => row.id !== id)
+const replaceById = (rows, next) => rows.map((row) => (row.id === next.id ? next : row))
+const hasId = (rows, id) => rows.some((row) => row.id === id)
+
+function isGameGm(game, members, uid) {
+  return game.gm_id === uid || members.some((member) => member.profile_id === uid && member.role === 'gm')
+}
 
 export default function GameView({ gameId, session, onBack }) {
   const uid = session.user.id
@@ -28,7 +52,6 @@ export default function GameView({ gameId, session, onBack }) {
   const refreshRef = useRef(() => {})
   const refreshTimer = useRef(null)
   const invalidateSnapshot = useRef(() => {})
-  const snapshotPending = useRef(false)
   const scheduleRefresh = useCallback(() => {
     clearTimeout(refreshTimer.current)
     refreshTimer.current = setTimeout(() => refreshRef.current(), 250)
@@ -56,39 +79,39 @@ export default function GameView({ gameId, session, onBack }) {
     if (!loadedOnce.current) setLoadError(message)
   }, [recordError])
 
-  const isGm = !!game && (
-    game.gm_id === uid || members.some((m) => m.profile_id === uid && m.role === 'gm')
-  )
+  const isGm = !!game && isGameGm(game, members, uid)
 
-  const reportAction = useCallback((error) => {
-    setActionError(error?.message ?? '')
-    return error ?? null
+  // Failures of writes that no panel reports itself go to the banner.
+  const reportFailure = useCallback((promise) => promise.catch((error) => setActionError(error.message)), [])
+
+  const loadZones = useCallback(async () => {
+    setZones(unwrap(await supabase.from('zones_view').select('*').eq('game_id', gameId)) ?? [])
+  }, [gameId])
+
+  const loadMembers = useCallback(async () => {
+    setMembers(unwrap(await supabase.from('game_players').select('*, profile:profiles(username)').eq('game_id', gameId)) ?? [])
+  }, [gameId])
+
+  const refresh = useCallback(() => refreshRef.current(), [])
+
+  // One event row changed: keep the recent page, the older pages and the
+  // pending queue consistent with it. Only a new row joins the recent page.
+  const putEvent = useCallback((row, isNew = false) => {
+    setPendingEvents((prev) => (row.status === 'pending' ? [row, ...withoutId(prev, row.id)] : withoutId(prev, row.id)))
+    setEvents((prev) => (hasId(prev, row.id) ? replaceById(prev, row) : isNew ? [row, ...prev].slice(0, 300) : prev))
+    setOlderEvents((prev) => replaceById(prev, row))
   }, [])
 
-  function requireGm() {
-    if (isGm) return null
-    return reportAction(new Error('Only a GM can change this game.'))
-  }
-
-  const refetchZones = useCallback(async () => {
-    const { data, error } = await supabase.from('zones_view').select('*').eq('game_id', gameId)
-    if (error) return reportAction(error)
-    setZones(data ?? [])
-    return null
-  }, [gameId, reportAction])
-
-  const refetchMembers = useCallback(async () => {
-    const { data, error } = await supabase.from('game_players').select('*, profile:profiles(username)').eq('game_id', gameId)
-    if (error) return reportAction(error)
-    setMembers(data ?? [])
-    return null
-  }, [gameId, reportAction])
-
-  const refetchHunt = useCallback(() => refreshRef.current(), [])
+  const dropEvent = useCallback((id) => {
+    setPendingEvents((prev) => withoutId(prev, id))
+    setEvents((prev) => withoutId(prev, id))
+    setOlderEvents((prev) => withoutId(prev, id))
+  }, [])
 
   useEffect(() => {
     let alive = true
     let version = 0
+    let snapshotPending = false
     async function loadPending() {
       const rows = []
       let before
@@ -103,10 +126,10 @@ export default function GameView({ gameId, session, onBack }) {
       }
       return { data: rows, error: null }
     }
-    invalidateSnapshot.current = () => { if (snapshotPending.current) { ++version; scheduleRefresh() } }
+    invalidateSnapshot.current = () => { if (snapshotPending) { ++version; scheduleRefresh() } }
     async function load() {
       const request = ++version
-      snapshotPending.current = true
+      snapshotPending = true
       try {
       const [g, mem] = await Promise.all([
         supabase.from('games').select(GAME_COLUMNS).eq('id', gameId).single(),
@@ -118,9 +141,7 @@ export default function GameView({ gameId, session, onBack }) {
 
       setGame(g.data)
       setMembers(mem.data ?? [])
-      const canManage = g.data.gm_id === uid
-        || (mem.data ?? []).some((member) => member.profile_id === uid && member.role === 'gm')
-      if (!canManage) { setLoadError(''); loadedOnce.current = true; recordOk(); return }
+      if (!isGameGm(g.data, mem.data ?? [], uid)) { setLoadError(''); loadedOnce.current = true; recordOk(); return }
 
       const [z, pos, chars, fac, ev, huntState, joinCode, pending] = await Promise.all([
         supabase.from('zones_view').select('*').eq('game_id', gameId),
@@ -151,7 +172,7 @@ export default function GameView({ gameId, session, onBack }) {
       loadedOnce.current = true
       recordOk()
       } catch (error) { if (alive && request === version) failSnapshot(error.message) }
-      finally { if (request === version) snapshotPending.current = false }
+      finally { if (request === version) snapshotPending = false }
     }
     refreshRef.current = load
     const focus = () => { if (document.visibilityState !== 'hidden') load() }
@@ -168,12 +189,11 @@ export default function GameView({ gameId, session, onBack }) {
       alive = false; ++version; clearInterval(timer); clearTimeout(refreshTimer.current)
       refreshRef.current = () => {}
       invalidateSnapshot.current = () => {}
-      snapshotPending.current = false
       window.removeEventListener('online', wentOnline); window.removeEventListener('offline', wentOffline)
       window.removeEventListener('focus', focus)
       document.removeEventListener('visibilitychange', focus)
     }
-  }, [gameId, uid, refetchZones, refetchMembers, scheduleRefresh, recordOk, failSnapshot])
+  }, [gameId, uid, scheduleRefresh, recordOk, failSnapshot])
 
   useEffect(() => {
     if (!isGm) return undefined
@@ -212,43 +232,24 @@ export default function GameView({ gameId, session, onBack }) {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_events', filter: `game_id=eq.${gameId}` }, (payload) => {
         invalidateSnapshot.current()
-        setPendingEvents((prev) => {
-          const rest = prev.filter((e) => e.id !== (payload.new?.id ?? payload.old?.id))
-          return payload.new?.status === 'pending' ? [payload.new, ...rest] : rest
-        })
-        if (payload.eventType === 'INSERT') {
-          setEvents((prev) => (prev.some((e) => e.id === payload.new.id) ? prev : [payload.new, ...prev].slice(0, 300)))
-        } else if (payload.eventType === 'UPDATE') {
-          setEvents((prev) => prev.map((e) => (e.id === payload.new.id ? payload.new : e)))
-        } else if (payload.eventType === 'DELETE') {
-          setEvents((prev) => prev.filter((e) => e.id !== payload.old?.id))
-        }
-        if (payload.new?.type?.startsWith('hunt_')
-            || payload.new?.type?.startsWith('elimination_')
-            || payload.new?.type === 'eliminated'
-            || payload.new?.type === 'zone_boundary_exit') scheduleRefresh()
+        if (payload.eventType === 'DELETE') dropEvent(payload.old?.id)
+        else putEvent(payload.new, payload.eventType === 'INSERT')
+        if (payload.new && eventInfo(payload.new.type).affectsHunt) scheduleRefresh()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
         invalidateSnapshot.current()
-        if (payload.eventType === 'DELETE') {
-          setCharacters((prev) => prev.filter((c) => c.id !== payload.old?.id))
-        } else {
-          setCharacters((prev) => {
-            const i = prev.findIndex((c) => c.id === payload.new.id)
-            if (i === -1) return [...prev, payload.new]
-            const next = [...prev]; next[i] = payload.new; return next
-          })
-        }
+        if (payload.eventType === 'DELETE') setCharacters((prev) => withoutId(prev, payload.old?.id))
+        else setCharacters((prev) => (hasId(prev, payload.new.id) ? replaceById(prev, payload.new) : [...prev, payload.new]))
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'zones', filter: `game_id=eq.${gameId}` }, refetchZones)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players', filter: `game_id=eq.${gameId}` }, refetchMembers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'zones', filter: `game_id=eq.${gameId}` }, () => reportFailure(loadZones()))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_players', filter: `game_id=eq.${gameId}` }, () => reportFailure(loadMembers()))
       .subscribe((status) => {
         setRealtime(realtimeStateFromStatus(status))
         if (status === 'SUBSCRIBED') scheduleRefresh()
       })
 
     return () => { supabase.removeChannel(channel); setRealtime('closed') }
-  }, [gameId, isGm, refetchZones, refetchMembers, refetchHunt, scheduleRefresh])
+  }, [gameId, isGm, loadZones, loadMembers, reportFailure, scheduleRefresh, putEvent, dropEvent])
 
   const usernameOf = useCallback((profileId) => {
     const m = members.find((x) => x.profile_id === profileId)
@@ -266,7 +267,7 @@ export default function GameView({ gameId, session, onBack }) {
     const awaiting = hunt?.phase === 'active'
       ? (hunt.players ?? []).filter((player) => player.state === 'alive' && !player.target_profile_id).length
       : 0
-    const breaches = pendingEvents.filter((event) => event.type === 'zone_boundary_exit').length
+    const breaches = pendingEvents.filter((event) => eventInfo(event.type).breach).length
     const triggers = pendingEvents.length - breaches
     if (pendingClaims) items.push({ key: 'claims', tab: 'hunt', text: `${pendingClaims} elimination claim${pendingClaims === 1 ? '' : 's'} to rule on` })
     if (awaiting) items.push({ key: 'assign', tab: 'hunt', text: `${awaiting} player${awaiting === 1 ? '' : 's'} waiting for a target assignment` })
@@ -285,235 +286,78 @@ export default function GameView({ gameId, session, onBack }) {
       if (error) throw error
       setOlderEvents((prev) => [...prev, ...(data ?? [])])
       setHasMore(data?.length === 200)
-    } catch (error) { reportAction(error) } finally { setHistoryBusy(false) }
+    } catch (error) { setActionError(error.message) } finally { setHistoryBusy(false) }
   }
 
-  async function updateGame(patch) {
+  // Every GM write discards any snapshot still in flight (it predates the
+  // write) and clears the banner once it succeeds. Failures throw to the
+  // panel that started the write, which reports them. RLS and the RPCs are
+  // the access check.
+  const gmWrite = (write) => async (...args) => {
     invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.from('games').update(patch).eq('id', gameId).select(GAME_COLUMNS).single()
-    if (error) return reportAction(error)
+    const result = await write(...args)
+    setActionError('')
+    return result
+  }
+
+  // Hunt RPCs return the new admin state; the game row follows its phase.
+  const huntRpc = (name, argsOf) => gmWrite(async (...args) => {
+    const data = unwrap(await supabase.rpc(name, argsOf(...args)))
+    setHunt(data)
+    setGame((current) => ({ ...current, ...GAME_FOR_HUNT_PHASE[data.phase] }))
+  })
+
+  const resolveEvent = (patch) => gmWrite(async (ev) => {
+    const data = unwrap(await supabase.from('game_events')
+      .update({ ...patch, resolved_at: new Date().toISOString(), resolved_by: uid }).eq('id', ev.id).select().single())
+    putEvent(data)
+  })
+
+  const updateGame = gmWrite(async (patch) => {
+    const data = unwrap(await supabase.from('games').update(patch).eq('id', gameId).select(GAME_COLUMNS).single())
     setGame((current) => ({ ...data, join_code: current?.join_code }))
-    return reportAction(null)
-  }
-
-  async function confirmEvent(ev) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const patch = { status: 'confirmed', player_visible: true, resolved_at: new Date().toISOString(), resolved_by: uid }
-    const { data, error } = await supabase.from('game_events').update(patch).eq('id', ev.id).select().single()
-    if (error) return reportAction(error)
-    setEvents((prev) => prev.map((e) => (e.id === ev.id ? data : e)))
-    setOlderEvents((prev) => prev.map((e) => e.id === ev.id ? data : e))
-    setPendingEvents((prev) => prev.filter((e) => e.id !== ev.id))
-    return reportAction(null)
-  }
-
-  async function dismissEvent(ev) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const patch = { status: 'dismissed', resolved_at: new Date().toISOString(), resolved_by: uid }
-    const { data, error } = await supabase.from('game_events').update(patch).eq('id', ev.id).select().single()
-    if (error) return reportAction(error)
-    setEvents((prev) => prev.map((e) => (e.id === ev.id ? data : e)))
-    setOlderEvents((prev) => prev.map((e) => e.id === ev.id ? data : e))
-    setPendingEvents((prev) => prev.filter((e) => e.id !== ev.id))
-    return reportAction(null)
-  }
-
-  async function saveZone(draft) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    if (draft.id) {
-      const { error } = await supabase.from('zones').update({
-        name: draft.name, trigger_mode: draft.trigger_mode, dwell_seconds: draft.dwell_seconds,
-        exit_buffer_m: draft.exit_buffer_m, one_shot: draft.one_shot, active: draft.active,
-        radius_m: draft.radius_m, payload: draft.payload, zone_type: draft.zone_type,
-        warning_distance_m: draft.warning_distance_m,
-      }).eq('id', draft.id)
-      if (error) return reportAction(error)
-    } else {
-      const { error } = await supabase.from('zones').insert({
-        game_id: gameId, name: draft.name, shape: draft.shape, geog: draft.geog,
-        radius_m: draft.radius_m, trigger_mode: draft.trigger_mode, dwell_seconds: draft.dwell_seconds,
-        exit_buffer_m: draft.exit_buffer_m, one_shot: draft.one_shot, active: draft.active, payload: draft.payload,
-        zone_type: draft.zone_type, warning_distance_m: draft.warning_distance_m,
-      })
-      if (error) return reportAction(error)
-    }
-    const error = await refetchZones()
-    return reportAction(error)
-  }
-
-  async function deleteZone(id) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { error } = await supabase.from('zones').delete().eq('id', id)
-    if (error) return reportAction(error)
-    const refreshError = await refetchZones()
-    return reportAction(refreshError)
-  }
-
-  async function saveCharacter(id, patch) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { error } = await supabase.from('characters').update(patch).eq('id', id)
-    return reportAction(error)
-  }
-
-  async function addNpc(name) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { error } = await supabase.from('characters').insert({ game_id: gameId, user_id: uid, name, is_npc: true })
-    return reportAction(error)
-  }
-
-  async function deleteCharacter(id) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { error } = await supabase.from('characters').delete().eq('id', id)
-    return reportAction(error)
-  }
-
-  async function addFaction(name, color) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.from('factions').insert({ game_id: gameId, name, color }).select().single()
-    if (error) return reportAction(error)
+  })
+  const confirmEvent = resolveEvent({ status: 'confirmed', player_visible: true })
+  const dismissEvent = resolveEvent({ status: 'dismissed' })
+  const saveZone = gmWrite(async (draft) => {
+    const fields = Object.fromEntries(ZONE_FIELDS.map((key) => [key, draft[key]]))
+    unwrap(draft.id
+      ? await supabase.from('zones').update(fields).eq('id', draft.id)
+      : await supabase.from('zones').insert({ ...fields, game_id: gameId, shape: draft.shape, geog: draft.geog }))
+    await loadZones()
+  })
+  const deleteZone = gmWrite(async (id) => {
+    unwrap(await supabase.from('zones').delete().eq('id', id))
+    await loadZones()
+  })
+  const saveCharacter = gmWrite(async (id, patch) => unwrap(await supabase.from('characters').update(patch).eq('id', id)))
+  const addNpc = gmWrite(async (name) => unwrap(await supabase.from('characters').insert({ game_id: gameId, user_id: uid, name, is_npc: true })))
+  const deleteCharacter = gmWrite(async (id) => unwrap(await supabase.from('characters').delete().eq('id', id)))
+  const addFaction = gmWrite(async (name, color) => {
+    const data = unwrap(await supabase.from('factions').insert({ game_id: gameId, name, color }).select().single())
     setFactions((prev) => [...prev, data])
-    return reportAction(null)
-  }
-
-  async function broadcast(targetProfileIds, message) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const rows = targetProfileIds.map((pid) => ({
+  })
+  const broadcast = gmWrite(async (targetProfileIds, message) => unwrap(await supabase.from('game_events').insert(
+    targetProfileIds.map((pid) => ({
       game_id: gameId, profile_id: pid, type: 'gm_note', status: 'confirmed', player_visible: true,
       payload: { message },
-    }))
-    const { error } = await supabase.from('game_events').insert(rows)
-    return reportAction(error)
-  }
-
-  async function setMemberRole(profileId, role) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { error } = await supabase.from('game_players').update({ role }).eq('game_id', gameId).eq('profile_id', profileId)
-    if (error) return reportAction(error)
-    const refreshError = await refetchMembers()
-    return reportAction(refreshError)
-  }
-
-  async function removeMember(profileId) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { error } = await supabase.from('game_players').delete().eq('game_id', gameId).eq('profile_id', profileId)
-    if (error) return reportAction(error)
-    const refreshError = await refetchMembers()
-    return reportAction(refreshError)
-  }
-
-  async function startHunt() {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.rpc('start_hunt', { g: gameId })
-    if (error) return reportAction(error)
-    setHunt(data)
-    setGame((current) => ({ ...current, status: 'active', location_visibility: 'gm_only' }))
-    return reportAction(null)
-  }
-
-  async function resetHunt() {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.rpc('reset_hunt', { g: gameId })
-    if (error) return reportAction(error)
-    setHunt(data)
-    setGame((current) => ({ ...current, status: 'draft' }))
-    return reportAction(null)
-  }
-
-  async function resolveHuntClaim(claimId, confirmed) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.rpc('gm_resolve_elimination', {
-      claim_id: claimId,
-      confirm_elimination: confirmed,
-    })
-    if (error) return reportAction(error)
-    setHunt(data)
-    if (data.phase === 'finished') setGame((current) => ({ ...current, status: 'finished' }))
-    return reportAction(null)
-  }
-
-  async function eliminateHuntPlayer(profileId) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.rpc('gm_eliminate_player', {
-      g: gameId,
-      victim_id: profileId,
-    })
-    if (error) return reportAction(error)
-    setHunt(data)
-    if (data.phase === 'finished') setGame((current) => ({ ...current, status: 'finished' }))
-    return reportAction(null)
-  }
-
-  async function restoreHuntPlayer(profileId) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.rpc('gm_restore_player', {
-      g: gameId,
-      profile_id: profileId,
-    })
-    if (error) return reportAction(error)
-    setHunt(data)
-    setGame((current) => ({ ...current, status: 'active', location_visibility: 'gm_only' }))
-    return reportAction(null)
-  }
-
-  async function saveHuntChain(profileIds) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.rpc('gm_set_hunt_chain', {
-      g: gameId,
-      player_ids: profileIds,
-    })
-    if (error) return reportAction(error)
-    setHunt(data)
-    return reportAction(null)
-  }
-
-  async function assignNextTarget(profileId) {
-    invalidateSnapshot.current()
-    const denied = requireGm()
-    if (denied) return denied
-    const { data, error } = await supabase.rpc('gm_assign_next_target', {
-      g: gameId,
-      hunter_id: profileId,
-    })
-    if (error) return reportAction(error)
-    setHunt(data)
-    return reportAction(null)
-  }
+    })),
+  )))
+  const setMemberRole = gmWrite(async (profileId, role) => {
+    unwrap(await supabase.from('game_players').update({ role }).eq('game_id', gameId).eq('profile_id', profileId))
+    await loadMembers()
+  })
+  const removeMember = gmWrite(async (profileId) => {
+    unwrap(await supabase.from('game_players').delete().eq('game_id', gameId).eq('profile_id', profileId))
+    await loadMembers()
+  })
+  const startHunt = huntRpc('start_hunt', () => ({ g: gameId }))
+  const resetHunt = huntRpc('reset_hunt', () => ({ g: gameId }))
+  const resolveHuntClaim = huntRpc('gm_resolve_elimination', (claimId, confirmed) => ({ claim_id: claimId, confirm_elimination: confirmed }))
+  const eliminateHuntPlayer = huntRpc('gm_eliminate_player', (profileId) => ({ g: gameId, victim_id: profileId }))
+  const restoreHuntPlayer = huntRpc('gm_restore_player', (profileId) => ({ g: gameId, profile_id: profileId }))
+  const saveHuntChain = huntRpc('gm_set_hunt_chain', (profileIds) => ({ g: gameId, player_ids: profileIds }))
+  const assignNextTarget = huntRpc('gm_assign_next_target', (profileId) => ({ g: gameId, hunter_id: profileId }))
 
   function copyCode() {
     if (!game.join_code) return
@@ -543,7 +387,7 @@ export default function GameView({ gameId, session, onBack }) {
         <span className="spacer" />
         <div className="topbar-control">
           <span className="control-label">STATUS</span>
-          <select className={`status-select status-${game.status}`} aria-label="Game status" value={game.status} onChange={(e) => updateGame({ status: e.target.value })}>
+          <select className={`status-select status-${game.status}`} aria-label="Game status" value={game.status} onChange={(e) => reportFailure(updateGame({ status: e.target.value }))}>
             <option value="draft">DRAFT</option>
             <option value="active">ACTIVE</option>
             <option value="finished">FINISHED</option>
@@ -551,7 +395,7 @@ export default function GameView({ gameId, session, onBack }) {
         </div>
         <div className="topbar-control">
           <span className="control-label">WHO SEES POSITIONS</span>
-          <select aria-label="Position visibility" value={game.location_visibility} onChange={(e) => updateGame({ location_visibility: e.target.value })}>
+          <select aria-label="Position visibility" value={game.location_visibility} onChange={(e) => reportFailure(updateGame({ location_visibility: e.target.value }))}>
             <option value="gm_only">GMs only</option>
             <option value="faction">Same faction</option>
             <option value="all">Everyone</option>
@@ -560,14 +404,14 @@ export default function GameView({ gameId, session, onBack }) {
         <div className="topbar-control">
           <span className="control-label">HUNTER DIRECTION</span>
           <select aria-label="Hunter direction to target" title="On: living hunters see a true-north bearing to their target and only the distance band. Off: rounded metres, no bearing."
-            value={game.direction_enabled ? 'on' : 'off'} onChange={(e) => updateGame({ direction_enabled: e.target.value === 'on' })}>
+            value={game.direction_enabled ? 'on' : 'off'} onChange={(e) => reportFailure(updateGame({ direction_enabled: e.target.value === 'on' }))}>
             <option value="off">Off (bands + metres)</option>
             <option value="on">On (bearing + bands)</option>
           </select>
         </div>
-        <button className="ghost" onClick={refetchHunt}>Refresh</button><span className="gm-chip">GM</span>
+        <button className="ghost" onClick={refresh}>Refresh</button><span className="gm-chip">GM</span>
       </div>
-      <SyncStatus sync={sync} realtime={realtime} online={online} onRetry={refetchHunt} />
+      <SyncStatus sync={sync} realtime={realtime} online={online} onRetry={refresh} />
       {decisions.length > 0 && (
         <div className="pending-decisions" role="region" aria-label="Pending decisions" aria-live="polite">
           <b>{decisions.length} DECISION{decisions.length === 1 ? '' : 'S'} WAITING</b>
@@ -613,7 +457,7 @@ export default function GameView({ gameId, session, onBack }) {
             restorePlayer={restoreHuntPlayer}
             saveChain={saveHuntChain}
             assignNextTarget={assignNextTarget}
-            refresh={refetchHunt}
+            refresh={refresh}
           />
         )}
         <div style={{ display: tab === 'map' ? 'block' : 'none', height: '100%' }}>

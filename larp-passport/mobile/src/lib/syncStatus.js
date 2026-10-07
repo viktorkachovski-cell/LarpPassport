@@ -2,20 +2,12 @@
 // can disagree with the others; nothing here collapses them into one "online"
 // flag. The functions are pure so the screens only decide *when* to compute.
 
+import { formatAge } from './time'
+
 const NETWORK_FAILURE = /network request failed|failed to fetch|network ?error|load failed|econnrefused|enotfound|etimedout|timed? ?out|unreachable|offline/i
 
 export function isNetworkFailure(message) {
   return NETWORK_FAILURE.test(String(message ?? ''))
-}
-
-export function formatAge(timestamp, now = Date.now()) {
-  if (!timestamp) return null
-  const seconds = Math.max(0, Math.round((now - new Date(timestamp).getTime()) / 1000))
-  if (seconds < 10) return 'just now'
-  if (seconds < 60) return `${seconds} s ago`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`
-  return `${Math.floor(seconds / 86400)} d ago`
 }
 
 // Supabase channel statuses -> a small vocabulary the UI can label.
@@ -36,7 +28,8 @@ export function describeRealtime(state) {
 // lastOkAt: time of the last successful authoritative response.
 // lastErrorAt/lastError: the most recent failed authoritative request.
 // A socket status is only a hint; it never upgrades the wording to "synced".
-export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime, now = Date.now() }) {
+// subject names what the success line reports as updated.
+export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime, subject = 'Server', now = Date.now() }) {
   const failedSinceOk = lastErrorAt && (!lastOkAt || new Date(lastErrorAt) > new Date(lastOkAt))
   const network = failedSinceOk && isNetworkFailure(lastError)
   const okAge = formatAge(lastOkAt, now)
@@ -64,7 +57,7 @@ export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime,
   const ageMs = now - new Date(lastOkAt).getTime()
   return {
     tone: ageMs > 3 * 60 * 1000 ? 'warning' : 'ok',
-    text: `Server updated ${okAge}`,
+    text: `${subject} updated ${okAge}`,
     detail: live == null ? 'Pull down to refresh' : realtime === 'connected' ? live : `${live} · refreshing periodically`,
     live,
   }

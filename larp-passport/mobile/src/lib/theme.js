@@ -45,6 +45,14 @@ export const T = {
   lineLabel: 16,
 }
 
+// Text colour for a status tone from the syncStatus describers.
+export function toneColor(tone) {
+  if (tone === 'ok') return C.green
+  if (tone === 'error') return C.red
+  if (tone === 'warning') return C.amber
+  return C.muted
+}
+
 // Spacing and touch-target minimums.
 export const S = {
   touch: 48,

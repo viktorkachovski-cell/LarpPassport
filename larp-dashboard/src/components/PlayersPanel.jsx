@@ -1,21 +1,19 @@
-import { useState } from 'react'
-import { timeAgo } from '../lib/geo'
+import { formatAge } from '../lib/time'
+import { useAction } from '../lib/useAction'
+import Outcome from './Outcome'
 import TableScroll from './TableScroll'
 
 export default function PlayersPanel({ members, positions, uid, game, setMemberRole, removeMember, updateGame }) {
   const gmCount = members.filter((m) => m.role === 'gm').length
-  const [busy, setBusy] = useState(null)
-  const [outcome, setOutcome] = useState(null)
+  const { busy, outcome, clear, run } = useAction()
 
-  async function act(profileId, label, action) {
-    if (busy) return
-    setBusy(profileId); setOutcome(null)
-    try {
-      const error = await action()
-      setOutcome(error ? { tone: 'error', text: `${label} failed: ${error.message}` } : { tone: 'ok', text: `${label}.` })
-    } catch (error) {
-      setOutcome({ tone: 'error', text: `${label} failed: ${error.message}` })
-    } finally { setBusy(null) }
+  function act(profileId, label, action) {
+    run(action, { key: profileId, success: `${label}.`, failure: (reason) => `${label} failed: ${reason}` })
+  }
+
+  function setRetention(days) {
+    if (!(days >= 1) || days === game.purge_after_days) return
+    run(() => updateGame({ purge_after_days: days }), { key: 'retention', failure: (reason) => `Retention change failed: ${reason}` })
   }
 
   function remove(m) {
@@ -24,16 +22,12 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
     act(m.profile_id, `Removed ${name}`, () => removeMember(m.profile_id))
   }
 
-  const consentActive = (m) =>
-    m.sharing_enabled && m.location_consent_at &&
-    (!m.consent_revoked_at || new Date(m.consent_revoked_at) < new Date(m.location_consent_at))
-
   return (
     <div className="panel-pad">
       <p className="hint mb">
         Players join from the app with join code <b style={{ color: 'var(--cyan)' }}>{game.join_code}</b>.
         Location pings older than <input type="number" min="1" max="90" aria-label="Days to keep location pings" style={{ width: 76 }} defaultValue={game.purge_after_days}
-          onBlur={(e) => { const v = Number(e.target.value); if (v >= 1 && v !== game.purge_after_days) updateGame({ purge_after_days: v }) }} /> days are deleted automatically.
+          onBlur={(e) => setRetention(Number(e.target.value))} /> days are deleted automatically.
       </p>
       <TableScroll label="Members table">
       <table className="grid">
@@ -51,10 +45,10 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
               </td>
               <td>
                 {m.role === 'gm' ? <span className="badge-pill gm">GM</span>
-                  : consentActive(m) ? <span className="badge-pill on">sharing on</span>
+                  : m.sharing_enabled ? <span className="badge-pill on">sharing on</span>
                   : <span className="badge-pill off">sharing off</span>}
               </td>
-              <td className="hint">{timeAgo(positions[m.profile_id]?.recorded_at)}</td>
+              <td className="hint">{formatAge(positions[m.profile_id]?.recorded_at) ?? '—'}</td>
               <td className="hint">{positions[m.profile_id]?.battery_pct != null ? Math.round(positions[m.profile_id].battery_pct) + '%' : '—'}</td>
               <td>{m.profile_id !== uid && <button className="danger" aria-label={`Remove ${m.profile?.username ?? 'member'}`} disabled={busy === m.profile_id} onClick={() => remove(m)}>Remove</button>}</td>
             </tr>
@@ -62,12 +56,7 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
         </tbody>
       </table>
       </TableScroll>
-      {outcome && (
-        <div className={`outcome ${outcome.tone === 'error' ? 'outcome-error' : 'outcome-ok'}`} role={outcome.tone === 'error' ? 'alert' : 'status'}>
-          <span>{outcome.text}</span>
-          <button type="button" className="ghost" onClick={() => setOutcome(null)} aria-label="Dismiss message">Dismiss</button>
-        </div>
-      )}
+      <Outcome outcome={outcome} onDismiss={clear} />
       {members.length <= 1 && <p className="hint mt">Just you so far. Share the join code with your players.</p>}
     </div>
   )

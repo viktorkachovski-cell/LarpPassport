@@ -13,7 +13,7 @@ export function createEventDelivery({ storage, fetchPage, notify, isCurrent }) {
         for (const event of events) {
           if (!await isCurrent(scope)) return
           if (event.delivery_seq <= cursor) continue
-          if (event.type !== 'player_message') await notify(event)
+          await notify(event)
           cursor = event.delivery_seq
           await storage.setItem(key, String(cursor))
         }

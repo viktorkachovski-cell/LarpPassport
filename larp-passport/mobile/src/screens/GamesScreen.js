@@ -3,8 +3,9 @@ import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { stopSharing } from '../lib/locationTask'
-import { C, F, S, T } from '../lib/theme'
+import { C, F, S, T, toneColor } from '../lib/theme'
 import { describeServerSync } from '../lib/syncStatus'
+import { useNow } from '../lib/useNow'
 
 const STATUS_COLORS = { active: C.green, draft: C.amber, finished: C.muted }
 
@@ -115,14 +116,10 @@ export default function GamesScreen({ onOpen }) {
 }
 
 function ListSyncStatus({ sync, loading }) {
-  const [tick, setTick] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setTick(Date.now()), 10000)
-    return () => clearInterval(timer)
-  }, [])
-  const status = describeServerSync({ ...sync, realtime: null, now: tick })
-  const color = status.tone === 'ok' ? C.green : status.tone === 'error' ? C.red : status.tone === 'warning' ? C.amber : C.muted
-  const text = loading && !sync.lastOkAt ? 'Checking server' : status.text.replace('Server updated', 'Games updated')
+  const now = useNow(10000)
+  const status = describeServerSync({ ...sync, realtime: null, subject: 'Games', now })
+  const color = toneColor(status.tone)
+  const text = loading && !sync.lastOkAt ? 'Checking server' : status.text
   return (
     <View style={styles.syncChip}>
       <Text style={[styles.syncChipText, { color }]} numberOfLines={2}>{text}</Text>

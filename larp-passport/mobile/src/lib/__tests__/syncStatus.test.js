@@ -1,6 +1,7 @@
 import {
-  describeRealtime, describeServerSync, describeSharing, formatAge, isNetworkFailure, realtimeStateFromStatus,
+  describeRealtime, describeServerSync, describeSharing, isNetworkFailure, realtimeStateFromStatus,
 } from '../syncStatus'
+import { formatAge } from '../time'
 
 const T0 = Date.parse('2026-09-07T12:00:00Z')
 const at = (secondsAgo) => new Date(T0 - secondsAgo * 1000).toISOString()
@@ -9,9 +10,10 @@ describe('formatAge', () => {
   it('rounds to readable units', () => {
     expect(formatAge(null, T0)).toBeNull()
     expect(formatAge(at(3), T0)).toBe('just now')
-    expect(formatAge(at(12), T0)).toBe('12 s ago')
-    expect(formatAge(at(190), T0)).toBe('3 min ago')
-    expect(formatAge(at(7200), T0)).toBe('2 h ago')
+    expect(formatAge(at(12), T0)).toBe('12s ago')
+    expect(formatAge(at(190), T0)).toBe('3m ago')
+    expect(formatAge(at(7200), T0)).toBe('2h ago')
+    expect(formatAge(at(3 * 86400), T0)).toBe('3d ago')
   })
 })
 
@@ -37,20 +39,20 @@ describe('describeServerSync', () => {
   it('reports a successful snapshot age and the live hint separately', () => {
     const s = describeServerSync({ lastOkAt: at(12), realtime: 'connected', now: T0 })
     expect(s.tone).toBe('ok')
-    expect(s.text).toBe('Server updated 12 s ago')
+    expect(s.text).toBe('Server updated 12s ago')
     expect(s.detail).toBe('Live updates on')
   })
 
   it('does not claim synchronized data when the socket is up but the snapshot failed', () => {
     const s = describeServerSync({ lastOkAt: at(120), lastErrorAt: at(5), lastError: 'permission denied', realtime: 'connected', now: T0 })
     expect(s.tone).toBe('error')
-    expect(s.text).toBe('Last refresh failed · showing data from 2 min ago')
+    expect(s.text).toBe('Last refresh failed · showing data from 2m ago')
     expect(s.detail).toBe('permission denied')
   })
 
   it('only says offline when the failure looks like a network failure', () => {
     const offline = describeServerSync({ lastOkAt: at(30), lastErrorAt: at(1), lastError: 'Network request failed', realtime: 'reconnecting', now: T0 })
-    expect(offline.text).toBe('Offline or unreachable · showing data from 30 s ago')
+    expect(offline.text).toBe('Offline or unreachable · showing data from 30s ago')
     const first = describeServerSync({ lastErrorAt: at(1), lastError: 'TypeError: Network request failed', realtime: 'connecting', now: T0 })
     expect(first.text).toBe('Cannot reach the server')
     expect(isNetworkFailure('JWT expired')).toBe(false)
@@ -59,7 +61,7 @@ describe('describeServerSync', () => {
   it('treats an old but successful snapshot as a warning, not an error', () => {
     const s = describeServerSync({ lastOkAt: at(400), realtime: 'closed', now: T0 })
     expect(s.tone).toBe('warning')
-    expect(s.text).toBe('Server updated 6 min ago')
+    expect(s.text).toBe('Server updated 6m ago')
     expect(s.detail).toBe('Live updates off · refreshing periodically')
   })
 
@@ -101,7 +103,7 @@ describe('describeSharing', () => {
   })
 
   it('flags a stale fix and a missing first fix', () => {
-    expect(describeSharing({ sharing: true, permission: granted, lastFixAt: at(200), now: T0 }).lines).toEqual(['GPS fix is stale (3 min ago)'])
+    expect(describeSharing({ sharing: true, permission: granted, lastFixAt: at(200), now: T0 }).lines).toEqual(['GPS fix is stale (3m ago)'])
     expect(describeSharing({ sharing: true, permission: granted, now: T0 }).lines).toEqual(['Waiting for the first GPS fix'])
   })
 
@@ -113,5 +115,12 @@ describe('describeSharing', () => {
 
   it('does not claim a permission problem before permissions were queried', () => {
     expect(describeSharing({ sharing: false, permission: null, now: T0 }).lines).toEqual([])
+  })
+})
+
+describe('describeServerSync subject', () => {
+  it('names what was updated without rewriting the sentence', () => {
+    expect(describeServerSync({ lastOkAt: at(15), realtime: null, subject: 'Games', now: T0 }).text).toBe('Games updated 15s ago')
+    expect(describeServerSync({ lastOkAt: at(15), realtime: null, now: T0 }).text).toBe('Server updated 15s ago')
   })
 })

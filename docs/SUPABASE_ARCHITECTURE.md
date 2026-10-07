@@ -66,11 +66,14 @@ The callable RPCs are:
 - `gm_get_join_code(g)`: returns the game's join code to its GMs only.
 - `set_location_consent(g, grant_consent)`: records consent and revocation;
   revocation also deletes the latest stored position.
-- `ingest_pings(g, pings, last_seen_seq)`: accepts up to 500 points/256 KiB
-  while the game is draft or active, skips and counts invalid points instead
-  of rejecting the batch, deduplicates retries, updates the latest position,
-  evaluates recent points (newest 50 within 10 minutes) against zones, and
-  piggybacks visible events.
+- `ingest_pings(g, pings)`: accepts up to 500 points/256 KiB while the game
+  is draft or active, skips and counts invalid points instead of rejecting the
+  batch, deduplicates retries, updates the latest position, evaluates recent
+  points (newest 50 within 10 minutes) against zones, and returns
+  `{accepted, rejected, profile: {mode}}` or `{accepted: 0, rejected, reason}`.
+  Events reach phones through `get_player_event_delivery`; the legacy
+  `last_seen_seq` argument is still accepted and ignored so installed builds
+  keep resolving the call.
 - `get_hunt_status(g)`: returns only the caller's safe hunt state, target
   character, coarse proximity, and anonymous incoming claim.
 - `get_hunt_admin(g)`: returns the complete chain and claim history to the GM.
@@ -115,7 +118,8 @@ finished responses never carry a bearing (`006_hunt_direction.sql`). A confirmed
 elimination atomically removes the victim, revokes their location sharing, and
 cloaks the hunter for ten minutes. The inherited target remains private and
 unassigned until the GM explicitly releases it or replaces the complete chain.
-Per-game advisory locks serialize simultaneous claims. The final survivor is
+One per-game advisory lock (`private.lock_game`) serializes claims, GM hunt
+edits, consent changes and ping ingestion. The final survivor is
 recorded as winner and the game is marked finished.
 
 One zone per game may use `zone_type = 'play_area'`. The boundary is evaluated

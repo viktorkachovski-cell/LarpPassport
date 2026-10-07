@@ -8,6 +8,7 @@ import { supabase } from './supabase'
 import { createPingStore } from './pingStore'
 import { createTrackingSession } from './trackingSession'
 import { createEventDelivery } from './eventDelivery'
+import { eventInfo } from './events'
 
 export const LOCATION_TASK = 'larp-passport-location'
 const OWNER_KEY = 'larp_tracking_owner_v2'
@@ -41,11 +42,15 @@ const delivery = createEventDelivery({
     if (error) throw error
     return data ?? []
   },
-  notify: (event) => Notifications.scheduleNotificationAsync({
-    identifier: `larp-${event.id}-${event.delivery_seq}`,
-    content: { title: notificationTitle(event.type), body: event.payload?.message ?? 'Check your passport.' },
-    trigger: null,
-  }),
+  notify: async (event) => {
+    const { notifies, notification } = eventInfo(event.type)
+    if (!notifies) return
+    await Notifications.scheduleNotificationAsync({
+      identifier: `larp-${event.id}-${event.delivery_seq}`,
+      content: { title: notification, body: event.payload?.message ?? 'Check your passport.' },
+      trigger: null,
+    })
+  },
 })
 export async function syncNotifications(gameId) {
   const auth = await session()
@@ -115,9 +120,9 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
 })
 
 // Sends queued points for the active game in claimed batches. The server
-// evaluates the trail against zones, returns any events we haven't seen
-// (piggyback — no websocket needed in the background), and a GPS profile hint
-// we apply on the fly. Only one drain runs at a time; a second flush() call
+// evaluates the trail against zones and returns a GPS profile hint we apply
+// on the fly; after each batch syncNotifications pulls new events (no
+// websocket needed in the background). Only one drain runs at a time; a second flush() call
 // (e.g. "SEND NOW" during a background tick) joins the running drain, which
 // keeps claiming batches until nothing is pending.
 export async function flush(gameId) {
@@ -132,9 +137,8 @@ export async function flush(gameId) {
     send: async (pings) => {
       const auth = await session()
       if (!await tracking.current(owner) || auth?.user.id !== owner.userId) throw new Error('Tracking session ended.')
-      const { data, error } = await supabase.rpc('ingest_pings', {
-        g: gameId, pings, last_seen_seq: null,
-      }).setHeader('Authorization', `Bearer ${auth.access_token}`)
+      const { data, error } = await supabase.rpc('ingest_pings', { g: gameId, pings })
+        .setHeader('Authorization', `Bearer ${auth.access_token}`)
       if (error) {
         const wrapped = new Error(error.message)
         wrapped.code = error.code
@@ -180,24 +184,6 @@ async function handleRejected(reason, owner) {
       trigger: null,
     })
   } catch {}
-}
-
-function notificationTitle(type) {
-  if (type === 'gm_note') return 'Message from your GM'
-  if (type === 'hunt_started') return 'The hunt has begun'
-  if (type === 'elimination_requested') return 'Confirm an elimination'
-  if (type === 'elimination_claimed') return 'Elimination claim sent'
-  if (type === 'elimination_rejected') return 'Elimination rejected'
-  if (type === 'elimination_confirmed') return 'Target eliminated'
-  if (type === 'eliminated') return 'You have been eliminated'
-  if (type === 'hunt_finished') return 'The hunt is over'
-  if (type === 'hunt_player_restored') return 'Traveller restored'
-  if (type === 'hunt_chain_changed') return 'Target chain corrected'
-  if (type === 'hunt_target_assigned') return 'New target assigned'
-  if (type === 'zone_boundary_warning') return 'Time anomaly boundary warning'
-  if (type === 'zone_boundary_exit') return 'You left the time anomaly'
-  if (type === 'player_message') return 'Message sent to GM'
-  return 'New passport event'
 }
 
 async function applyProfile(mode, owner) {

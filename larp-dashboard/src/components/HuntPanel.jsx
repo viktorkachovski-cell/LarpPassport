@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { timeAgo } from '../lib/geo'
+import { formatAge } from '../lib/time'
+import { useAction } from '../lib/useAction'
+import Outcome from './Outcome'
 import TableScroll from './TableScroll'
 
 function cloakLabel(timestamp) {
@@ -36,10 +38,7 @@ export default function HuntPanel({
   assignNextTarget,
   refresh,
 }) {
-  const [busy, setBusy] = useState(false)
-  // Outcome of the last consequential action. It stays until the GM dismisses
-  // it or starts another action; dismissing it changes no game state.
-  const [outcome, setOutcome] = useState(null) // { tone: 'error' | 'ok', text }
+  const { busy, outcome, clear, run } = useAction()
   const [editingChain, setEditingChain] = useState(false)
   const [chainOrder, setChainOrder] = useState([])
   const players = members.filter((member) => member.role === 'player')
@@ -47,19 +46,6 @@ export default function HuntPanel({
     characters.filter((character) => !character.is_npc).map((character) => character.user_id),
   )
   const ready = players.length >= 2 && players.every((player) => readyCharacters.has(player.profile_id))
-
-  async function run(action, { onSuccess, success } = {}) {
-    if (busy) return
-    setBusy(true); setOutcome(null)
-    try {
-      const error = await action()
-      if (error) { setOutcome({ tone: 'error', text: error.message }); return }
-      if (success) setOutcome({ tone: 'ok', text: success })
-      onSuccess?.()
-    } catch (error) {
-      setOutcome({ tone: 'error', text: error.message })
-    } finally { setBusy(false) }
-  }
 
   function begin() {
     if (!window.confirm(`Start the hunt with ${players.length} players? The roster and GM-only location privacy will be locked.`)) return
@@ -118,12 +104,7 @@ export default function HuntPanel({
     run(() => assignNextTarget(player.profile_id), { success: `Target assigned to ${player.character_name}.` })
   }
 
-  const outcomeBox = outcome && (
-    <div className={`outcome ${outcome.tone === 'error' ? 'outcome-error' : 'outcome-ok'}`} role={outcome.tone === 'error' ? 'alert' : 'status'}>
-      <span>{outcome.text}</span>
-      <button type="button" className="ghost" onClick={() => setOutcome(null)} aria-label="Dismiss message">Dismiss</button>
-    </div>
-  )
+  const outcomeBox = <Outcome outcome={outcome} onDismiss={clear} />
 
   if (!hunt) return <div className="panel-pad hunt-panel"><p className="hint">Loading hunt state...</p></div>
 
@@ -226,7 +207,7 @@ export default function HuntPanel({
                       <td><span className={`badge-pill ${player.state === 'alive' ? 'on' : 'off'}`}>{player.state.toUpperCase()}</span></td>
                       <td className={awaitingAssignment ? 'awaiting-target' : 'target-cell'}>{player.target_name ? <>→ {player.target_name}</> : awaitingAssignment ? 'Waiting for GM target assignment' : '-'}</td>
                       <td className={signal.startsWith('cloaked') ? 'signal-cloaked' : 'hint'}>{signal}</td>
-                      <td className="hint">{player.eliminated_at ? timeAgo(player.eliminated_at) : '-'}</td>
+                      <td className="hint">{formatAge(player.eliminated_at) ?? '-'}</td>
                       <td className="action-cell">
                         {hunt.phase === 'active' && player.state === 'alive' && alive.length > 1 && (
                           <button className="danger" aria-label={`Eliminate ${player.character_name}`} disabled={busy || assignmentPending} onClick={() => forceEliminate(player)}>Eliminate</button>
@@ -260,7 +241,7 @@ export default function HuntPanel({
             </div>
             {(hunt.claims ?? []).map((claim) => (
               <div key={claim.id} className="claim-row">
-                <div className="claim-meta"><span className={`status ${claim.status}`}>{claim.status.toUpperCase()}</span><span>{timeAgo(claim.requested_at)}</span></div>
+                <div className="claim-meta"><span className={`status ${claim.status}`}>{claim.status.toUpperCase()}</span><span>{formatAge(claim.requested_at)}</span></div>
                 <p><b>{claim.hunter_name}</b> claimed <b className="victim-name">{claim.victim_name}</b></p>
                 {claim.status === 'pending' && (
                   <div className="claim-actions">
