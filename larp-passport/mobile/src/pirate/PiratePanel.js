@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { C, F, S, T } from '../lib/theme'
 import { pirateRequestId } from '../lib/pirateRequestId'
 import { CompassDial } from './CompassDial'
+import { Kicker, Notice, Sheet, SheetTitle, TideButton } from './ui'
 
 const ordinal = (n) => ['first', 'second', 'third', 'fourth', 'fifth'][n - 1] ?? `#${n}`
 
@@ -46,8 +47,10 @@ export function PiratePanel({ mode, state, error, gameId, refresh }) {
 
   if (state && state.role !== 'player') {
     return <ScrollView contentContainerStyle={styles.root}>
-      <Text style={styles.heading}>PIRATE GAME</Text>
-      <Text style={styles.body}>GM controls are available in the dashboard.</Text>
+      <Sheet>
+        <SheetTitle>Pirate game</SheetTitle>
+        <Text style={styles.body}>GM controls are available in the dashboard.</Text>
+      </Sheet>
     </ScrollView>
   }
 
@@ -89,72 +92,90 @@ export function PiratePanel({ mode, state, error, gameId, refresh }) {
     finally { setBusy(false) }
   }
 
+  const bandLabel = state?.band === '25' ? 'within 25 m' : state?.band === '100' ? 'within 100 m'
+    : state?.band === 'far' ? 'farther than 100 m' : state?.band ?? 'locked'
+  const claimDisabled = !claimOpen || busy || !answer.trim()
+
   return (
     <ScrollView contentContainerStyle={styles.root} keyboardShouldPersistTaps="handled">
-      {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
-      {!state && <Text style={styles.body}>Loading the Pirate logbook…</Text>}
+      {!!error && <Notice tone="error" text={error} />}
+      {!state && <Sheet><Text style={styles.body}>Loading the Pirate logbook…</Text></Sheet>}
       {state && <>
-        <Text style={styles.heading}>{state.crew?.name ?? 'PIRATE GAME'}</Text>
-        {!!state.crew && <Text style={styles.body}>{state.is_captain
-          ? 'You are the captain. You carry the compass.'
-          : `Captain: ${state.crew.captain_name ?? 'not chosen yet'}. Only the captain reads the compass.`}</Text>}
-        {state.paused && <Text style={styles.warning}>The tide has stopped. Player actions are paused.</Text>}
-        {mode === 'chart' ? <>
-          <Text style={styles.caption}>CURRENT SITE</Text>
-          <Text style={styles.body}>{site?.site_name ?? 'No marked site in range.'}</Text>
-          {!!site?.reward && <Text style={styles.body}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}, plus doubloons by the order crews answer it (20 / 15 / 10 / 5 / 5).</Text>}
-          {!!site?.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
-          {site?.claimed_by_my_crew && <Text style={styles.warning}>Your crew has claimed this site.</Text>}
-          {site?.kind === 'riddle' && !site.claimed_by_my_crew && <>
-            <TextInput style={styles.input} value={answer} onChangeText={setAnswer}
-              placeholder="Enter the answer" placeholderTextColor={C.muted}
-              accessibilityLabel="Site answer" autoCapitalize="none" autoCorrect={false} maxLength={100} />
-            <TouchableOpacity accessibilityRole="button" disabled={!claimOpen || busy || !answer.trim()}
-              onPress={claim} style={[styles.button, (!claimOpen || busy || !answer.trim()) && styles.disabled]}>
-              <Text style={styles.buttonText}>{busy ? 'CLAIMING…' : 'CLAIM FOR CREW'}</Text>
-            </TouchableOpacity>
+        <Text style={styles.crewName} accessibilityRole="header">{state.crew?.name ?? 'Pirate game'}</Text>
+        <Sheet>
+          {!!state.crew && <Text style={styles.body}>{state.is_captain
+            ? 'You are the captain. You carry the compass.'
+            : `Captain: ${state.crew.captain_name ?? 'not chosen yet'}. Only the captain reads the compass.`}</Text>}
+          {state.paused && <Notice tone="warning" text="The tide has stopped. Player actions are paused." />}
+          {mode === 'chart' ? <>
+            <Kicker style={styles.section}>Current site</Kicker>
+            <Text style={styles.siteName}>{site?.site_name ?? 'No marked site in range.'}</Text>
+            {!!site?.reward && <Text style={styles.muted}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}, plus doubloons by the order crews answer it (20 / 15 / 10 / 5 / 5).</Text>}
+            {!!site?.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
+            {site?.claimed_by_my_crew && <Notice tone="ok" text="Your crew has claimed this site." />}
+            {site?.kind === 'riddle' && !site.claimed_by_my_crew && <>
+              <Kicker>Your answer</Kicker>
+              <TextInput style={styles.input} value={answer} onChangeText={setAnswer}
+                placeholder="Enter the answer" placeholderTextColor={C.sheetMuted}
+                accessibilityLabel="Site answer" autoCapitalize="none" autoCorrect={false} maxLength={100} />
+              <TideButton label={busy ? 'Claiming…' : 'Claim for crew'} disabled={claimDisabled} onPress={claim} />
+            </>}
+            <View style={styles.rule} />
+            <Kicker>Oath logbook</Kicker>
+            {(state.oath ?? []).length === 0
+              ? <Text style={styles.muted}>No words recovered yet.</Text>
+              : state.oath.map((word) => (
+                <View key={word.index} style={styles.ledgerRow}>
+                  <Text style={styles.ledgerLabel}>Word {word.index}</Text>
+                  <Text style={styles.ledgerValue}>{word.word}</Text>
+                </View>
+              ))}
+          </> : <>
+            <Kicker style={styles.section}>{reading ? `Reading at ${reading.lighthouse_name}` : 'True bearing'}</Kicker>
+            <CompassDial reading={reading} active={mode === 'compass'} />
+            <View style={styles.ledgerRow}>
+              <Text style={styles.ledgerLabel}>Distance band</Text>
+              <Text style={styles.ledgerValue}>{bandLabel}</Text>
+            </View>
+            <TideButton label={busy ? 'Reading…' : 'Take lighthouse reading'} disabled={!compassOpen || busy} onPress={takeReading} />
+            <View style={styles.rule} />
+            <Kicker>Logbook readings</Kicker>
+            {readings.length === 0
+              ? <Text style={styles.muted}>Reach a lighthouse after the curse wakes.</Text>
+              : readings.map((item) => {
+                const selected = item.taken_at === reading?.taken_at
+                return (
+                  <TouchableOpacity key={`${item.lighthouse_name}:${item.level}:${item.taken_at}`}
+                    accessibilityRole="button" accessibilityState={{ selected }}
+                    onPress={() => setSelectedReading(item.taken_at)} style={[styles.reading, selected && styles.readingSelected]}>
+                    <Text style={styles.readingName}>{item.lighthouse_name}</Text>
+                    <Text style={styles.muted}>{item.centre_deg}° ±{item.half_width_deg}° · {item.level} shards</Text>
+                  </TouchableOpacity>
+                )
+              })}
           </>}
-          <Text style={styles.caption}>OATH LOGBOOK</Text>
-          {(state.oath ?? []).length === 0
-            ? <Text style={styles.body}>No words recovered yet.</Text>
-            : state.oath.map((word) => <Text key={word.index} style={styles.body}>{word.index}. {word.word}</Text>)}
-        </> : <>
-          <Text style={styles.caption}>TRUE BEARING</Text>
-          <CompassDial reading={reading} active={mode === 'compass'} />
-          <Text style={styles.body}>Distance band: {state.band === '25' ? 'within 25 m' : state.band === '100' ? 'within 100 m' : state.band === 'far' ? 'farther than 100 m' : state.band ?? 'locked'}</Text>
-          <TouchableOpacity accessibilityRole="button" disabled={!compassOpen || busy}
-            onPress={takeReading} style={[styles.button, (!compassOpen || busy) && styles.disabled]}>
-            <Text style={styles.buttonText}>{busy ? 'READING…' : 'TAKE LIGHTHOUSE READING'}</Text>
-          </TouchableOpacity>
-          <Text style={styles.caption}>LOGBOOK READINGS</Text>
-          {readings.length === 0
-            ? <Text style={styles.body}>Reach a lighthouse after the curse wakes.</Text>
-            : readings.map((item) => (
-              <TouchableOpacity key={`${item.lighthouse_name}:${item.level}:${item.taken_at}`}
-                accessibilityRole="button" onPress={() => setSelectedReading(item.taken_at)} style={styles.reading}>
-                <Text style={styles.body}>{item.lighthouse_name} · {item.centre_deg}° ±{item.half_width_deg}° · {item.level} shards</Text>
-              </TouchableOpacity>
-            ))}
-        </>}
-        {!!outcome && <Text style={styles.outcome} accessibilityLiveRegion="polite">{outcome}</Text>}
+          {!!outcome && <Notice text={outcome} />}
+        </Sheet>
       </>}
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { padding: S.pad, gap: S.gap, paddingBottom: 40 },
-  heading: { color: C.text, fontFamily: F.displayBold, fontSize: T.title },
-  caption: { color: C.amber, fontFamily: F.monoMedium, fontSize: T.label, marginTop: 12 },
-  body: { color: C.text, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody },
-  prompt: { color: C.text, fontFamily: F.bodySemiBold, fontSize: T.bodyLarge, lineHeight: T.lineBody, marginVertical: 8 },
-  input: { color: C.text, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6,
-    fontFamily: F.body, fontSize: T.bodyLarge, minHeight: S.touch, paddingHorizontal: 12 },
-  button: { minHeight: S.touch, backgroundColor: C.amber, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  disabled: { opacity: 0.5 },
-  buttonText: { color: C.ink, fontFamily: F.displayBold, fontSize: T.button },
-  warning: { color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body },
-  error: { color: C.red, fontFamily: F.body, fontSize: T.body },
-  outcome: { color: C.cyan, fontFamily: F.bodyMedium, fontSize: T.body, marginTop: 12 },
-  reading: { borderColor: C.line, borderWidth: 1, borderRadius: 6, padding: 10 },
+  root: { padding: S.pad, gap: 10, paddingBottom: 40 },
+  crewName: { color: C.onWood, fontFamily: F.blackletter, fontSize: 34, lineHeight: 40, textShadowColor: C.woodSeam, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  section: { marginTop: 2 },
+  siteName: { color: C.sheetInk, fontFamily: F.bodyBold, fontSize: 19, lineHeight: 25 },
+  body: { color: C.sheetInk, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: T.lineBody },
+  muted: { color: C.sheetMuted, fontFamily: F.body, fontSize: 15, lineHeight: 21 },
+  prompt: { color: C.sheetInk, fontFamily: F.bodyMedium, fontStyle: 'italic', fontSize: 18, lineHeight: 26, marginVertical: 4 },
+  input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 6,
+    fontFamily: F.body, fontSize: 18, minHeight: S.touch, paddingHorizontal: 14 },
+  rule: { height: 1, backgroundColor: C.sheetRule, marginVertical: 6 },
+  ledgerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 },
+  ledgerLabel: { color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
+  ledgerValue: { flexShrink: 1, color: C.sheetInk, fontFamily: F.bodyMedium, fontSize: 18, lineHeight: 25, textAlign: 'right' },
+  reading: { minHeight: S.touch, justifyContent: 'center', borderColor: C.sheetMuted, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8 },
+  readingSelected: { backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 2 },
+  readingName: { color: C.sheetInk, fontFamily: F.bodySemiBold, fontSize: 17, lineHeight: 22 },
 })

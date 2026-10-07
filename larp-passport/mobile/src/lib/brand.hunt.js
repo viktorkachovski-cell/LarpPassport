@@ -20,6 +20,37 @@ export const palette = {
   greenBorder: '#2B6B4F',
 }
 
+export const themeName = 'hunt'
+
+export const fonts = {
+  displayMedium: 'ChakraPetch_500Medium',
+  displaySemiBold: 'ChakraPetch_600SemiBold',
+  displayBold: 'ChakraPetch_700Bold',
+  body: 'IBMPlexSans_400Regular',
+  bodyMedium: 'IBMPlexSans_500Medium',
+  bodySemiBold: 'IBMPlexSans_600SemiBold',
+  bodyBold: 'IBMPlexSans_700Bold',
+  mono: 'IBMPlexMono_400Regular',
+  monoMedium: 'IBMPlexMono_500Medium',
+  monoSemiBold: 'IBMPlexMono_600SemiBold',
+  numeric: 'ChakraPetch_700Bold',
+  blackletter: 'ChakraPetch_700Bold',
+}
+
+// Type scale (logical px). Operational text never goes below `label`; only
+// genuinely decorative kickers may use `micro`. Native font scaling stays on.
+export const typeScale = {
+  micro: 11,
+  label: 12,
+  body: 14,
+  bodyLarge: 15,
+  button: 14,
+  title: 20,
+  hero: 26,
+  lineBody: 20,
+  lineLabel: 16,
+}
+
 export const EYEBROW = 'TEMPORAL FIELD AUTHORITY'
 export const SHARING_FOOTNOTE = 'Sharing stops and your map position is removed on elimination. History follows the retention period above.'
 

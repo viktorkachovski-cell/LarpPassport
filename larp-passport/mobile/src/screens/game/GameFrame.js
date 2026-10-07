@@ -10,30 +10,34 @@ import { LiveDot } from '../../ui/primitives'
 import { CharacterSheet, CreateCharacter } from './CharacterTab'
 import { EventsTab } from './EventsTab'
 import { SharingTab } from './SharingTab'
+import { skin } from './frameSkin'
 
 // Layout shared by both apps' game screens: header, sync line, state strip,
 // tab bar and the character, events and sharing tabs. Each app supplies its
 // own state cells, mode tabs and, as children, the panel for its mode tabs.
+// Each app's frameSkin may restyle the chrome (Time Hunt's skin is empty).
+const sk = skin.styles
+
 export function GameFrame({
   session, onBack, phase, phaseLabel, phaseColor, cells, banner, modeTabs, eventsLabel = 'EVENTS', scrollTabs = false, tab, setTab, children,
 }) {
   const { game, character } = session
   if (session.loadError) return (
-    <SafeAreaView style={styles.loading}>
-      <Text style={styles.loadingText} accessibilityLiveRegion="polite">{session.loadError}</Text>
-      <TouchableOpacity accessibilityRole="button" onPress={session.refresh} style={styles.loadingAction}><Text style={styles.loadingText}>Retry</Text></TouchableOpacity>
-      <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.loadingAction}><Text style={styles.loadingText}>Back to games</Text></TouchableOpacity>
+    <SafeAreaView style={[styles.loading, sk.loading]}>
+      <Text style={[styles.loadingText, sk.loadingText]} accessibilityLiveRegion="polite">{session.loadError}</Text>
+      <TouchableOpacity accessibilityRole="button" onPress={session.refresh} style={styles.loadingAction}><Text style={[styles.loadingText, sk.loadingText]}>Retry</Text></TouchableOpacity>
+      <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.loadingAction}><Text style={[styles.loadingText, sk.loadingText]}>Back to games</Text></TouchableOpacity>
     </SafeAreaView>
   )
   if (!game || character === undefined) return (
-    <SafeAreaView style={styles.loading}>
-      <Text style={styles.loadingText}>LOADING GAME...</Text>
+    <SafeAreaView style={[styles.loading, sk.loading]}>
+      <Text style={[styles.loadingText, sk.loadingText]}>LOADING GAME...</Text>
     </SafeAreaView>
   )
   if (!ownsGame(game)) return (
-    <SafeAreaView style={styles.loading}>
-      <Text style={styles.loadingText}>{`${game.name} runs in the ${OTHER_APP} app.`}</Text>
-      <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.loadingAction}><Text style={styles.loadingText}>Back to games</Text></TouchableOpacity>
+    <SafeAreaView style={[styles.loading, sk.loading]}>
+      <Text style={[styles.loadingText, sk.loadingText]}>{`${game.name} runs in the ${OTHER_APP} app.`}</Text>
+      <TouchableOpacity accessibilityRole="button" onPress={onBack} style={styles.loadingAction}><Text style={[styles.loadingText, sk.loadingText]}>Back to games</Text></TouchableOpacity>
     </SafeAreaView>
   )
 
@@ -41,34 +45,36 @@ export function GameFrame({
     .map(([key, label]) => (
       <TouchableOpacity key={key} accessibilityRole="tab" accessibilityState={{ selected: tab === key }}
         accessibilityLabel={label.toLowerCase()} onPress={() => setTab(key)}
-        style={[styles.tab, scrollTabs && styles.scrollTab, tab === key && styles.activeTab]}>
-        <Text style={[styles.tabText, tab === key && styles.activeTabText]}>{label}</Text>
+        style={[styles.tab, sk.tab, scrollTabs && styles.scrollTab, scrollTabs && sk.scrollTab, tab === key && styles.activeTab, tab === key && sk.activeTab]}>
+        <Text style={[styles.tabText, sk.tabText, tab === key && styles.activeTabText, tab === key && sk.activeTabText]}>{label}</Text>
       </TouchableOpacity>
     ))
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to games" onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backText}>&lt;</Text>
+    <SafeAreaView style={[styles.safe, sk.safe]}>
+      {skin.Backdrop && <skin.Backdrop />}
+      <View style={[styles.header, sk.header]}>
+        {skin.HeaderDecor && <skin.HeaderDecor />}
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to games" onPress={onBack} style={[styles.backButton, sk.backButton]}>
+          {skin.BackGlyph ? <skin.BackGlyph /> : <Text style={styles.backText}>&lt;</Text>}
         </TouchableOpacity>
-        <Text style={styles.gameName} numberOfLines={1}>{game.name.toUpperCase()}</Text>
-        <View style={[styles.phaseChip, { borderColor: phaseColor }]} accessibilityLabel={`Game ${phaseLabel.toLowerCase()}`}>
+        <Text style={[styles.gameName, sk.gameName]} numberOfLines={1}>{skin.upperName ? game.name.toUpperCase() : game.name}</Text>
+        <View style={[styles.phaseChip, sk.phaseChip, { borderColor: phaseColor }]} accessibilityLabel={`Game ${phaseLabel.toLowerCase()}`}>
           {phase === 'active' && <LiveDot color={C.green} />}
-          <Text style={[styles.phaseText, { color: phaseColor }]}>{phaseLabel}</Text>
+          <Text style={[styles.phaseText, sk.phaseText, { color: phaseColor }]}>{phaseLabel}</Text>
         </View>
       </View>
 
       <SyncStatusLine sync={session.sync} realtime={session.realtime} onRetry={session.refresh} />
 
-      <View style={styles.stateStrip}>{cells}</View>
+      <View style={[styles.stateStrip, sk.stateStrip]}>{cells}</View>
 
       {banner}
 
       {scrollTabs
-        ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scrollTabsWrap}
-            contentContainerStyle={styles.scrollTabs}>{tabButtons}</ScrollView>
-        : <View style={styles.tabs}>{tabButtons}</View>}
+        ? <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.scrollTabsWrap, sk.scrollTabsWrap]}
+            contentContainerStyle={[styles.scrollTabs, sk.scrollTabs]}>{tabButtons}</ScrollView>
+        : <View style={[styles.tabs, sk.tabs]}>{tabButtons}</View>}
 
       {children}
 
@@ -105,14 +111,14 @@ function SyncStatusLine({ sync, realtime, onRetry }) {
   const status = describeServerSync({ ...sync, realtime, now })
   const color = toneColor(status.tone)
   return (
-    <View style={styles.syncLine}>
+    <View style={[styles.syncLine, sk.syncLine]}>
       <View style={common.flex}>
         <Text style={[styles.syncText, { color }]}>{status.text}</Text>
-        <Text style={styles.syncDetail} accessibilityLiveRegion={status.tone === 'error' ? 'polite' : 'none'}>{status.detail}</Text>
+        <Text style={[styles.syncDetail, sk.syncDetail]} accessibilityLiveRegion={status.tone === 'error' ? 'polite' : 'none'}>{status.detail}</Text>
       </View>
       {status.tone === 'error' && (
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retry sync" onPress={onRetry} style={styles.syncRetry}>
-          <Text style={styles.syncRetryText}>RETRY</Text>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retry sync" onPress={onRetry} style={[styles.syncRetry, sk.syncRetry]}>
+          <Text style={[styles.syncRetryText, sk.syncRetryText]}>RETRY</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -122,9 +128,9 @@ function SyncStatusLine({ sync, realtime, onRetry }) {
 export const StateCell = memo(function StateCell({ value, label, color = C.text, bordered = false }) {
   const isElement = typeof value === 'object' && value !== null
   return (
-    <View style={[styles.stateCell, bordered && styles.stateCellBorder]}>
-      <Text style={[styles.stateValue, { color }]} numberOfLines={1}>{isElement ? value : String(value)}</Text>
-      <Text style={styles.stateLabel} numberOfLines={1}>{label}</Text>
+    <View style={[styles.stateCell, sk.stateCell, bordered && styles.stateCellBorder, bordered && sk.stateCellBorder]}>
+      <Text style={[styles.stateValue, sk.stateValue, { color }]} numberOfLines={1}>{isElement ? value : String(value)}</Text>
+      <Text style={[styles.stateLabel, sk.stateLabel]} numberOfLines={1}>{label}</Text>
     </View>
   )
 })

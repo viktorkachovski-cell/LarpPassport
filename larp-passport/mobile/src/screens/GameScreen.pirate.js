@@ -27,8 +27,8 @@ export default function GameScreen({ gameId, session: auth, onBack }) {
       phase={phase} phaseLabel={phase.toUpperCase()} phaseColor={phaseColor}
       cells={<>
         <StateCell value={pirate?.shards ?? '--'} label="BEARING SHARDS" />
-        <StateCell value={pirate?.doubloons ?? '--'} label="DOUBLOONS" color={C.amber} bordered />
-        <StateCell value={pirate?.paused ? 'PAUSED' : phase.toUpperCase()} label="THE TIDE" color={pirate?.paused ? C.red : C.cyan} />
+        <StateCell value={pirate?.doubloons ?? '--'} label="DOUBLOONS" color={C.brassLight} bordered />
+        <StateCell value={pirate?.paused ? 'PAUSED' : phase.toUpperCase()} label="THE TIDE" color={pirate?.paused ? C.red : C.green} />
       </>}
     >
       {(tab === 'chart' || tab === 'compass') && (

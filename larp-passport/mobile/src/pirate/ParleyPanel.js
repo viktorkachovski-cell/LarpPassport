@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { parleyActions } from '../lib/pirateParley'
 import { pirateRequestId } from '../lib/pirateRequestId'
 import { supabase } from '../lib/supabase'
 import { C, F, S, T } from '../lib/theme'
 import { useNow } from '../lib/useNow'
+import { Kicker, Notice, Sheet, SheetTitle, TideButton } from './ui'
 
 function statusText(result) {
   if (!result) return ''
@@ -30,11 +31,8 @@ function statusText(result) {
   return messages[result.status] ?? `Parley status: ${result.status}`
 }
 
-function ActionButton({ label, disabled, onPress }) {
-  return <TouchableOpacity accessibilityRole="button" disabled={disabled} onPress={onPress}
-    style={[styles.button, disabled && styles.disabled]}>
-    <Text style={styles.buttonText}>{label}</Text>
-  </TouchableOpacity>
+function ActionButton({ label, disabled, onPress, variant }) {
+  return <TideButton label={label} disabled={disabled} onPress={onPress} variant={variant} style={styles.action} />
 }
 
 export function ParleyPanel({ state, error, gameId, refresh }) {
@@ -75,30 +73,32 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
   }
 
   return <ScrollView contentContainerStyle={styles.root} keyboardShouldPersistTaps="handled">
-    <Text style={styles.heading}>PARLEY</Text>
-    <Text style={styles.body}>The target shows a code. Both players confirm the result after the physical exchange.</Text>
-    {!!error && <Text style={styles.error}>{error}</Text>}
-    {!state && <Text style={styles.body}>Loading Parley…</Text>}
-    {state && <>
-      {state.mercy_until && new Date(state.mercy_until).getTime() > now
-        && <Text style={styles.warning}>Davy’s Mercy protects your crew until {new Date(state.mercy_until).toLocaleTimeString()}.</Text>}
-      {!active && <>
-        <ActionButton label="OPEN PARLEY CODE" disabled={!actions.canOpen || busy}
-          onPress={() => call('open_parley', {}, (data) => `Show code ${data.code} to the other player.`)} />
-        <Text style={styles.caption}>JOIN ANOTHER CREW</Text>
-        <TextInput style={styles.input} value={code} onChangeText={setCode}
-          accessibilityLabel="Parley code" keyboardType="number-pad" maxLength={4}
-          placeholder="Four digit code" placeholderTextColor={C.muted} />
-        <ActionButton label="JOIN PARLEY" disabled={!actions.canJoin || busy || !/^\d{4}$/.test(code)} onPress={join} />
-      </>}
-      {active && <>
-        <View style={styles.card}>
-          <Text style={styles.caption}>CURRENT PARLEY · {active.state.toUpperCase()}</Text>
+    {!!error && <Notice tone="error" text={error} />}
+    <Sheet>
+      <SheetTitle>Parley</SheetTitle>
+      <Text style={styles.muted}>The target shows a code. Both players confirm the result after the physical exchange.</Text>
+      {!state && <Text style={styles.body}>Loading Parley…</Text>}
+      {state && <>
+        {state.mercy_until && new Date(state.mercy_until).getTime() > now
+          && <Notice tone="warning" text={`Davy’s Mercy protects your crew until ${new Date(state.mercy_until).toLocaleTimeString()}.`} />}
+        {!active && <>
+          <ActionButton label="Open parley code" disabled={!actions.canOpen || busy}
+            onPress={() => call('open_parley', {}, (data) => `Show code ${data.code} to the other player.`)} />
+          <View style={styles.rule} />
+          <Kicker>Join another crew</Kicker>
+          <TextInput style={styles.input} value={code} onChangeText={setCode}
+            accessibilityLabel="Parley code" keyboardType="number-pad" maxLength={4}
+            placeholder="Four digit code" placeholderTextColor={C.sheetMuted} />
+          <ActionButton label="Join parley" variant="plank" disabled={!actions.canJoin || busy || !/^\d{4}$/.test(code)} onPress={join} />
+        </>}
+        {active && <>
+          <Kicker>Current parley · {active.state}</Kicker>
           {!!active.opponent_name && <Text style={styles.body}>Other crew: {active.opponent_name}</Text>}
-          {active.far_apart && <Text style={styles.warning}>The players were far apart when this Parley began. The GM can review it.</Text>}
-          {active.code && <Text style={styles.code} accessibilityLabel={`Parley code ${active.code}`}>
-            {active.code} · {secondsLeft}s
-          </Text>}
+          {active.far_apart && <Notice tone="warning" text="The players were far apart when this Parley began. The GM can review it." />}
+          {active.code && <View style={styles.codeBox} accessibilityLabel={`Parley code ${active.code.split('').join(' ')}, ${secondsLeft} seconds left`}>
+            <Text style={styles.code}>{active.code}</Text>
+            <Text style={styles.muted}>{secondsLeft}s left</Text>
+          </View>}
           {!active.can_act && <Text style={styles.body}>The two players in this Parley must handle its decisions.</Text>}
           {active.state === 'open' && active.can_act && <Text style={styles.body}>Show this code to the other player in person.</Text>}
           {active.state === 'joined' && active.role === 'attacker' && <Text style={styles.body}>Waiting for the target to choose Yield or Fight.</Text>}
@@ -106,55 +106,49 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
           {active.state === 'fighting' && <Text style={styles.body}>Play the physical rock-paper-scissors exchange, then each player reports the winner.</Text>}
           {active.self_reported && ['yielded', 'fighting'].includes(active.state)
             && <Text style={styles.body}>Your report is saved. Waiting for the other player.</Text>}
-          {active.state === 'disputed' && <Text style={styles.warning}>Reports disagree or the session timed out. The GM must rule.</Text>}
-        </View>
-        {actions.canChoose && <View style={styles.row}>
-          <ActionButton label="YIELD" disabled={busy}
-            onPress={() => call('parley_choice', { parley_id: active.id, choice: 'yield' }, () => 'Yield recorded. Both players must confirm the outcome.')} />
-          <ActionButton label="FIGHT" disabled={busy}
-            onPress={() => call('parley_choice', { parley_id: active.id, choice: 'fight' }, () => 'Fight recorded. Play the physical exchange.')} />
-        </View>}
-        {actions.canReport && active.state === 'yielded' && <View style={styles.row}>
-          <ActionButton label="CONFIRM ATTACKER WON" disabled={busy}
-            onPress={() => call('parley_report', { parley_id: active.id, winner_faction: active.attacker_faction },
-              (data) => data.state === 'resolved' ? 'Both reports agree. Yield is resolved.' : 'Your report is saved.')} />
-        </View>}
-        {actions.canReport && active.state === 'fighting' && <View style={styles.row}>
-          <ActionButton label="OUR CREW WON" disabled={busy}
-            onPress={() => call('parley_report', { parley_id: active.id, winner_faction: ourFaction },
-              (data) => data.state === 'resolved' ? 'Both reports agree. The fight is resolved.' : 'Your report is saved.')} />
-          <ActionButton label="OTHER CREW WON" disabled={busy || !otherFaction}
-            onPress={() => call('parley_report', { parley_id: active.id, winner_faction: otherFaction },
-              (data) => data.state === 'resolved' ? 'Both reports agree. The fight is resolved.' : 'Your report is saved.')} />
-        </View>}
-        {actions.canPlunder && <View style={styles.row}>
-          <ActionButton label="TAKE ONE SHARD" disabled={busy}
-            onPress={() => call('parley_plunder', { parley_id: active.id, currency: 'bearing' }, () => 'One bearing shard transferred.')} />
-          <ActionButton label="TAKE DOUBLOONS" disabled={busy}
-            onPress={() => call('parley_plunder', { parley_id: active.id, currency: 'doubloon' },
-              (data) => `${data.amount} doubloons transferred.`)} />
-        </View>}
+          {active.state === 'disputed' && <Notice tone="warning" text="Reports disagree or the session timed out. The GM must rule." />}
+          {actions.canChoose && <View style={styles.row}>
+            <ActionButton label="Yield" variant="plank" disabled={busy}
+              onPress={() => call('parley_choice', { parley_id: active.id, choice: 'yield' }, () => 'Yield recorded. Both players must confirm the outcome.')} />
+            <ActionButton label="Fight" variant="blood" disabled={busy}
+              onPress={() => call('parley_choice', { parley_id: active.id, choice: 'fight' }, () => 'Fight recorded. Play the physical exchange.')} />
+          </View>}
+          {actions.canReport && active.state === 'yielded' && <View style={styles.row}>
+            <ActionButton label="Confirm attacker won" disabled={busy}
+              onPress={() => call('parley_report', { parley_id: active.id, winner_faction: active.attacker_faction },
+                (data) => data.state === 'resolved' ? 'Both reports agree. Yield is resolved.' : 'Your report is saved.')} />
+          </View>}
+          {actions.canReport && active.state === 'fighting' && <View style={styles.row}>
+            <ActionButton label="Our crew won" variant="plank" disabled={busy}
+              onPress={() => call('parley_report', { parley_id: active.id, winner_faction: ourFaction },
+                (data) => data.state === 'resolved' ? 'Both reports agree. The fight is resolved.' : 'Your report is saved.')} />
+            <ActionButton label="Other crew won" variant="plank" disabled={busy || !otherFaction}
+              onPress={() => call('parley_report', { parley_id: active.id, winner_faction: otherFaction },
+                (data) => data.state === 'resolved' ? 'Both reports agree. The fight is resolved.' : 'Your report is saved.')} />
+          </View>}
+          {actions.canPlunder && <View style={styles.row}>
+            <ActionButton label="Take one shard" variant="plank" disabled={busy}
+              onPress={() => call('parley_plunder', { parley_id: active.id, currency: 'bearing' }, () => 'One bearing shard transferred.')} />
+            <ActionButton label="Take doubloons" variant="plank" disabled={busy}
+              onPress={() => call('parley_plunder', { parley_id: active.id, currency: 'doubloon' },
+                (data) => `${data.amount} doubloons transferred.`)} />
+          </View>}
+        </>}
+        {!!outcome && <Notice text={outcome} />}
       </>}
-      {!!outcome && <Text style={styles.outcome} accessibilityLiveRegion="polite">{outcome}</Text>}
-    </>}
+    </Sheet>
   </ScrollView>
 }
 
 const styles = StyleSheet.create({
-  root: { padding: S.pad, gap: S.gap, paddingBottom: 40 },
-  heading: { color: C.text, fontFamily: F.displayBold, fontSize: T.title },
-  caption: { color: C.amber, fontFamily: F.monoMedium, fontSize: T.label },
-  body: { color: C.text, fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody },
-  warning: { color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody },
-  error: { color: C.red, fontFamily: F.body, fontSize: T.body },
-  outcome: { color: C.cyan, fontFamily: F.bodyMedium, fontSize: T.body, marginTop: 12 },
-  card: { backgroundColor: C.panel, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 8, padding: 12, gap: 8 },
-  code: { color: C.amber, fontFamily: F.monoMedium, fontSize: T.hero, textAlign: 'center', paddingVertical: 10 },
-  input: { color: C.text, borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6,
-    fontFamily: F.mono, fontSize: T.bodyLarge, minHeight: S.touch, paddingHorizontal: 12 },
+  root: { padding: S.pad, gap: 10, paddingBottom: 40 },
+  body: { color: C.sheetInk, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: T.lineBody },
+  muted: { color: C.sheetMuted, fontFamily: F.body, fontSize: 15, lineHeight: 21 },
+  rule: { height: 1, backgroundColor: C.sheetRule, marginVertical: 6 },
+  input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 6,
+    fontFamily: F.numeric, fontSize: 22, letterSpacing: 6, minHeight: S.touch, paddingHorizontal: 14 },
+  codeBox: { alignItems: 'center', gap: 2, borderColor: C.sheetInk, borderWidth: 2, borderStyle: 'dashed', borderRadius: 6, paddingVertical: 12 },
+  code: { color: C.sheetInk, fontFamily: F.numeric, fontSize: 44, lineHeight: 50, letterSpacing: 10, paddingLeft: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  button: { minHeight: S.touch, backgroundColor: C.amber, borderRadius: 6,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, flexGrow: 1 },
-  buttonText: { color: C.ink, fontFamily: F.displayBold, fontSize: T.button },
-  disabled: { opacity: 0.5 },
+  action: { flexGrow: 1 },
 })
