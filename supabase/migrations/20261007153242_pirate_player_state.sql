@@ -94,7 +94,7 @@ begin
   join public.factions target on target.id = parley.target_faction
   left join public.factions attacker on attacker.id = parley.attacker_faction
   where parley.game_id = g and parley.voided_at is null
-    and parley.state in ('open', 'joined', 'fighting', 'awaiting_choice', 'disputed')
+    and parley.state in ('open', 'joined', 'yielded', 'fighting', 'awaiting_choice', 'disputed')
     and (parley.target_faction = crew_id or parley.attacker_faction = crew_id)
   order by parley.created_at desc limit 1;
   return pg_catalog.jsonb_build_object(

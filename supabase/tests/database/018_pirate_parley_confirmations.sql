@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(29);
+select extensions.plan(30);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -82,6 +82,8 @@ select set_config('request.jwt.claim.sub', 'f2000000-0000-0000-0000-000000000102
 select extensions.is(public.parley_choice('f5000000-0000-0000-0000-000000000105',
   current_setting('test.parley_id')::uuid, 'yield')->>'state',
   'yielded', 'target chooses Yield without transferring anything');
+select extensions.is(public.get_pirate_state('f5000000-0000-0000-0000-000000000105')
+  ->'active_parley'->>'state', 'yielded', 'player state still shows the Yield awaiting confirmation');
 select extensions.is(public.parley_report('f5000000-0000-0000-0000-000000000105',
   current_setting('test.parley_id')::uuid, 'f7000000-0000-0000-0000-000000000107')->>'state',
   'awaiting_report', 'first participant confirms and waits for the second');
