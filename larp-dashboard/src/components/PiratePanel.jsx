@@ -113,8 +113,8 @@ export default function PiratePanel({ game, state, zones, refresh }) {
         reward: kind === 'riddle' ? reward : null,
         oath_index: kind === 'riddle' && reward === 'oath' ? Number(oathIndex) : null,
         oath_word: kind === 'riddle' && reward === 'oath' ? oathWord : null,
-        prompt: ['riddle', 'cache'].includes(kind) ? prompt : null,
-        answer: ['riddle', 'cache'].includes(kind) ? (answer || null) : null,
+        prompt: kind === 'riddle' ? prompt : null,
+        answer: kind === 'riddle' ? (answer || null) : null,
       })
       setAnswer('')
       refresh()
@@ -209,7 +209,7 @@ export default function PiratePanel({ game, state, zones, refresh }) {
       </section>
       {canSetSite && <section className="command-card pirate-section">
         <h3>Register a Pirate site</h3>
-        <p className="hint">Create the zone on the map first. Answers are write only and disappear after save.</p>
+        <p className="hint">Create the zone on the map first. Setup needs 5 bearing riddles, 4 oath riddles and 3 lighthouses. Each riddle also pays 20 / 15 / 10 / 5 doubloons to the first four crews to solve it. Answers are write only and disappear after save.</p>
         <form onSubmit={saveSite}>
           <div className="pirate-form-grid">
             <div className="field"><label htmlFor="pirate-zone">Zone</label>
@@ -219,7 +219,7 @@ export default function PiratePanel({ game, state, zones, refresh }) {
               </select></div>
             <div className="field"><label htmlFor="pirate-kind">Site kind</label>
               <select id="pirate-kind" value={kind} onChange={(event) => setKind(event.target.value)}>
-                {['riddle', 'cache', 'lighthouse', 'harbour', 'treasure'].map((item) =>
+                {['riddle', 'lighthouse'].map((item) =>
                   <option key={item} value={item}>{item}</option>)}
               </select></div>
             {kind === 'riddle' && <div className="field"><label htmlFor="pirate-reward">Riddle reward</label>
@@ -235,7 +235,7 @@ export default function PiratePanel({ game, state, zones, refresh }) {
                 <input id="pirate-oath-word" value={oathWord} maxLength={40} required
                   onChange={(event) => setOathWord(event.target.value)} /></div>
             </>}
-            {['riddle', 'cache'].includes(kind) && <>
+            {kind === 'riddle' && <>
               <div className="field"><label htmlFor="pirate-prompt">Prompt</label>
                 <input id="pirate-prompt" value={prompt} maxLength={500} required
                   onChange={(event) => setPrompt(event.target.value)} /></div>

@@ -4,7 +4,6 @@ import SyncStatus from './SyncStatus'
 
 const DEFAULT_TEMPLATE = {
   stats: [
-    { key: 'hp', label: 'Hit points', type: 'number', default: 10, min: 0, max: 20, player_editable: false },
     { key: 'notes', label: 'Notes', type: 'text', default: '', player_editable: true },
   ],
 }
