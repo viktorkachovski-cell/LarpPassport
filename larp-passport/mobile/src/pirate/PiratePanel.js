@@ -5,13 +5,16 @@ import { C, F, S, T } from '../lib/theme'
 import { pirateRequestId } from '../lib/pirateRequestId'
 import { CompassDial } from './CompassDial'
 
+const ordinal = (n) => ['first', 'second', 'third', 'fourth', 'fifth'][n - 1] ?? `#${n}`
+
 function claimMessage(result) {
   if (!result) return ''
-  if (result.status === 'ok' && result.reward === 'oath') {
-    return `Oath word ${result.oath_index}: ${result.oath_word}`
-  }
   if (result.status === 'ok') {
-    return `Claimed ${result.site_name}. +${result.amount} ${result.reward === 'bearing' ? 'bearing shard' : 'doubloons'}.`
+    const reward = result.reward === 'oath'
+      ? `Oath word ${result.oath_index}: ${result.oath_word}.`
+      : '+1 bearing shard.'
+    const doubloons = result.doubloons > 0 ? ` +${result.doubloons} doubloons (solved ${ordinal(result.rank)}).` : ''
+    return `Solved ${result.site_name}. ${reward}${doubloons}`
   }
   if (result.status === 'wrong') return `That answer did not open it. ${result.attempts_remaining} attempts remain.`
   if (result.status === 'locked_out') return 'Too many attempts. Wait two minutes before trying again.'
@@ -91,10 +94,10 @@ export function PiratePanel({ mode, state, error, gameId, refresh }) {
         {mode === 'chart' ? <>
           <Text style={styles.caption}>CURRENT SITE</Text>
           <Text style={styles.body}>{site?.site_name ?? 'No marked site in range.'}</Text>
-          {!!site?.reward && <Text style={styles.body}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}</Text>}
+          {!!site?.reward && <Text style={styles.body}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}, plus doubloons by the order crews answer it (20 / 15 / 10 / 5 / 5).</Text>}
           {!!site?.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
           {site?.claimed_by_my_crew && <Text style={styles.warning}>Your crew has claimed this site.</Text>}
-          {site && ['riddle', 'cache'].includes(site.kind) && !site.claimed_by_my_crew && <>
+          {site?.kind === 'riddle' && !site.claimed_by_my_crew && <>
             <TextInput style={styles.input} value={answer} onChangeText={setAnswer}
               placeholder="Enter the answer" placeholderTextColor={C.muted}
               accessibilityLabel="Site answer" autoCapitalize="none" autoCorrect={false} maxLength={100} />

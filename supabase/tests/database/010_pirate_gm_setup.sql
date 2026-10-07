@@ -105,7 +105,7 @@ update public.games set phase = 'charting' where id = 'c3000000-0000-0000-0000-0
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c1000000-0000-0000-0000-000000000001', true);
 select extensions.lives_ok(
-  $$ select public.pirate_set_treasure('c3000000-0000-0000-0000-000000000003', 50, 30, 40) $$,
+  $$ select public.pirate_set_treasure('c3000000-0000-0000-0000-000000000003', 50, 30) $$,
   'GM may set treasure in charting before readings'
 );
 select extensions.is(
@@ -118,7 +118,7 @@ update public.games set phase = 'cursed' where id = 'c3000000-0000-0000-0000-000
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c1000000-0000-0000-0000-000000000001', true);
 select extensions.throws_ok(
-  $$ select public.pirate_set_treasure('c3000000-0000-0000-0000-000000000003', 50.01, 30, 40) $$,
+  $$ select public.pirate_set_treasure('c3000000-0000-0000-0000-000000000003', 50.01, 30) $$,
   '55000', 'treasure point is locked', 'treasure locks from cursed onward'
 );
 select extensions.throws_ok(

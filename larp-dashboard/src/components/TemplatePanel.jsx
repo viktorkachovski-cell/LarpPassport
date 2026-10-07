@@ -48,8 +48,8 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
         <tbody>
           {stats.map((s, i) => (
             <tr key={i}>
-              <td><input type="text" aria-label={`Key for stat ${i + 1}`} value={s.key} onChange={(e) => patch(i, { key: e.target.value })} placeholder="hp" /></td>
-              <td><input type="text" aria-label={`Label for stat ${s.key || i + 1}`} value={s.label ?? ''} onChange={(e) => patch(i, { label: e.target.value })} placeholder="Hit points" /></td>
+              <td><input type="text" aria-label={`Key for stat ${i + 1}`} value={s.key} onChange={(e) => patch(i, { key: e.target.value })} placeholder="notes" /></td>
+              <td><input type="text" aria-label={`Label for stat ${s.key || i + 1}`} value={s.label ?? ''} onChange={(e) => patch(i, { label: e.target.value })} placeholder="Notes" /></td>
               <td>
                 <select aria-label={`Type for stat ${s.key || i + 1}`} value={s.type} onChange={(e) => patch(i, { type: e.target.value })}>
                   <option value="number">number</option>

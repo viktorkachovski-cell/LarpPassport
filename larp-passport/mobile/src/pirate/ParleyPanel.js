@@ -14,8 +14,6 @@ function statusText(result) {
     wrong_phase: 'Parley is closed during this phase.',
     stale: 'Your location is stale. Send a fresh fix.',
     target_stale: 'The other player needs a fresh location fix.',
-    safe_harbour: 'Parley is not allowed inside a Safe Harbour.',
-    target_safe_harbour: 'The other player is inside a Safe Harbour.',
     treasure_exclusion: 'Parley is closed near the hoard.',
     target_treasure_exclusion: 'The other player is too near the hoard.',
     mercy: 'Davy’s Mercy protects this crew for now.',
