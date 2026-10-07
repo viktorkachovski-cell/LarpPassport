@@ -63,6 +63,11 @@
     },
     "testMatch": [
       "**/*.test.js"
+    ],
+    "moduleFileExtensions": [
+      "pirate.js",
+      "js",
+      "json"
     ]
   },
   "overrides": {

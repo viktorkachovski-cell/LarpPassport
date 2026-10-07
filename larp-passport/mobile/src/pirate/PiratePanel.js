@@ -88,7 +88,7 @@ export function PiratePanel({ mode, state, error, gameId, refresh }) {
       {state && <>
         <Text style={styles.heading}>{state.crew?.name ?? 'PIRATE GAME'}</Text>
         {state.paused && <Text style={styles.warning}>The tide has stopped. Player actions are paused.</Text>}
-        {mode === 'hunt' ? <>
+        {mode === 'chart' ? <>
           <Text style={styles.caption}>CURRENT SITE</Text>
           <Text style={styles.body}>{site?.site_name ?? 'No marked site in range.'}</Text>
           {!!site?.reward && <Text style={styles.body}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}</Text>}

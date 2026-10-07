@@ -3,15 +3,20 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": { "buildType": "apk" },
+      "env": { "APP_VARIANT": "pirate" }
     },
-    "pirate": {
+    "preview-hunt": {
       "extends": "preview",
-      "environment": "production",
-      "env": { "EXPO_PUBLIC_APP_THEME": "pirate" }
+      "env": { "APP_VARIANT": "hunt" }
     },
     "production": {
-      "android": { "buildType": "apk" }
+      "android": { "buildType": "apk" },
+      "env": { "APP_VARIANT": "pirate" }
+    },
+    "production-hunt": {
+      "extends": "production",
+      "env": { "APP_VARIANT": "hunt" }
     }
   }
 }

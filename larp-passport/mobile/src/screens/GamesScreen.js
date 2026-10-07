@@ -3,7 +3,8 @@ import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { stopSharing } from '../lib/locationTask'
-import { C, F, IS_PIRATE_BUILD, S, T, toneColor } from '../lib/theme'
+import { EYEBROW, ownsGame } from '../lib/brand'
+import { C, F, S, T, toneColor } from '../lib/theme'
 import { describeServerSync } from '../lib/syncStatus'
 import { useNow } from '../lib/useNow'
 
@@ -26,7 +27,7 @@ export default function GamesScreen({ onOpen }) {
     try {
       const { data, error } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
       if (error) throw error
-      setGames(data ?? [])
+      setGames((data ?? []).filter(ownsGame))
       setSync((current) => ({ ...current, lastOkAt: Date.now() }))
     } catch (error) {
       setError(error.message)
@@ -52,7 +53,7 @@ export default function GamesScreen({ onOpen }) {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>{IS_PIRATE_BUILD ? 'THE ADMIRALTY' : 'TEMPORAL FIELD AUTHORITY'}</Text>
+          <Text style={styles.eyebrow}>{EYEBROW}</Text>
           <Text style={styles.title}>GAMES</Text>
         </View>
         <ListSyncStatus sync={sync} loading={loading} />

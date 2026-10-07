@@ -1,46 +1,7 @@
-const tachyon = {
-  ink: '#0A0E15',
-  panel: '#131A26',
-  panel2: '#1B2434',
-  line: '#34435C',
-  lineStrong: '#5B6F93', // 3.4:1 on panel: input and button boundaries
-  text: '#EDF2FA',
-  muted: '#9DACC4',
-  cyan: '#47D6F0',
-  cyanBorder: '#2C6B7C',
-  orange: '#FF7A33',
-  orangeBright: '#FF9A5C',
-  amber: '#FFB020',
-  amberBorder: '#6B5121',
-  red: '#FF5449',
-  redBorder: '#7C3A34',
-  green: '#3FD68F',
-  greenBorder: '#2B6B4F',
-}
+import { palette } from './brand'
 
-const pirate = {
-  ink: '#0D1C24',
-  panel: '#142A32',
-  panel2: '#1E3540',
-  line: '#48636A',
-  lineStrong: '#83A6A5',
-  text: '#F4E8CB',
-  muted: '#C8C6B3',
-  cyan: '#80DDD0',
-  cyanBorder: '#5C9993',
-  orange: '#F3AF69',
-  orangeBright: '#FFC482',
-  amber: '#FFD080',
-  amberBorder: '#A57C42',
-  red: '#FF8279',
-  redBorder: '#B35D57',
-  green: '#96D9A7',
-  greenBorder: '#59956D',
-}
-
-// Expo inlines EXPO_PUBLIC_* at bundle time. The default keeps existing builds.
-export const IS_PIRATE_BUILD = process.env.EXPO_PUBLIC_APP_THEME === 'pirate'
-export const C = IS_PIRATE_BUILD ? pirate : tachyon
+// Colours come from the build's brand file (brand.pirate.js or brand.hunt.js).
+export const C = palette
 
 export const F = {
   displayMedium: 'ChakraPetch_500Medium',

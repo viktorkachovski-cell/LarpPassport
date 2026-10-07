@@ -1,12 +1,13 @@
 import { memo } from 'react'
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
+import { SHARING_FOOTNOTE } from '../../lib/brand'
 import { C, F, T, toneColor } from '../../lib/theme'
 import { describeSharing } from '../../lib/syncStatus'
 import { formatAge } from '../../lib/time'
 import { common } from '../../ui/common'
 import { GhostButton } from '../../ui/primitives'
 
-export const SharingTab = memo(function SharingTab({ game, phase, isPirate = false, sharing, permission, queue, error, sharingBusy, toggleSharing, sendNow }) {
+export const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, queue, error, sharingBusy, toggleSharing, sendNow }) {
   const status = describeSharing({
     sharing, permission, lastFixAt: queue.lastFixAt, queued: queue.queued ?? 0, failed: queue.failed ?? 0, lastError: queue.lastError,
   })
@@ -57,9 +58,7 @@ export const SharingTab = memo(function SharingTab({ game, phase, isPirate = fal
         <Text style={styles.telemetryNote}>Queued updates are sent automatically. "Last sent" is about location updates only; it does not prove the rest of the game data is current.</Text>
         <GhostButton label="SEND NOW" onPress={sendNow} />
       </View>
-      <Text style={styles.sharingFootnote}>{isPirate
-        ? 'Location sharing is voluntary. History follows the retention period above.'
-        : 'Sharing stops and your map position is removed on elimination. History follows the retention period above.'}</Text>
+      <Text style={styles.sharingFootnote}>{SHARING_FOOTNOTE}</Text>
     </ScrollView>
   )
 })
