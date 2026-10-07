@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { unwrap } from '../lib/unwrap'
 import { useAction } from '../lib/useAction'
 import Outcome from './Outcome'
+import PirateCrews from './PirateCrews'
+import PirateSiteBoard from './PirateSiteBoard'
 
 const PHASES = ['setup', 'charting', 'cursed', 'truce', 'hunt', 'hoard', 'recall', 'finished']
 const PHASE_MESSAGES = {
@@ -260,14 +262,7 @@ export default function PiratePanel({ game, state, zones, refresh }) {
         {readiness && <div role="status"><strong>{readiness.ready ? 'Ready to chart' : 'Needs work'}</strong>
           <ul>{readiness.issues?.map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
       </section>}
-      <section className="command-card pirate-section">
-        <h3>Crews</h3>
-        <div className="table-scroll"><table className="grid"><thead><tr><th>Crew</th><th>Shards</th><th>Doubloons</th><th>Oath</th><th>Readings</th></tr></thead>
-          <tbody>{(state.crews ?? []).map((crew) => <tr key={crew.id}>
-            <td>{crew.name}</td><td>{crew.shards}</td><td>{crew.doubloons}</td>
-            <td>{crew.oath_count}/4</td><td>{crew.reading_count}</td>
-          </tr>)}</tbody></table></div>
-      </section>
+      <PirateCrews gameId={game.id} state={state} busy={busy} run={run} rpc={rpc} refresh={refresh} />
       {state.phase === 'hoard' && <section className="command-card pirate-section">
         <h3>Treasure award</h3>
         {state.treasure?.value != null
@@ -293,16 +288,8 @@ export default function PiratePanel({ game, state, zones, refresh }) {
           <button type="submit" disabled={!!busy || !awardCrew || awardReason.trim().length < 3}>Award treasure</button>
         </form>}
       </section>}
-      <section className="command-card pirate-section">
-        <h3>Site board</h3>
-        <div className="table-scroll"><table className="grid"><thead><tr><th>Site</th><th>Kind</th><th>Reward</th><th>Answer</th><th>Claims</th>{canSetSite && <th>Setup</th>}</tr></thead>
-          <tbody>{(state.sites ?? []).map((site) => <tr key={site.zone_id}>
-            <td>{site.name}{!site.active && ' (inactive)'}</td><td>{site.kind}</td>
-            <td>{site.reward ?? '—'}</td><td>{site.answer_set ? 'set' : '—'}</td>
-            <td>{site.claims?.length ?? 0}</td>
-            {canSetSite && <td><button type="button" disabled={!!busy} onClick={() => clearSite(site)}>Remove</button></td>}
-          </tr>)}</tbody></table></div>
-      </section>
+      <PirateSiteBoard gameId={game.id} state={state} busy={busy} run={run} rpc={rpc} refresh={refresh}
+        onRemoveSite={clearSite} />
       <section className="command-card pirate-section">
         <h3>Parley and disputes</h3>
         {(state.parleys ?? []).length === 0 && <p className="hint">No active Parleys.</p>}

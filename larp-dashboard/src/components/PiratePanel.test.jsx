@@ -73,3 +73,35 @@ it('requires a reason before the GM can resolve a disputed Parley', async () => 
     }))
   } finally { confirm.mockRestore() }
 })
+
+it('lets the GM choose a captain for a larger crew during setup', async () => {
+  rpc.mockResolvedValue({ data: { status: 'ok' }, error: null })
+  render(<PiratePanel game={game} state={{ ...state, crews: [
+    { id: 'crew-1', name: 'Black Crew', captain_id: null,
+      members: [{ profile_id: 'p-1', name: 'Anne' }, { profile_id: 'p-2', name: 'Mary' }] },
+    { id: 'crew-2', name: 'Gold Crew', captain_id: 'p-3', members: [{ profile_id: 'p-3', name: 'Jack' }] },
+  ] }} zones={[]} refresh={() => {}} />)
+  expect(screen.getByText('Jack')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText('Captain of Black Crew'), { target: { value: 'p-2' } })
+  await waitFor(() => expect(rpc).toHaveBeenCalledWith('pirate_set_captain',
+    { g: 'game-1', crew: 'crew-1', captain: 'p-2' }))
+})
+
+it('voids a riddle claim only with a reason', async () => {
+  rpc.mockResolvedValue({ data: { status: 'ok' }, error: null })
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  try {
+    render(<PiratePanel game={{ ...game, phase: 'charting' }} state={{ ...state, phase: 'charting', sites: [
+      { zone_id: 'zone-1', name: 'Cove', kind: 'riddle', reward: 'bearing', answer_set: true, active: true,
+        claims: [{ id: 'claim-1', crew_name: 'Black Crew', claimed_by_name: 'Anne', rank: 1 }] },
+    ] }} zones={[]} refresh={() => {}} />)
+    expect(screen.queryByLabelText('Captain of Black Crew')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Void' }))
+    const submit = screen.getByRole('button', { name: 'Void claim' })
+    expect(submit.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Correction reason'), { target: { value: 'Answer phoned in' } })
+    fireEvent.click(submit)
+    await waitFor(() => expect(rpc).toHaveBeenCalledWith('gm_void_claim',
+      { g: 'game-1', claim_id: 'claim-1', reason: 'Answer phoned in' }))
+  } finally { confirm.mockRestore() }
+})

@@ -5,13 +5,17 @@ import { PiratePanel } from '../pirate/PiratePanel'
 import { GameFrame, StateCell } from './game/GameFrame'
 import { useGameRpc, useGameSession, useSyncLog } from './game/session'
 
-const MODE_TABS = [['chart', 'CHART'], ['compass', 'COMPASS'], ['parley', 'PARLEY']]
+// Only the crew's captain carries the compass.
+const CREW_TABS = [['chart', 'CHART'], ['parley', 'PARLEY']]
+const CAPTAIN_TABS = [['chart', 'CHART'], ['compass', 'COMPASS'], ['parley', 'PARLEY']]
 
 export default function GameScreen({ gameId, session: auth, onBack }) {
   const syncLog = useSyncLog()
   const { data: pirate, error: pirateError, load: loadPirate } = useGameRpc('get_pirate_state', gameId, syncLog)
   const session = useGameSession({ gameId, uid: auth.user.id, syncLog, loadMode: loadPirate })
-  const [tab, setTab] = useState('chart')
+  const [selectedTab, setTab] = useState('chart')
+  const modeTabs = pirate?.is_captain ? CAPTAIN_TABS : CREW_TABS
+  const tab = selectedTab === 'compass' && !pirate?.is_captain ? 'chart' : selectedTab
 
   const phase = pirate?.phase ?? session.game?.phase ?? ''
   const phaseColor = pirate?.paused ? C.red : phase === 'finished' ? C.muted : C.amber
@@ -19,7 +23,7 @@ export default function GameScreen({ gameId, session: auth, onBack }) {
   return (
     <GameFrame
       session={session} onBack={onBack} tab={tab} setTab={setTab}
-      modeTabs={MODE_TABS} eventsLabel="LOGBOOK" scrollTabs
+      modeTabs={modeTabs} eventsLabel="LOGBOOK" scrollTabs
       phase={phase} phaseLabel={phase.toUpperCase()} phaseColor={phaseColor}
       cells={<>
         <StateCell value={pirate?.shards ?? '--'} label="BEARING SHARDS" />

@@ -548,3 +548,5 @@ table.grid input[type='text'] { width: 130px; }
   .game-card { grid-template-columns: auto 1fr; }
   .game-card-action { grid-column: 1 / -1; text-align: right; }
 }
+.pirate-claims { margin: 0; padding-left: 18px; }
+.pirate-claims button { padding: 2px 8px; min-height: 0; }

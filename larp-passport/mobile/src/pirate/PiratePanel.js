@@ -18,7 +18,12 @@ function claimMessage(result) {
   }
   if (result.status === 'wrong') return `That answer did not open it. ${result.attempts_remaining} attempts remain.`
   if (result.status === 'locked_out') return 'Too many attempts. Wait two minutes before trying again.'
-  if (result.status === 'already_claimed') return 'Your crew has already claimed this site.'
+  if (result.status === 'already_claimed') {
+    return result.claimed_by_name
+      ? `${result.claimed_by_name} already solved this for your crew.`
+      : 'Your crew has already claimed this site.'
+  }
+  if (result.status === 'not_captain') return 'Only your captain can read the compass.'
   if (result.status === 'stale') return 'Your location is stale. Send your position, then try again.'
   if (result.status === 'paused') return 'The tide has stopped. Wait for the GM to resume play.'
   if (result.status === 'no_site') return 'Check in at the marked site before claiming.'
@@ -90,6 +95,9 @@ export function PiratePanel({ mode, state, error, gameId, refresh }) {
       {!state && <Text style={styles.body}>Loading the Pirate logbook…</Text>}
       {state && <>
         <Text style={styles.heading}>{state.crew?.name ?? 'PIRATE GAME'}</Text>
+        {!!state.crew && <Text style={styles.body}>{state.is_captain
+          ? 'You are the captain. You carry the compass.'
+          : `Captain: ${state.crew.captain_name ?? 'not chosen yet'}. Only the captain reads the compass.`}</Text>}
         {state.paused && <Text style={styles.warning}>The tide has stopped. Player actions are paused.</Text>}
         {mode === 'chart' ? <>
           <Text style={styles.caption}>CURRENT SITE</Text>

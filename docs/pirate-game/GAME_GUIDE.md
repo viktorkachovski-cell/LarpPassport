@@ -14,7 +14,7 @@ Numbers are starting values to validate in the test run. Implementation instruct
 | Schedule | **16:30 to 23:00**, confirmed |
 | Staff | **2 GMs**: the Admiralty (dashboard) and the Ghost Captain (street and treasure NPC) |
 | Tavern Truce venue | To be booked; the `truce` phase pauses claims and Parley globally, with no Safe Harbour zones |
-| Crews | 5 crews of up to 4 (confirm actual roster before setup) |
+| Crews | 5 crews of up to 4 (confirm actual roster before setup). Each crew has one captain: the GM picks it in setup, a one-player crew's player is captain automatically, and captains lock when charting starts. |
 | Currencies | Bearing shards, oath words, doubloons |
 | Riddle sites | Five shard sites each give **one shard plus ranked doubloons**; four oath sites each give **one oath word plus ranked doubloons**, after the correct answer |
 | Oath words | Shown in the app once earned; traded freely through roleplay; not plunderable |
@@ -89,6 +89,7 @@ The former 29-point estimate no longer applies. In the field rehearsal, time a r
 | 4 | ±12° | A block |
 | 5+ | ±5° | Near-certain |
 
+- Only the crew captain's app shows the compass: readings, the reading logbook and distance bands. Shards, doubloons and oath words belong to the whole crew.
 - Shards above 5 act as a theft buffer.
 - Distance bands (≤100 m and ≤25 m only) unlock at 3+ shards.
 - Arcs are computed server-side from the lighthouse centre, with a deterministic HMAC offset per crew, lighthouse and shard level.
@@ -97,7 +98,7 @@ The former 29-point estimate no longer applies. In the field rehearsal, time a r
 
 ## 5. Doubloons
 
-Each of the **five shard sites** gives the claiming crew +1 shard and doubloons. Each of the **four oath sites** gives one oath word and doubloons. The crew must submit the correct on-site answer before either reward is granted. **Rank is set by the order of correct answers, not GPS arrival.** Doubloons pay **20 / 15 / 10 / 5 / 5** by rank. Each riddle site pays at most 55 across five crews, or **495 across all nine**. Rewards are one successful claim per crew per site. Lighthouses pay no doubloons. This rule is approved but still needs implementation and balance testing.
+Each of the **five shard sites** gives the claiming crew +1 shard and doubloons. Each of the **four oath sites** gives one oath word and doubloons. The crew must submit the correct on-site answer before either reward is granted. **Rank is set by the order of correct answers, not GPS arrival.** Doubloons pay **20 / 15 / 10 / 5 / 5** by rank. Each riddle site pays at most 55 across five crews, or **495 across all nine**. Rewards are one successful claim per crew per site: the first crewmate to answer correctly claims for the whole crew, and a later crewmate's correct answer earns nothing. Lighthouses pay no doubloons. This rule is approved but still needs implementation and balance testing.
 
 **Treasure value = round(0.40 × the highest crew's doubloon balance when `hoard` first opens)**, normally at 22:00. Scores include riddle-site awards, Parley transfers and GM corrections recorded before that phase change, but no treasure award. For example, a leading balance of 103 makes the treasure worth 41 doubloons. Freeze and audit the leading balance and calculated value once; stepping back and reopening `hoard`, voiding an award, or awarding it later must not recalculate it. If every crew has zero, the value is zero. Recheck balance after the new route and payout are playtested.
 
