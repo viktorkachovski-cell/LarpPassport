@@ -44,9 +44,11 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState('')
   const pendingJoin = useRef(null)
-  const now = useNow(1000)
-  const actions = parleyActions(state, now)
   const active = state?.active_parley
+  // Per-second ticks only while a code countdown is on screen; otherwise the
+  // coarse tick is enough to lift an expired Davy's Mercy.
+  const now = useNow(active?.code ? 1000 : 30000)
+  const actions = parleyActions(state, now)
   const secondsLeft = active?.code_expires_at
     ? Math.max(0, Math.ceil((new Date(active.code_expires_at).getTime() - now) / 1000)) : 0
   const ourFaction = state?.crew?.id
@@ -122,10 +124,10 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
         {actions.canReport && active.state === 'fighting' && <View style={styles.row}>
           <ActionButton label="OUR CREW WON" disabled={busy}
             onPress={() => call('parley_report', { parley_id: active.id, winner_faction: ourFaction },
-              (data) => data.state === 'resolved' ? 'Both reports agree. Yield is resolved.' : 'Your report is saved.')} />
+              (data) => data.state === 'resolved' ? 'Both reports agree. The fight is resolved.' : 'Your report is saved.')} />
           <ActionButton label="OTHER CREW WON" disabled={busy || !otherFaction}
             onPress={() => call('parley_report', { parley_id: active.id, winner_faction: otherFaction },
-              (data) => data.state === 'resolved' ? 'Both reports agree. Yield is resolved.' : 'Your report is saved.')} />
+              (data) => data.state === 'resolved' ? 'Both reports agree. The fight is resolved.' : 'Your report is saved.')} />
         </View>}
         {actions.canPlunder && <View style={styles.row}>
           <ActionButton label="TAKE ONE SHARD" disabled={busy}
