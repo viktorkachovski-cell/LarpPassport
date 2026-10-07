@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(17);
+select extensions.plan(19);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -32,14 +32,14 @@ insert into public.characters (game_id, user_id, name, faction_id) values
    'Two', 'a6000000-0000-0000-0000-000000000006');
 insert into public.zones (id, game_id, name, geog, radius_m, trigger_mode) values
   ('a7000000-0000-0000-0000-000000000007', 'a4000000-0000-0000-0000-000000000004',
-   'Cache Cove', extensions.st_setsrid(extensions.st_makepoint(30, 50), 4326)::extensions.geography,
+   'Riddle Rock', extensions.st_setsrid(extensions.st_makepoint(30, 50), 4326)::extensions.geography,
    40, 'silent');
 insert into private.pirate_games (game_id) values ('a4000000-0000-0000-0000-000000000004');
 update public.games set phase = 'charting', status = 'active'
 where id = 'a4000000-0000-0000-0000-000000000004';
-insert into private.pirate_sites (game_id, zone_id, kind, prompt, answer_hash) values
+insert into private.pirate_sites (game_id, zone_id, kind, reward, prompt, answer_hash) values
   ('a4000000-0000-0000-0000-000000000004', 'a7000000-0000-0000-0000-000000000007',
-   'cache', 'What is hidden?',
+   'riddle', 'bearing', 'What is hidden?',
    encode(extensions.digest('gold:a7000000-0000-0000-0000-000000000007', 'sha256'), 'hex'));
 insert into public.player_positions (game_id, profile_id, geog, recorded_at) values
   ('a4000000-0000-0000-0000-000000000004', 'a2000000-0000-0000-0000-000000000002',
@@ -83,31 +83,38 @@ select extensions.is(public.claim_site('a4000000-0000-0000-0000-000000000004', '
   'a8000000-0000-0000-0000-000000000008')->>'status', 'idempotency_conflict',
   'same request ID cannot change the answer');
 select extensions.is(public.claim_site('a4000000-0000-0000-0000-000000000004', 'gold',
-  'a9000000-0000-0000-0000-000000000009')->>'amount', '20',
-  'first crew receives the first cache payout');
+  'a9000000-0000-0000-0000-000000000009')->>'doubloons', '20',
+  'first crew to solve receives the first doubloon payout');
 select extensions.is(public.claim_site('a4000000-0000-0000-0000-000000000004', 'gold',
-  'a9000000-0000-0000-0000-000000000009')->>'amount', '20',
+  'a9000000-0000-0000-0000-000000000009')->>'doubloons', '20',
   'successful retry returns the original payout');
 select extensions.is(public.claim_site('a4000000-0000-0000-0000-000000000004', 'gold',
   'aa000000-0000-0000-0000-00000000000a')->>'status', 'already_claimed',
-  'same crew cannot claim the cache again');
+  'same crew cannot claim the riddle again');
 reset role;
 
 select extensions.is((select count(*)::integer from private.pirate_claims), 1,
   'retries created only one claim');
-select extensions.is((select coalesce(sum(delta),0)::integer from private.pirate_ledger), 20,
-  'retries credited only once');
+select extensions.is((select coalesce(sum(delta),0)::integer from private.pirate_ledger where currency = 'doubloon'), 20,
+  'retries credited doubloons only once');
+select extensions.is((select coalesce(sum(delta),0)::integer from private.pirate_ledger where currency = 'bearing'), 1,
+  'a bearing riddle also gives one shard');
 select extensions.is((select count(*)::integer from private.pirate_attempts where not ok), 1,
   'wrong answer retry consumed only one attempt');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a3000000-0000-0000-0000-000000000003', true);
 select extensions.is(public.claim_site('a4000000-0000-0000-0000-000000000004', 'gold',
-  'ab000000-0000-0000-0000-00000000000b')->>'amount', '15',
-  'second crew receives the second cache payout');
+  'ab000000-0000-0000-0000-00000000000b')->>'doubloons', '15',
+  'second crew to solve receives the second doubloon payout');
 reset role;
 select extensions.is((select count(*)::integer from public.game_events where type = 'pirate_claim'), 2,
   'each crew receives only its own one-player claim event');
+
+select extensions.throws_ok(
+  $$ insert into private.pirate_sites (game_id, zone_id, kind) values
+       ('a4000000-0000-0000-0000-000000000004', 'a7000000-0000-0000-0000-000000000007', 'cache') $$,
+  '23514', null, 'caches, harbours and treasure sites no longer exist');
 
 select * from extensions.finish();
 rollback;
