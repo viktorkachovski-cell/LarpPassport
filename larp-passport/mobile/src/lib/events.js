@@ -60,6 +60,7 @@ const EVENTS = {
   },
   eliminated: { tag: HUNT_BAD, title: 'You have been eliminated', notification: 'You have been eliminated' },
   pirate_phase: { tag: PIRATE, title: 'The tide has changed', notification: 'The tide has changed', body: 'Open your logbook for the current phase.' },
+  pirate_captain: { tag: PIRATE, title: 'Your crew has a captain', notification: 'Captain chosen', body: 'The captain carries the compass.' },
   pirate_claim: { tag: PIRATE, title: 'Your crew claimed a site', notification: 'Site claimed', body: 'A reward has been added to your crew logbook.' },
   pirate_reading: { tag: PIRATE, title: 'New lighthouse reading', notification: 'New bearing recorded', body: 'A new arc is in your compass logbook.' },
   pirate_parley: { tag: PIRATE, title: 'Parley changed', notification: 'Parley update', body: 'Open the Parley screen to review the result.' },

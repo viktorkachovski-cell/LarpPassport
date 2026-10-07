@@ -25,4 +25,5 @@ test('pirate events have crew-safe wording', () => {
   })
   expect(eventInfo('pirate_reading').body).toContain('compass logbook')
   expect(eventInfo('pirate_ruling')).toMatchObject({ tag: { label: 'PIRATE' } })
+  expect(eventInfo('pirate_captain').body).toContain('compass')
 })

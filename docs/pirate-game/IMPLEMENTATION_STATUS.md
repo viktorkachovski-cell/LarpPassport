@@ -11,14 +11,16 @@ Updated 2026-10-07. Source status for `codex/pirate-game`, based on `origin/main
 ## Implemented in the branch
 
 - One additive Pirate migration (`20261007181043_pirate_game.sql`, squashed from twelve before its first hosted apply): private game/site/reward/reading/Parley tables, setup and phase controls, claims, deterministic compass readings, player state, GM overview, treasure award/correction, and Parley open/join/report/plunder/GM ruling/void. Private data is exposed through scoped RPCs. Ordinary Time Hunt remains routed through its existing RPCs.
-- `009`–`018` pgTAP suites cover foundation, setup, phase, claims, compass, state, treasure, Parley confirmations, GM dispute ruling, and transfer reversal. They pass in CI against a local Supabase stack.
+- `009`–`019` pgTAP suites cover foundation, setup, phase, claims, compass, state, treasure, Parley confirmations, GM dispute ruling, transfer reversal, captains and claim voids. They pass in CI against a local Supabase stack.
+- Captains and claim voids (`20261007200000_pirate_captains_and_claim_void.sql`): one captain per crew in `private.pirate_captains`, set by the GM with `pirate_set_captain` during setup, automatic for a one-player crew, locked at charting. Only the captain can take readings or see the distance band and reading logbook. `gm_void_claim` voids a riddle claim and reverses its shard and doubloons (refused if that would take a balance below zero).
+- `supabase/tests/pirate_concurrency.py` (CI) races real connections: five crews solving one riddle, three crewmates solving one riddle, double voids, a void against a re-claim, a captain change against charting, two crews joining one Parley code and simultaneous yield confirmations.
 - Dashboard Pirate tab for setup, treasure, phases, pause/PvP, crews, sites, treasure award/void, and disputed Parley ruling/void. Pirate games no longer load Hunt admin state.
 - Mobile Pirate theme, chart/compass and Parley screens, shared true-heading sensor hook and React Native SVG compass. The Pirate and Time Hunt apps are separate builds: neither bundle contains the other game's screens, and each lists only its own games. EAS profiles: `preview`/`production` (Pirate), `preview-hunt`/`production-hunt` (Time Hunt).
 - Lighthouse placement simulator and four Python unit tests.
 
 ## Verified locally
 
-- Dashboard: 56 Vitest tests pass; Vite production build succeeds. Mode-specific behaviour lives in `src/lib/gameModes.js`.
+- Dashboard: 58 Vitest tests pass; Vite production build succeeds. Mode-specific behaviour lives in `src/lib/gameModes.js`.
 - Mobile: 78 Jest tests pass. Android exports of both apps pass after the split; the Pirate bundle contains no Time Hunt RPCs and the Time Hunt bundle contains no Pirate code or SVG. These exports are not APK or device tests.
 - Before the split, a standalone local arm64 release APK built successfully with the Pirate theme and public Supabase configuration. APK metadata confirms `com.larppassport.app`, min SDK 24, target SDK 35, an embedded JavaScript bundle and a valid v2 signature. It is signed with the generated local Android debug certificate, so it may require removing an EAS-signed installation before installing. It has not booted on a device.
 - Simulator: four Python tests pass. Its area estimates are approximate planning inputs.
@@ -38,7 +40,6 @@ Updated 2026-10-07. Source status for `codex/pirate-game`, based on `origin/main
 ## Release gates and remaining work
 
 - The owner changed the event scope on 2026-10-07 to five crews of up to four, 5 shard riddles, 4 oath riddles, 3 reading-only lighthouses, no caches or Safe Harbour zones, and a separate treasure point (13 physical locations). All nine riddles pay doubloons 20 / 15 / 10 / 5 / 5 by order of correct answers; shard and oath rewards remain distinct. The treasure value is 40% of the highest pre-treasure crew balance, rounded to a whole doubloon and frozen at the first `hoard` opening. Implemented in `20261007184255_pirate_riddle_sites` (riddle and lighthouse kinds only; the treasure is the GM-set secret point, per the owner's instruction to drop the `treasure` site kind), with dashboard and mobile updates and pgTAP `013`/`017`. New games no longer get a Hit points stat.
-- Concurrency tests for simultaneous Parley joins and transfers (`supabase/tests/concurrency.py`) are still to be written.
 - The earlier SVG probe EAS build `cb7b5e30-94c3-45b5-b4c7-9be4e1d2cbf1` was still queued at the last check. The owner declined uploading the reviewed Pirate source to EAS, so no final EAS build was submitted. The local APK is a QA artifact; real-device boot/gameplay QA and a distribution signing plan remain.
-- Complete GM correction tools for claims, balances and readings, richer ledger/claim/reading drill-down, and remaining documented edge-case and concurrency tests. Review site placement with the simulator before live setup.
+- Remaining GM correction tools from guide 7.6 (`gm_adjust`, `gm_claim_for`, `gm_void_reading`, `gm_set_mercy`) and a way to replace a captain after charting (for example a dead phone), richer ledger/claim/reading drill-down, and remaining documented edge-case and concurrency tests. Review site placement with the simulator before live setup.
 - Verify the Vercel deployment from `main` and the rebuilt Pirate APK against the hosted backend, then run the field rehearsal (AGENT_PLAN section 11).
