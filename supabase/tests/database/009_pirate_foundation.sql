@@ -94,6 +94,9 @@ insert into public.zones (id, game_id, name, geog, radius_m)
 values ('b7000000-0000-0000-0000-000000000007',
         'b5000000-0000-0000-0000-000000000005', 'Ordinary Zone',
         extensions.st_setsrid(extensions.st_makepoint(30, 50), 4326)::extensions.geography, 40);
+-- The scoped foreign keys are deferred (cascade order on game deletion), so
+-- check this one at statement time.
+set constraints all immediate;
 select extensions.throws_ok(
   $$ insert into private.pirate_sites (zone_id, game_id, kind)
      values ('b7000000-0000-0000-0000-000000000007',
@@ -101,6 +104,7 @@ select extensions.throws_ok(
   '23503', null,
   'Pirate sites cannot reference a zone in another game'
 );
+set constraints all deferred;
 
 insert into private.pirate_treasure_awards (game_id, faction_id, awarded_by)
 values ('b4000000-0000-0000-0000-000000000004',

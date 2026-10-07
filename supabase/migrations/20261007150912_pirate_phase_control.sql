@@ -70,7 +70,7 @@ begin
                     else status end
   where id = g;
   perform private.emit_pirate_event(g, 'pirate_phase', pg_catalog.jsonb_build_object(
-    'phase', next_phase, 'message', pg_catalog.coalesce(pg_catalog.nullif(clean_message, ''),
+    'phase', next_phase, 'message', coalesce(nullif(clean_message, ''),
       'Pirate phase: ' || next_phase)
   ));
   return pg_catalog.jsonb_build_object('status', 'ok', 'phase', next_phase);
@@ -95,8 +95,8 @@ begin
     raise exception using errcode = '42501', message = 'GM access required';
   end if;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('pirate:' || g::text, 0));
-  update private.pirate_games set paused = pirate_set_paused.paused, updated_at = now()
-  where game_id = g and paused is distinct from pirate_set_paused.paused;
+  update private.pirate_games pirate set paused = pirate_set_paused.paused, updated_at = now()
+  where pirate.game_id = g and pirate.paused is distinct from pirate_set_paused.paused;
   if not found then
     if not exists (select 1 from private.pirate_games where game_id = g) then
       raise exception using errcode = '55000', message = 'Pirate mode is not enabled';

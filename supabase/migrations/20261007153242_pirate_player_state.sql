@@ -77,7 +77,7 @@ begin
   select pg_catalog.jsonb_build_object(
     'id', parley.id, 'state', parley.state,
     'role', case when parley.target_faction = crew_id then 'target' else 'attacker' end,
-    'can_act', pg_catalog.coalesce(caller = parley.target_profile
+    'can_act', coalesce(caller = parley.target_profile
       or caller = parley.attacker_profile, false),
     'self_reported', case when caller = parley.target_profile then parley.target_report is not null
                           when caller = parley.attacker_profile then parley.attacker_report is not null

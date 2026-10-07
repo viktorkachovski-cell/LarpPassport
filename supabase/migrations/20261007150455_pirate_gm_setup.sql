@@ -141,7 +141,7 @@ begin
     zone_id, game_id, kind, reward, oath_index, oath_word, prompt, answer_hash
   ) values (
     zone_id, g, kind, reward, oath_index, oath_word, prompt, new_hash
-  ) on conflict (zone_id) do update set
+  ) on conflict on constraint pirate_sites_pkey do update set
     kind = excluded.kind,
     reward = excluded.reward,
     oath_index = excluded.oath_index,
@@ -315,7 +315,7 @@ begin
   join public.zones za on za.id = a.zone_id and za.active
   join public.zones zb on zb.id = b.zone_id and zb.active
   where a.game_id = g and extensions.st_dwithin(
-    za.geog, zb.geog, pg_catalog.coalesce(za.radius_m, 0) + pg_catalog.coalesce(zb.radius_m, 0)
+    za.geog, zb.geog, coalesce(za.radius_m, 0) + coalesce(zb.radius_m, 0)
   );
   if overlap_count > 0 then
     issues := pg_catalog.array_append(issues, 'Pirate site zones overlap');

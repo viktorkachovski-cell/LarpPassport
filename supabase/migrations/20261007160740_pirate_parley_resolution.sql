@@ -182,7 +182,7 @@ begin
   end if;
   if session.choice = 'yield' then
     loser_balance := private.pirate_parley_balance(g, session.target_faction, 'doubloon');
-    amount := pg_catalog.least(loser_balance, pg_catalog.greatest(3, pg_catalog.ceil(loser_balance * 0.10)::integer));
+    amount := least(loser_balance, greatest(3, pg_catalog.ceil(loser_balance * 0.10)::integer));
     perform private.pirate_resolve_transfer(g, parley_id, session.attacker_faction,
       session.target_faction, 'doubloon', amount, caller);
     return pg_catalog.jsonb_build_object('status', 'ok', 'state', 'resolved', 'amount', amount);
@@ -254,7 +254,7 @@ begin
     if loser_balance < 1 then return pg_catalog.jsonb_build_object('status', 'no_shards'); end if;
     amount := 1;
   else
-    amount := pg_catalog.least(loser_balance, pg_catalog.greatest(5, pg_catalog.ceil(loser_balance * 0.25)::integer));
+    amount := least(loser_balance, greatest(5, pg_catalog.ceil(loser_balance * 0.25)::integer));
   end if;
   perform private.pirate_resolve_transfer(g, parley_id, session.winner_faction,
     loser, currency, amount, caller);

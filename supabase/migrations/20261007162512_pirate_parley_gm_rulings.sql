@@ -44,12 +44,12 @@ begin
                 then session.attacker_faction else session.target_faction end;
   balance := private.pirate_parley_balance(g, loser, currency);
   if session.choice = 'yield' then
-    amount := pg_catalog.least(balance, pg_catalog.greatest(3, pg_catalog.ceil(balance * 0.10)::integer));
+    amount := least(balance, greatest(3, pg_catalog.ceil(balance * 0.10)::integer));
   elsif currency = 'bearing' then
     if balance < 1 then return pg_catalog.jsonb_build_object('status', 'no_shards'); end if;
     amount := 1;
   else
-    amount := pg_catalog.least(balance, pg_catalog.greatest(5, pg_catalog.ceil(balance * 0.25)::integer));
+    amount := least(balance, greatest(5, pg_catalog.ceil(balance * 0.25)::integer));
   end if;
   update private.pirate_parleys
   set resolved_by = caller, resolution_reason = clean_reason, updated_at = now()

@@ -134,7 +134,7 @@ begin
     extensions.hmac(pg_catalog.convert_to('claim:' || normalized || ':' || g::text, 'UTF8'), secret, 'sha256'), 'hex');
   select attempt.request_hash, attempt.result into prior
   from private.pirate_attempts attempt
-  where attempt.game_id = g and attempt.profile_id = caller and attempt.idem = idem;
+  where attempt.game_id = g and attempt.profile_id = caller and attempt.idem = claim_site.idem;
   if found then
     if prior.request_hash <> request_hash then
       return pg_catalog.jsonb_build_object('status', 'idempotency_conflict');
@@ -175,7 +175,7 @@ begin
     extensions.digest(normalized || ':' || site.zone_id::text, 'sha256'), 'hex');
   if site.answer_hash is null or normalized = '' or answer_digest <> site.answer_hash then
     result := pg_catalog.jsonb_build_object('status', case when wrong_count + 1 >= 3 then 'locked_out' else 'wrong' end,
-      'attempts_remaining', pg_catalog.greatest(0, 3 - wrong_count - 1),
+      'attempts_remaining', greatest(0, 3 - wrong_count - 1),
       'remaining_seconds', case when wrong_count + 1 >= 3 then 120 else 0 end);
     insert into private.pirate_attempts (
       game_id, zone_id, faction_id, profile_id, idem, request_hash, ok, result

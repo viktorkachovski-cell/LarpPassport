@@ -59,7 +59,7 @@ begin
   select coalesce(sum(delta), 0)::integer into balance from private.pirate_ledger ledger
   where ledger.game_id = g and ledger.faction_id = crew_id and ledger.currency = 'bearing';
   if balance < 1 then return pg_catalog.jsonb_build_object('status', 'no_shards'); end if;
-  level := pg_catalog.least(balance, 5)::smallint;
+  level := least(balance, 5)::smallint;
   half_width := (array[90, 45, 25, 12, 5])[level]::smallint;
 
   select count(*)::integer into candidate_count
