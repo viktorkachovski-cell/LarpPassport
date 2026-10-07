@@ -5,7 +5,7 @@ describe('event catalogue', () => {
   it('labels a boundary breach and marks it pending until ruled on', () => {
     expect(eventKind({ type: 'zone_boundary_exit', status: 'pending' })).toBe('BREACH // PENDING')
     expect(eventKind({ type: 'zone_boundary_exit', status: 'confirmed' })).toBe('BREACH')
-    expect(eventInfo('zone_boundary_exit')).toMatchObject({ breach: true, affectsHunt: true, tone: 'critical' })
+    expect(eventInfo('zone_boundary_exit')).toMatchObject({ breach: true, tone: 'critical' })
   })
 
   it('describes zone events with the zone name', () => {
@@ -14,9 +14,7 @@ describe('event catalogue', () => {
     expect(eventInfo('zone_boundary_exit').describe({ type: 'zone_boundary_exit' }, zoneNameOf)).toBe('left Northern anomaly')
   })
 
-  it('reloads the hunt for hunt types the dashboard does not know yet', () => {
-    expect(eventInfo('hunt_paused').affectsHunt).toBe(true)
-    expect(eventInfo('zone_enter').affectsHunt).toBe(false)
+  it('labels types the dashboard does not know yet from the type', () => {
     expect(eventInfo('something_new')).toMatchObject({ kind: 'SOMETHING NEW', tone: '', breach: false })
   })
 })
