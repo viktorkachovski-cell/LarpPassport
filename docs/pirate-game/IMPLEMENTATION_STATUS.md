@@ -10,8 +10,8 @@ Updated 2026-10-07. Source status for `codex/pirate-game`, based on `origin/main
 
 ## Implemented in the branch
 
-- Twelve additive Pirate migrations: private game/site/reward/reading/Parley tables, setup and phase controls, claims, deterministic compass readings, player state, GM overview, treasure award/correction, and Parley open/join/report/plunder/GM ruling/void. Private data is exposed through scoped RPCs. Ordinary Time Hunt remains routed through its existing RPCs.
-- `009`–`018` pgTAP source suites cover foundation, setup, phase, claims, compass, state, treasure, Parley confirmations, GM dispute ruling, and transfer reversal. These have **not** executed against Postgres yet.
+- One additive Pirate migration (`20261007144147_pirate_game.sql`, squashed from twelve before its first hosted apply): private game/site/reward/reading/Parley tables, setup and phase controls, claims, deterministic compass readings, player state, GM overview, treasure award/correction, and Parley open/join/report/plunder/GM ruling/void. Private data is exposed through scoped RPCs. Ordinary Time Hunt remains routed through its existing RPCs.
+- `009`–`018` pgTAP suites cover foundation, setup, phase, claims, compass, state, treasure, Parley confirmations, GM dispute ruling, and transfer reversal. They pass in CI against a local Supabase stack.
 - Dashboard Pirate tab for setup, treasure, phases, pause/PvP, crews, sites, treasure award/void, and disputed Parley ruling/void. Pirate games no longer load Hunt admin state.
 - Mobile Pirate theme, chart/compass and Parley screens, shared true-heading sensor hook and React Native SVG compass. The Pirate and Time Hunt apps are separate builds: neither bundle contains the other game's screens, and each lists only its own games. EAS profiles: `preview`/`production` (Pirate), `preview-hunt`/`production-hunt` (Time Hunt).
 - Lighthouse placement simulator and four Python unit tests.
@@ -21,16 +21,17 @@ Updated 2026-10-07. Source status for `codex/pirate-game`, based on `origin/main
 - Dashboard: 51 Vitest tests pass; Vite production build succeeds.
 - Mobile: 78 Jest tests pass. Android exports of both apps pass after the split; the Pirate bundle contains no Time Hunt RPCs and the Time Hunt bundle contains no Pirate code or SVG. These exports are not APK or device tests.
 - Before the split, a standalone local arm64 release APK built successfully with the Pirate theme and public Supabase configuration. APK metadata confirms `com.larppassport.app`, min SDK 24, target SDK 35, an embedded JavaScript bundle and a valid v2 signature. It is signed with the generated local Android debug certificate, so it may require removing an EAS-signed installation before installing. It has not booted on a device.
-- PostgreSQL syntax parser: 31 PL/pgSQL functions across the 12 new migrations parse. This does not validate catalog references, policies, extension behavior, or transactions.
 - Simulator: four Python tests pass. Its area estimates are approximate planning inputs.
 
 ## Fixed after review
 
-- `get_pirate_state` omitted the `yielded` Parley state, so after the target chose Yield neither player could confirm the result and the session could only time out to a GM dispute. The state is now returned; `018` asserts it.
+- `get_pirate_state` omitted the `yielded` Parley state, so after the target chose Yield neither player could confirm the result and the session could only time out to a GM dispute. The state is now returned; `018` asserts it. All three "Parley still in play" checks now share `private.pirate_parley_live`.
+- The first CI run of the Pirate suites found runtime SQL errors (`pg_catalog.coalesce`/`least` calls and PL/pgSQL names clashing with columns). Fixed; all suites pass.
+- Dashboard: Parley disputes counted as "zone triggers to confirm" in the Events queue. They are now listed as Parley disputes and ruled on in the Pirate tab.
 
 ## Release gates and remaining work
 
-- Run all pgTAP suites against an isolated Postgres/PostGIS/Supabase database, including concurrent joins and transfers. No local Docker, PostgreSQL, or Supabase CLI runtime is available in this checkout. Do not apply the migrations to production as a substitute for an isolated test.
+- Concurrency tests for simultaneous Parley joins and transfers (`supabase/tests/concurrency.py`) are still to be written.
 - Reconcile the hosted migration history: the hosted latest version is `20260907185433_hunt_direction_bearing`, while the repository file is `20260907180000_hunt_direction_bearing.sql`. No Pirate migration has been applied to the hosted project.
 - The earlier SVG probe EAS build `cb7b5e30-94c3-45b5-b4c7-9be4e1d2cbf1` was still queued at the last check. The owner declined uploading the reviewed Pirate source to EAS, so no final EAS build was submitted. The local APK is a QA artifact; real-device boot/gameplay QA and a distribution signing plan remain.
 - Complete GM correction tools for claims, balances and readings, richer ledger/claim/reading drill-down, and remaining documented edge-case and concurrency tests. Review site placement with the simulator before live setup.
