@@ -1,6 +1,6 @@
 # The Black Tide: Halloween Pirate Treasure Hunt
 Game guide for the PirateGame theme (test run), built on the LarpPassport engine.
-Version 3.1, 2026-10-07. Game date: Saturday 2026-10-31, 16:30 to 23:00.
+Version 3.3, 2026-10-07. Game date: Saturday 2026-10-31, 16:30 to 23:00.
 
 Numbers are starting values to validate in the test run. Implementation instructions live in [AGENT_PLAN.md](AGENT_PLAN.md). This guide describes intended rules, not implemented behaviour.
 
@@ -10,17 +10,17 @@ Numbers are starting values to validate in the test run. Implementation instruct
 
 | Topic | Decision |
 | --- | --- |
-| Event | Test run, friendly group, 12 to 16 players, no release freeze |
+| Event | Test run, friendly group, up to 20 players, no release freeze |
 | Schedule | **16:30 to 23:00**, confirmed |
 | Staff | **2 GMs**: the Admiralty (dashboard) and the Ghost Captain (street and treasure NPC) |
-| Tavern Truce venue | Chosen by the owner; registered as a Safe Harbour zone |
-| Crews | 4 crews of 3 to 4 |
+| Tavern Truce venue | To be booked; the `truce` phase pauses claims and Parley globally, with no Safe Harbour zones |
+| Crews | 5 crews of up to 4 (confirm actual roster before setup) |
 | Currencies | Bearing shards, oath words, doubloons |
-| Riddle sites | Each site gives **either** a bearing shard **or** an oath word, shown on screen after the correct answer |
+| Riddle sites | Five shard sites each give **one shard plus ranked doubloons**; four oath sites each give **one oath word plus ranked doubloons**, after the correct answer |
 | Oath words | Shown in the app once earned; traded freely through roleplay; not plunderable |
-| Doubloons | From caches, plunder, treasure |
+| Doubloons | From all nine riddle sites after correct answers, plunder, treasure; lighthouses pay nothing |
 | Parley | In app; rock-paper-scissors played physically; both sides enter the agreed result; Yield or Fight |
-| Treasure | ~40% of a strong crew's non-treasure total; claimed by speaking the oath to an on-site NPC |
+| Treasure | 40% of the highest crew doubloon score at the first `hoard` opening, rounded to the nearest whole doubloon; claimed by speaking the oath to an on-site NPC |
 | GM dashboard | Full control layer: zones, messages, resources, positions, corrections (section 7) |
 
 ---
@@ -30,11 +30,11 @@ Numbers are starting values to validate in the test run. Implementation instruct
 | Time | Phase | Notes |
 | --- | --- | --- |
 | 16:30 | **Muster** (at the Truce venue or another chosen meeting point) | Briefing, crews, armbands, app join, consent, battery check |
-| 17:00 | **Act I: Charting** | Daylight. Riddle sites and caches open. PvP off. Compass needs shards and dark, so no readings yet. |
+| 17:00 | **Act I: Charting** | Daylight. Shard and oath riddle sites open. PvP off. Compass needs shards and dark, so no readings yet. |
 | ~17:20 | **The Curse Wakes** | Sunset (verify exact time for the location). GM triggers it from the dashboard: lighthouses and PvP turn on. |
-| 19:45 to 20:30 | **Tavern Truce** | Supper break in a Safe Harbour. PvP and claims paused. Warm up, charge phones, trade oath words, form alliances. |
+| 19:45 to 20:30 | **Tavern Truce** | Supper break indoors. PvP and claims paused globally. Warm up, charge phones, trade oath words, form alliances. |
 | 20:30 | **Act II: The Hunt** | Everything on |
-| 22:00 | **The Hoard Surfaces** | Treasure becomes claimable; the NPC takes position. Before 22:00 the compass works but the ground is sealed. |
+| 22:00 | **The Hoard Surfaces** | GM opens `hoard`, freezing the treasure value from the current leading doubloon score; the NPC takes position. Before opening the compass works but the ground is sealed. |
 | 22:00 to 22:50 | **Last Plunder** | After the treasure is found, the game continues. The finding crew is now the richest target in town. |
 | 22:50 | Recall | GM ends PvP and claims |
 | 23:00 | **Final Muster** | Scoring, awards |
@@ -57,18 +57,16 @@ The Last Plunder window is the payoff: the finding crew has to survive 50 minute
 
 ## 3. Site counts (rescaled for the longer game)
 
-Play time is about 285 minutes: 390 minutes total, minus 30 muster, 45 truce and 30 final muster. A larger walking area means hops of about 12 minutes.
+Play time is about 285 minutes: 390 minutes total, minus 30 muster, 45 truce and 30 final muster. The route and activity timing must be remeasured for this smaller layout.
 
 | Site | Count | Zone setup | Per-crew rule |
 | --- | --- | --- | --- |
-| Shard riddle sites | **7** | circle 40-50 m, `silent`, dwell 20 s; private site kind `riddle`, reward `bearing` | Once per crew, +1 shard |
-| Oath riddle sites | **4** (one per oath word) | same, reward `oath`, oath index 1..4 | Once per crew, reveals that word |
-| Caches | **8** | circle 30-40 m, `silent`, dwell 20 s; private site kind `cache` | Once per crew, payout by arrival order |
-| Lighthouses | **6** | circle 40-60 m, `silent`, dwell 20 s; private site kind `lighthouse` | One reading per crew per lighthouse per shard level |
-| Safe Harbours | **3** | private site kind `harbour` (one is the Truce tavern) | No Parley inside |
-| Treasure | **1** | circle 25 m, `gm_confirm`; private site kind `treasure` | GM award in `hoard` phase |
+| Shard riddle sites | **5** | circle 40-50 m, `silent`, dwell 20 s; private site kind `riddle`, reward `bearing` | Once per crew after correct answer, +1 shard and doubloons by successful-answer rank |
+| Oath riddle sites | **4** (one per oath word) | same, reward `oath`, oath index 1..4 | Once per crew after correct answer, reveals that word and pays doubloons by successful-answer rank |
+| Lighthouses | **3** | circle 40-60 m, `silent`, dwell 20 s; private site kind `lighthouse` | One reading per crew per lighthouse per shard level; no site reward |
+| Treasure | **1** | circle 25 m, `gm_confirm`; private site kind `treasure` | Separate staffed point; GM award in `hoard` phase |
 
-Total: 29 points.
+Total: **12 activity sites plus 1 separate treasure point = 13 physical locations**. There are no caches or Safe Harbour zones.
 
 **Mark shard and oath sites differently on the printed chart.** Crews then plan, for example: "we skip the far oath site and trade for that word at the Truce". That is the decision you want them making. Hidden reward types would make it a lottery.
 
@@ -76,27 +74,20 @@ One word per oath site means no crew collects all four on its own schedule witho
 
 ### Time budget per crew
 
-| Activity | Attempts | Min each (walk + on site) | Total |
-| --- | --- | --- | --- |
-| Shard sites | 5 | 17 | 85 |
-| Oath sites | 3 | 17 | 51 |
-| Lighthouse readings | 4 | 15 | 60 |
-| Caches | 5 | 16 | 80 |
-| Parley encounters | 4 | 5 | 20 |
-| Final approach + oath | 1 | 20 | 20 |
-| **Total** | | | **~316 of ~285 available (111%)** |
-
-Still deliberately over budget, so choices matter.
+The former 29-point estimate no longer applies. In the field rehearsal, time a route that earns at least three shards, visits two distinct lighthouses, finds or trades the four oath words, and reaches the treasure after 22:00. If that finishes too early, improve story and interaction pacing before adding locations. If it overruns, shorten walking distances or puzzle time.
 
 ---
 
 ## 4. Bearing shards and compass
 
-Unchanged from v2:
-
-| Shards | 0 | 1 | 2 | 3 | 4 | 5+ |
-| --- | --- | --- | --- | --- | --- | --- |
-| Arc half-width | spins | ±90° | ±45° | ±25° | ±12° | ±5° |
+| Shards | Arc half-width | Player feel |
+| --- | --- | --- |
+| 0 | Needle spins | Useless: “the glass is broken” |
+| 1 | ±90° | Somewhere that way-ish |
+| 2 | ±45° | A quadrant |
+| 3 | ±25° | A street direction |
+| 4 | ±12° | A block |
+| 5+ | ±5° | Near-certain |
 
 - Shards above 5 act as a theft buffer.
 - Distance bands (≤100 m and ≤25 m only) unlock at 3+ shards.
@@ -106,15 +97,9 @@ Unchanged from v2:
 
 ## 5. Doubloons
 
-Cache payout by arrival order is 20 / 15 / 10 / 5, so each of the 8 caches pays out 50, or 400 across the game.
+Each of the **five shard sites** gives the claiming crew +1 shard and doubloons. Each of the **four oath sites** gives one oath word and doubloons. The crew must submit the correct on-site answer before either reward is granted. **Rank is set by the order of correct answers, not GPS arrival.** Doubloons pay **20 / 15 / 10 / 5 / 5** by rank. Each riddle site pays at most 55 across five crews, or **495 across all nine**. Rewards are one successful claim per crew per site. Lighthouses pay no doubloons. This rule is approved but still needs implementation and balance testing.
 
-| Crew | Caches | Doubloons before treasure (incl. plunder) |
-| --- | --- | --- |
-| Strong | 6 | ~105 |
-| Typical | 5 | ~60 |
-| Struggling | 3-4 | ~30 |
-
-**Treasure: 40 doubloons.** A typical crew that finds it reaches ~100, just below a strong crew that did not (~105). The treasure is decisive but not automatic.
+**Treasure value = round(0.40 × the highest crew's doubloon balance when `hoard` first opens)**, normally at 22:00. Scores include riddle-site awards, Parley transfers and GM corrections recorded before that phase change, but no treasure award. For example, a leading balance of 103 makes the treasure worth 41 doubloons. Freeze and audit the leading balance and calculated value once; stepping back and reopening `hoard`, voiding an award, or awarding it later must not recalculate it. If every crew has zero, the value is zero. Recheck balance after the new route and payout are playtested.
 
 Plunder and protections are unchanged:
 
@@ -127,7 +112,7 @@ After the physical exchange, the two players in that Parley independently confir
 - Davy's Mercy: 15 minutes of immunity after being plundered.
 - The same pair of crews cannot Parley again for 30 minutes.
 - Maximum 3 Parleys initiated per crew per hour.
-- No Parley inside Safe Harbours, during the Truce, or within 100 m of the treasure.
+- No Parley during the Truce, or within 100 m of the treasure in the `hoard` phase. The GM can also disable Parley globally.
 
 ---
 
@@ -136,12 +121,12 @@ After the physical exchange, the two players in that Parley independently confir
 Proposed private tables (the agent plan gives their full schemas):
 - `pirate_games`: mode marker, secret treasure point and value; `hoard` phase controls opening
 - `pirate_sites`: answer hashes and oath words for registered zones
-- `pirate_claims`: unique active `(faction_id, zone_id)` claims, with cache rank and void flag
+- `pirate_claims`: unique active `(faction_id, zone_id)` claims, with riddle-site successful-claim rank and void flag
 - `pirate_ledger`: append-only bearing shard and doubloon entries, with source, reference, reason and actor
 - `pirate_readings`: unique active `(faction_id, zone_id, shards)` compass readings
 - `pirate_parleys`: state machine, both reports and resolution state
 
-Oath words are not a ledger currency. A crew's words are derived from its non-voided oath `site_claims`, shown in the Hold screen and logbook.
+Oath words are not a ledger currency. A crew's words are derived from its non-voided oath `pirate_claims`, shown in the Hold screen and logbook.
 
 Player RPCs: `claim_site`, `compass_reading`, `open_parley`, `join_parley`, `parley_choice`, `parley_report`. Every gameplay RPC checks `games.phase` and the Pirate pause flag, so GM phase and pause changes take effect server-side.
 
@@ -170,7 +155,7 @@ setup → charting → cursed → truce → hunt → hoard → recall → finish
 
 - **Create, move, resize and deactivate zones on the map.** The existing `rearm_zone_on_change` handles state when geometry changes.
 - **Pirate-specific fields:** kind, reward type and oath word index, edited through a GM form and stored in private Pirate site state. Answers are write-only from the dashboard: the GM can set or replace an answer but the UI never displays it back.
-- **Typical uses:** deactivate a cache whose box was taken by civilians; enlarge a riddle zone in a GPS dead spot.
+- **Typical uses:** deactivate an inaccessible shard site; enlarge a riddle zone in a GPS dead spot.
 - **The treasure point can only be edited before `cursed`.** Moving it after readings exist would make every logbook bearing wrong. The dashboard blocks it with an explicit warning.
 
 ### 7.3 Messages (existing)
@@ -186,11 +171,11 @@ Crew table, live via Realtime on `game_events`:
 
 Opening a crew shows:
 - the ledger history, with source and actor per row;
-- its site claims and cache ranks;
+- its site claims and riddle-site successful-claim ranks;
 - its compass readings (centre and width, so the GM can see who is close);
 - its Parley history.
 
-There is also a cache board showing which crews claimed each cache and in what order.
+There is also a riddle-site board showing which crews solved each site and in what order.
 
 ### 7.5 Positions (existing, extended)
 
@@ -208,13 +193,13 @@ All corrections are `SECURITY DEFINER` RPCs with a GM role check (the same patte
 | RPC | Use case | Effect |
 | --- | --- | --- |
 | `gm_adjust(g, crew, currency, delta, reason)` | Anything deemed unfair; manual scoring | Compensating ledger row. Balance can't go below zero. |
-| `gm_claim_for(g, crew, zone, reason)` | GPS failed but the crew was clearly there and phoned the GM with the answer | Creates the claim without the presence check. Cache rank is computed at that moment. |
+| `gm_claim_for(g, crew, zone, reason)` | GPS failed but the crew was clearly there and phoned the GM with the answer | Creates the claim without the presence check. Riddle-site successful-claim rank is computed at that moment. |
 | `gm_void_claim(g, claim_id, reason)` | Claim made by mistake or by cheating | Voids the claim, writes the reversing ledger row, removes the oath word, and allows a re-claim |
 | `gm_void_parley(g, session_id, reason)` | Dispute, or a result entered wrongly | Reverses both ledger rows and clears the Mercy it granted |
 | `gm_resolve_parley(g, session_id, winner, choice, reason)` | Reports disagree or a session timed out | Applies the outcome as if both had agreed |
 | `gm_void_reading(g, reading_id, reason)` | Reading taken from a wrongly placed lighthouse | Voids the reading; the crew can read again there |
 | `gm_set_mercy(g, crew, until, reason)` | Protect a crew that is being farmed, or lift a stuck immunity | Overrides the Mercy timer |
-| `gm_award_treasure` | NPC confirms the spoken oath | Awards the treasure once in `hoard`, writing +40 |
+| `gm_award_treasure` | NPC confirms the spoken oath | Awards the frozen treasure value once in `hoard`; void/re-award uses the same value |
 
 Players see corrections in their logbook as "The Admiralty has ruled: ..." with the reason. Transparency avoids "the GM is cheating" suspicion in a friendly group.
 
@@ -234,7 +219,7 @@ Both are `gm` members of the game. If the Admiralty's connection fails, the Ghos
 | Risk | Mitigation |
 | --- | --- |
 | **Battery** (~6.5 h of GPS) | Power bank mandatory per player; charging at the Truce; Near/Far GPS profile |
-| **Cold** (late October nights) | Truce indoors; 3 harbours where crews can warm up |
+| **Cold** (late October nights) | Truce indoors; GMs identify optional warm-up stops outside gameplay |
 | **Peak Halloween crowds and drinking after 21:00**, plus many civilian "pirates" | Crew armbands, no-contact Parley, no alcohol until Final Muster, crew-spread warning, PvP kill switch |
 | **Mobile data congestion late evening** | Offline-tolerant queue; claims retryable; `gm_claim_for` as the manual fallback |
 | **GM overload during the Last Plunder window** | Canned messages, a dispute queue rather than live phone calls, and the PvP kill switch |
@@ -244,6 +229,6 @@ Both are `gm` members of the game. If the Admiralty's connection fails, the Ghos
 
 ## 9. Open questions
 
-1. Treasure point and 6 lighthouse candidates for the triangulation simulation (task S01 in the agent plan).
+1. Separate treasure point and 3 lighthouse candidates for the triangulation simulation (task S01 in the agent plan).
 2. The 4 oath words and the riddle texts and answers (content, owner).
 3. Printed chart design.
