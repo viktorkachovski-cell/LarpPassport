@@ -57,7 +57,7 @@ The four-week release freeze is **waived by the owner** for this test run. A sho
 | Presence | `private.zone_state` (`inside`, `inside_since`, `last_evaluated_at`) maintained by `private.evaluate_zones` from `ingest_pings` | Server-side presence proof. Read only; never write zone state from pirate RPCs. |
 | Latest position | `public.player_positions` | Freshness check (≤ 2 min) and treasure distance |
 | Events | `public.game_events` (`type`, `payload`, `player_visible`, `status`, `seq`, `delivery_seq`) and the mobile/dashboard delivery path | Logbook entries, rulings, broadcasts, dispute queue |
-| Bearing math | `S/migrations/20260907180000_hunt_direction_bearing.sql` (`extensions.st_azimuth`, band edges, freshness) | Pattern for `compass_reading`; do not modify the hunt function |
+| Bearing math | `S/migrations/20260907185433_hunt_direction_bearing.sql` (`extensions.st_azimuth`, band edges, freshness) | Pattern for `compass_reading`; do not modify the hunt function |
 | Advisory locks | `pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('hunt:' \|\| game_id::text, 0))` | Same pattern with prefix `'pirate:'` |
 | pgcrypto | Installed in `extensions` (`extensions.gen_random_bytes` already used) | `extensions.hmac`, `extensions.digest` |
 | Mobile compass | `M/src/lib/direction.js` (`usableTrueHeading`, `headingQuality`, `shortestAngleDelta`, `formatBearing`), `Location.watchHeadingAsync` in `M/src/screens/GameScreen.js` | Compass dial rotation. No new sensor module. |

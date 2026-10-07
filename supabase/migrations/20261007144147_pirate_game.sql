@@ -237,9 +237,9 @@ returns boolean
 language sql
 immutable
 set search_path = ''
-as $
+as $$
   select state in ('open', 'joined', 'yielded', 'fighting', 'awaiting_choice', 'disputed');
-$;
+$$;
 revoke all on function private.pirate_parley_live(text) from public, anon, authenticated;
 
 create table private.pirate_mercy (
