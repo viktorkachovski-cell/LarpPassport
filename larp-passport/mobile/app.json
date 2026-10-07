@@ -1,6 +1,5 @@
 {
   "expo": {
-    "name": "LARP Passport",
     "slug": "larp-passport",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -9,7 +8,6 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0f1210",
     "android": {
-      "package": "com.larppassport.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f1210"

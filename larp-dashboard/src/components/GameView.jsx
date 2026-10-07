@@ -3,12 +3,14 @@ import { ErrorBoundary } from '@sentry/react'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { unwrap } from '../lib/unwrap'
 import { eventInfo } from '../lib/events'
+import { modeOf, PIRATE_MODE, ruledInModeTab } from '../lib/gameModes'
 import { parseWkbPoint } from '../lib/geo'
 import CharactersPanel from './CharactersPanel'
 import TemplatePanel from './TemplatePanel'
 import EventsPanel from './EventsPanel'
 import PlayersPanel from './PlayersPanel'
 import HuntPanel from './HuntPanel'
+import PiratePanel from './PiratePanel'
 import SyncStatus from './SyncStatus'
 import { realtimeStateFromStatus } from '../lib/syncStatus'
 
@@ -56,8 +58,9 @@ export default function GameView({ gameId, session, onBack }) {
     clearTimeout(refreshTimer.current)
     refreshTimer.current = setTimeout(() => refreshRef.current(), 250)
   }, [])
-  const [hunt, setHunt] = useState(null)
-  const [tab, setTab] = useState('hunt')
+  // GM state of the game's mode: get_hunt_admin or gm_pirate_overview.
+  const [modeState, setModeState] = useState(null)
+  const [tab, setTab] = useState(null)
   const [mapOpened, setMapOpened] = useState(false)
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -80,6 +83,9 @@ export default function GameView({ gameId, session, onBack }) {
   }, [recordError])
 
   const isGm = !!game && isGameGm(game, members, uid)
+  const mode = game ? modeOf(game) : null
+  // The mode tab until the GM picks another tab this mode has.
+  const activeTab = mode?.tabs.includes(tab) ? tab : mode?.key
 
   // Failures of writes that no panel reports itself go to the banner.
   const reportFailure = useCallback((promise) => promise.catch((error) => setActionError(error.message)), [])
@@ -143,18 +149,18 @@ export default function GameView({ gameId, session, onBack }) {
       setMembers(mem.data ?? [])
       if (!isGameGm(g.data, mem.data ?? [], uid)) { setLoadError(''); loadedOnce.current = true; recordOk(); return }
 
-      const [z, pos, chars, fac, ev, huntState, joinCode, pending] = await Promise.all([
+      const [z, pos, chars, fac, ev, modeState, joinCode, pending] = await Promise.all([
         supabase.from('zones_view').select('*').eq('game_id', gameId),
         supabase.from('player_positions_view').select('*').eq('game_id', gameId),
         supabase.from('characters').select('*').eq('game_id', gameId),
         supabase.from('factions').select('*').eq('game_id', gameId),
         supabase.from('game_events').select('*').eq('game_id', gameId).order('seq', { ascending: false }).limit(200),
-        supabase.rpc('get_hunt_admin', { g: gameId }),
+        supabase.rpc(modeOf(g.data).stateRpc, { g: gameId }),
         supabase.rpc('gm_get_join_code', { g: gameId }),
         loadPending(),
       ])
       if (!alive || request !== version) return
-      const failed = [z, pos, chars, fac, ev, huntState, pending, joinCode].find((result) => result.error)
+      const failed = [z, pos, chars, fac, ev, modeState, pending, joinCode].find((result) => result.error)
       if (failed) { failSnapshot(failed.error.message); return }
       if (typeof joinCode.data === 'string') {
         setGame((current) => ({ ...(current ?? g.data), join_code: joinCode.data }))
@@ -168,7 +174,7 @@ export default function GameView({ gameId, session, onBack }) {
       setEvents(ev.data ?? [])
       setPendingEvents(pending.data ?? [])
       setLoadError('')
-      setHunt(huntState.data)
+      setModeState(modeState.data)
       loadedOnce.current = true
       recordOk()
       } catch (error) { if (alive && request === version) failSnapshot(error.message) }
@@ -234,7 +240,7 @@ export default function GameView({ gameId, session, onBack }) {
         invalidateSnapshot.current()
         if (payload.eventType === 'DELETE') dropEvent(payload.old?.id)
         else putEvent(payload.new, payload.eventType === 'INSERT')
-        if (payload.new && eventInfo(payload.new.type).affectsHunt) scheduleRefresh()
+        if (payload.new && mode.reloadsOn(String(payload.new.type ?? ''))) scheduleRefresh()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'characters', filter: `game_id=eq.${gameId}` }, (payload) => {
         invalidateSnapshot.current()
@@ -249,7 +255,7 @@ export default function GameView({ gameId, session, onBack }) {
       })
 
     return () => { supabase.removeChannel(channel); setRealtime('closed') }
-  }, [gameId, isGm, loadZones, loadMembers, reportFailure, scheduleRefresh, putEvent, dropEvent])
+  }, [gameId, isGm, mode, loadZones, loadMembers, reportFailure, scheduleRefresh, putEvent, dropEvent])
 
   const usernameOf = useCallback((profileId) => {
     const m = members.find((x) => x.profile_id === profileId)
@@ -258,23 +264,23 @@ export default function GameView({ gameId, session, onBack }) {
 
   const zoneNameOf = useCallback((zoneId) => zones.find((z) => z.id === zoneId)?.name ?? 'a zone', [zones])
 
-  // Pending GM decisions, derived from authoritative state only: the hunt
-  // admin snapshot and the fully paginated pending-event query, never the
-  // capped history page.
+  // Pending events the Events tab and map rule on; Parley disputes are ruled
+  // on in the Pirate tab.
+  const eventQueue = useMemo(() => pendingEvents.filter((event) => !ruledInModeTab(event)), [pendingEvents])
+
+  // Pending GM decisions, derived from authoritative state only: the mode
+  // state and the fully paginated pending-event query, never the capped
+  // history page.
   const decisions = useMemo(() => {
-    const items = []
-    const pendingClaims = (hunt?.claims ?? []).filter((claim) => claim.status === 'pending').length
-    const awaiting = hunt?.phase === 'active'
-      ? (hunt.players ?? []).filter((player) => player.state === 'alive' && !player.target_profile_id).length
-      : 0
-    const breaches = pendingEvents.filter((event) => eventInfo(event.type).breach).length
-    const triggers = pendingEvents.length - breaches
-    if (pendingClaims) items.push({ key: 'claims', tab: 'hunt', text: `${pendingClaims} elimination claim${pendingClaims === 1 ? '' : 's'} to rule on` })
-    if (awaiting) items.push({ key: 'assign', tab: 'hunt', text: `${awaiting} player${awaiting === 1 ? '' : 's'} waiting for a target assignment` })
-    if (breaches) items.push({ key: 'breach', tab: 'events', text: `${breaches} boundary breach${breaches === 1 ? '' : 'es'} to review` })
-    if (triggers) items.push({ key: 'trigger', tab: 'events', text: `${triggers} zone trigger${triggers === 1 ? '' : 's'} to confirm` })
-    return items
-  }, [hunt, pendingEvents])
+    if (!mode) return []
+    const breaches = eventQueue.filter((event) => eventInfo(event.type).breach).length
+    const triggers = eventQueue.length - breaches
+    return [
+      ...mode.decisions(modeState).map((item) => ({ ...item, tab: mode.key })),
+      breaches && { key: 'breach', tab: 'events', text: `${breaches} boundary breach${breaches === 1 ? '' : 'es'} to review` },
+      triggers && { key: 'trigger', tab: 'events', text: `${triggers} zone trigger${triggers === 1 ? '' : 's'} to confirm` },
+    ].filter(Boolean)
+  }, [mode, modeState, eventQueue])
 
   const history = useMemo(() => [...new Map([...olderEvents, ...events].map((e) => [e.id, e])).values()].sort((a, b) => b.seq - a.seq), [events, olderEvents])
   async function loadOlder() {
@@ -303,7 +309,7 @@ export default function GameView({ gameId, session, onBack }) {
   // Hunt RPCs return the new admin state; the game row follows its phase.
   const huntRpc = (name, argsOf) => gmWrite(async (...args) => {
     const data = unwrap(await supabase.rpc(name, argsOf(...args)))
-    setHunt(data)
+    setModeState(data)
     setGame((current) => ({ ...current, ...GAME_FOR_HUNT_PHASE[data.phase] }))
   })
 
@@ -387,7 +393,9 @@ export default function GameView({ gameId, session, onBack }) {
         <span className="spacer" />
         <div className="topbar-control">
           <span className="control-label">STATUS</span>
-          <select className={`status-select status-${game.status}`} aria-label="Game status" value={game.status} onChange={(e) => reportFailure(updateGame({ status: e.target.value }))}>
+          <select className={`status-select status-${game.status}`} aria-label="Game status" value={game.status}
+            disabled={mode.statusFollowsPhase} title={mode.statusFollowsPhase ? 'Pirate status follows the phase controls' : undefined}
+            onChange={(e) => reportFailure(updateGame({ status: e.target.value }))}>
             <option value="draft">DRAFT</option>
             <option value="active">ACTIVE</option>
             <option value="finished">FINISHED</option>
@@ -401,40 +409,40 @@ export default function GameView({ gameId, session, onBack }) {
             <option value="all">Everyone</option>
           </select>
         </div>
-        <div className="topbar-control">
+        {mode.directionControl && <div className="topbar-control">
           <span className="control-label">HUNTER DIRECTION</span>
           <select aria-label="Hunter direction to target" title="On: living hunters see a true-north bearing to their target and only the distance band. Off: rounded metres, no bearing."
             value={game.direction_enabled ? 'on' : 'off'} onChange={(e) => reportFailure(updateGame({ direction_enabled: e.target.value === 'on' }))}>
             <option value="off">Off (bands + metres)</option>
             <option value="on">On (bearing + bands)</option>
           </select>
-        </div>
+        </div>}
         <button className="ghost" onClick={refresh}>Refresh</button><span className="gm-chip">GM</span>
       </div>
       <SyncStatus sync={sync} realtime={realtime} online={online} onRetry={refresh} />
       {decisions.length > 0 && (
         <div className="pending-decisions" role="region" aria-label="Pending decisions" aria-live="polite">
           <b>{decisions.length} DECISION{decisions.length === 1 ? '' : 'S'} WAITING</b>
-          {['hunt', 'events'].map((target) => {
+          {[mode.key, 'events'].map((target) => {
             const items = decisions.filter((item) => item.tab === target)
             if (items.length === 0) return null
             return (
               <span key={target} className="row">
                 <span>{items.map((item) => item.text).join(' · ')}</span>
-                {tab !== target && <button type="button" className="ghost" onClick={() => setTab(target)}>Open {target === 'hunt' ? 'Hunt' : 'Events'}</button>}
+                {activeTab !== target && <button type="button" className="ghost" onClick={() => setTab(target)}>Open {target[0].toUpperCase() + target.slice(1)}</button>}
               </span>
             )
           })}
         </div>
       )}
       <div className="tabs" role="tablist" aria-label="Game sections">
-        {['hunt', 'map', 'characters', 'template', 'events', 'players'].map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => {
+        {mode.tabs.map((t) => (
+          <button key={t} role="tab" aria-selected={activeTab === t} className={activeTab === t ? 'active' : ''} onClick={() => {
             if (t === 'map') setMapOpened(true)
             setTab(t)
           }}>
             {t.toUpperCase()}
-            {t === 'events' && pendingEvents.length > 0 && <span className="badge" aria-label={`${pendingEvents.length} pending`}>{pendingEvents.length}</span>}
+            {t === 'events' && eventQueue.length > 0 && <span className="badge" aria-label={`${eventQueue.length} pending`}>{eventQueue.length}</span>}
           </button>
         ))}
       </div>
@@ -444,10 +452,12 @@ export default function GameView({ gameId, session, onBack }) {
           <button className="ghost" onClick={() => setActionError('')}>Dismiss</button>
         </div>
       )}
-      <div className={`tab-body ${tab === 'map' ? 'no-scroll' : ''}`}>
-        {tab === 'hunt' && (
+      <div className={`tab-body ${activeTab === 'map' ? 'no-scroll' : ''}`}>
+        {activeTab === 'pirate' && <PiratePanel game={game} state={mode === PIRATE_MODE ? modeState : null} zones={zones}
+          refresh={refresh} />}
+        {activeTab === 'hunt' && (
           <HuntPanel
-            hunt={hunt}
+            hunt={modeState}
             members={members}
             characters={characters}
             startHunt={startHunt}
@@ -460,7 +470,7 @@ export default function GameView({ gameId, session, onBack }) {
             refresh={refresh}
           />
         )}
-        <div style={{ display: tab === 'map' ? 'block' : 'none', height: '100%' }}>
+        <div style={{ display: activeTab === 'map' ? 'block' : 'none', height: '100%' }}>
           {mapOpened && (
             <ErrorBoundary fallback={
               <div className="panel-pad" role="alert">
@@ -470,26 +480,26 @@ export default function GameView({ gameId, session, onBack }) {
             }>
               <Suspense fallback={<p className="hint" role="status">Loading map…</p>}>
                 <MapPanel
-                  active={tab === 'map'}
+                  active={activeTab === 'map'}
                   zones={zones} positions={positions} members={members} characters={characters} factions={factions}
-                  pendingEvents={pendingEvents} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
+                  pendingEvents={eventQueue} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
                   saveZone={saveZone} deleteZone={deleteZone} confirmEvent={confirmEvent} dismissEvent={dismissEvent}
                 />
               </Suspense>
             </ErrorBoundary>
           )}
         </div>
-        {tab === 'characters' && (
+        {activeTab === 'characters' && (
           <CharactersPanel game={game} characters={characters} members={members} factions={factions}
             usernameOf={usernameOf} saveCharacter={saveCharacter} addNpc={addNpc} deleteCharacter={deleteCharacter}
             addFaction={addFaction} />
         )}
-        {tab === 'template' && <TemplatePanel game={game} hasCharacters={characters.length > 0} updateGame={updateGame} />}
-        {tab === 'events' && (
-          <EventsPanel events={history} pendingEvents={pendingEvents} loadOlder={loadOlder} hasMore={hasMore} historyBusy={historyBusy} members={members} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
+        {activeTab === 'template' && <TemplatePanel game={game} hasCharacters={characters.length > 0} updateGame={updateGame} />}
+        {activeTab === 'events' && (
+          <EventsPanel events={history} pendingEvents={eventQueue} loadOlder={loadOlder} hasMore={hasMore} historyBusy={historyBusy} members={members} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
             confirmEvent={confirmEvent} dismissEvent={dismissEvent} broadcast={broadcast} onOpenHunt={() => setTab('hunt')} />
         )}
-        {tab === 'players' && (
+        {activeTab === 'players' && (
           <PlayersPanel members={members} positions={positions} uid={uid} game={game}
             setMemberRole={setMemberRole} removeMember={removeMember} updateGame={updateGame} />
         )}

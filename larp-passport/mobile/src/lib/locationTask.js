@@ -43,11 +43,11 @@ const delivery = createEventDelivery({
     return data ?? []
   },
   notify: async (event) => {
-    const { notifies, notification } = eventInfo(event.type)
+    const { notifies, notification, body } = eventInfo(event.type)
     if (!notifies) return
     await Notifications.scheduleNotificationAsync({
       identifier: `larp-${event.id}-${event.delivery_seq}`,
-      content: { title: notification, body: event.payload?.message ?? 'Check your passport.' },
+      content: { title: notification, body: event.payload?.message || body || 'Check your passport.' },
       trigger: null,
     })
   },

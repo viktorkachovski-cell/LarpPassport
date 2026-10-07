@@ -54,8 +54,12 @@ jobs:
         run: npx expo-doctor@1.20.4
       - name: Unit tests (location queue)
         run: npm test
-      - name: Prove the Android bundle exports
-        run: npx expo export --platform android --output-dir dist-test
+      - name: Prove the Pirate app bundle exports
+        run: npx expo export --platform android --output-dir dist-test/pirate
+        env: { APP_VARIANT: pirate }
+      - name: Prove the Time Hunt app bundle exports
+        run: npx expo export --platform android --output-dir dist-test/hunt --clear
+        env: { APP_VARIANT: hunt }
 
   database:
     name: Database (pgTAP suite on local Supabase)

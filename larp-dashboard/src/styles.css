@@ -295,6 +295,17 @@ label.inline { display: inline-flex; align-items: center; gap: 6px; min-height: 
 .tab-body.no-scroll { overflow: hidden; }
 
 .panel-pad { width: 100%; max-width: 1440px; padding: 20px; margin-inline: auto; }
+.pirate-panel { display: grid; gap: 14px; align-content: start; }
+.pirate-section { display: grid; gap: 12px; }
+.pirate-section h3 { margin: 0; }
+.pirate-section form { margin: 0; }
+.pirate-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px 16px; align-items: end; }
+.pirate-form-grid .field { margin: 0; }
+.pirate-form-grid input, .pirate-form-grid select, .pirate-section input { width: 100%; }
+.pirate-parley-row { padding: 12px; border: 1px solid var(--line-strong); border-radius: 6px; }
+.pirate-parley-row + .pirate-parley-row { margin-top: 10px; }
+.pirate-ruling { display: grid; gap: 10px; margin-top: 12px; }
+.pirate-ruling .hint { margin: 0; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .row.between { justify-content: space-between; }
 .mt { margin-top: 16px; }

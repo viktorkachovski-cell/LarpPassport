@@ -1,22 +1,7 @@
-export const C = {
-  ink: '#0A0E15',
-  panel: '#131A26',
-  panel2: '#1B2434',
-  line: '#34435C',
-  lineStrong: '#5B6F93', // 3.4:1 on panel: input and button boundaries
-  text: '#EDF2FA',
-  muted: '#9DACC4',
-  cyan: '#47D6F0',
-  cyanBorder: '#2C6B7C',
-  orange: '#FF7A33',
-  orangeBright: '#FF9A5C',
-  amber: '#FFB020',
-  amberBorder: '#6B5121',
-  red: '#FF5449',
-  redBorder: '#7C3A34',
-  green: '#3FD68F',
-  greenBorder: '#2B6B4F',
-}
+import { palette } from './brand'
+
+// Colours come from the build's brand file (brand.pirate.js or brand.hunt.js).
+export const C = palette
 
 export const F = {
   displayMedium: 'ChakraPetch_500Medium',

@@ -29,6 +29,7 @@
     "react": "19.0.0",
     "react-native": "0.79.6",
     "react-native-safe-area-context": "5.4.0",
+    "react-native-svg": "15.11.2",
     "react-native-url-polyfill": "^2.0.0"
   },
   "devDependencies": {
@@ -62,6 +63,11 @@
     },
     "testMatch": [
       "**/*.test.js"
+    ],
+    "moduleFileExtensions": [
+      "pirate.js",
+      "js",
+      "json"
     ]
   },
   "overrides": {

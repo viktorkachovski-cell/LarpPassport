@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
+import { SHARING_FOOTNOTE } from '../../lib/brand'
 import { C, F, T, toneColor } from '../../lib/theme'
 import { describeSharing } from '../../lib/syncStatus'
 import { formatAge } from '../../lib/time'
@@ -57,7 +58,7 @@ export const SharingTab = memo(function SharingTab({ game, phase, sharing, permi
         <Text style={styles.telemetryNote}>Queued updates are sent automatically. "Last sent" is about location updates only; it does not prove the rest of the game data is current.</Text>
         <GhostButton label="SEND NOW" onPress={sendNow} />
       </View>
-      <Text style={styles.sharingFootnote}>Sharing stops and your map position is removed on elimination. History follows the retention period above.</Text>
+      <Text style={styles.sharingFootnote}>{SHARING_FOOTNOTE}</Text>
     </ScrollView>
   )
 })

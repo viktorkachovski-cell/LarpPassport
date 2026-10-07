@@ -3,10 +3,20 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": { "buildType": "apk" },
+      "env": { "APP_VARIANT": "pirate" }
+    },
+    "preview-hunt": {
+      "extends": "preview",
+      "env": { "APP_VARIANT": "hunt" }
     },
     "production": {
-      "android": { "buildType": "apk" }
+      "android": { "buildType": "apk" },
+      "env": { "APP_VARIANT": "pirate" }
+    },
+    "production-hunt": {
+      "extends": "production",
+      "env": { "APP_VARIANT": "hunt" }
     }
   }
 }

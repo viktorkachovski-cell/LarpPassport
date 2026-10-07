@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../lib/supabase', () => ({
   GAME_COLUMNS:
-    'id, gm_id, name, template, location_visibility, status, purge_after_days, created_at, direction_enabled',
+    'id, gm_id, name, template, location_visibility, status, phase, purge_after_days, created_at, direction_enabled',
   supabase: {
     channel: mocks.channel,
     from: mocks.from,
@@ -359,5 +359,20 @@ describe('GameView authoritative recovery', () => {
     await screen.findByText('Hunt panel')
     await act(async () => resolveOld({ data: game(), error: null }))
     expect(screen.getByRole('combobox', { name: 'Game status' }).value).toBe('finished')
+  })
+
+  it('routes Pirate games to GM controls without loading or showing Time Hunt', async () => {
+    mocks.queryResults.games = { data: { ...game(), phase: 'setup' }, error: null }
+    mocks.rpc.mockImplementation((fn) => Promise.resolve(fn === 'gm_get_join_code'
+      ? { data: 'ABCDEFGH', error: null }
+      : { data: { is_pirate: true, phase: 'setup', paused: false, pvp_enabled: false,
+        crews: [], sites: [] }, error: null }))
+    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    await screen.findByText('Phase and safety controls')
+    expect(screen.queryByRole('tab', { name: 'HUNT', exact: true })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'PIRATE', exact: true })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Game status' }).disabled).toBe(true)
+    expect(mocks.rpc.mock.calls.some(([name]) => name === 'get_hunt_admin')).toBe(false)
+    expect(mocks.rpc.mock.calls.some(([name]) => name === 'gm_pirate_overview')).toBe(true)
   })
 })
