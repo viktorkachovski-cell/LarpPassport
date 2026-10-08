@@ -32,6 +32,7 @@ export default function MapPanel({
   active = true,
   zones, positions, members, characters, factions, pendingEvents,
   usernameOf, zoneNameOf, saveZone, deleteZone, confirmEvent, dismissEvent,
+  treasure = null, treasureFocus = 0,
 }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
@@ -45,6 +46,7 @@ export default function MapPanel({
   const now = useNow(30000) // marker staleness and ages
   const playerMarkers = useRef(new Map())
   const zoneMarkers = useRef([])
+  const treasureMarker = useRef(null)
   const drawRef = useRef(null)
   const selectRef = useRef(() => {})
   const didFit = useRef(false)
@@ -138,6 +140,8 @@ export default function MapPanel({
       playerMarkers.current.forEach((m) => m.remove())
       playerMarkers.current.clear()
       zoneMarkers.current.forEach((m) => m.remove())
+      treasureMarker.current?.remove()
+      treasureMarker.current = null
       map.remove()
       mapRef.current = null
     }
@@ -332,6 +336,24 @@ export default function MapPanel({
     }
   }, [ready, positions, members, characters, factions, now])
 
+  // ---- Pirate treasure point (GM only; never sent to players) ----
+  useEffect(() => {
+    if (!ready) return
+    treasureMarker.current?.remove()
+    treasureMarker.current = null
+    if (treasure?.lat == null || treasure?.lng == null) return
+    const el = document.createElement('div')
+    el.className = 'treasure-marker'
+    el.innerHTML = '<div class="cross" aria-hidden="true">X</div><div class="tag">Treasure · GM only</div>'
+    treasureMarker.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([treasure.lng, treasure.lat]).addTo(mapRef.current)
+  }, [ready, treasure?.lat, treasure?.lng])
+
+  const flyToTreasure = () => {
+    if (treasure?.lat == null) return
+    mapRef.current?.flyTo({ center: [treasure.lng, treasure.lat], zoom: Math.max(mapRef.current.getZoom(), 16) })
+  }
+
   // ---- initial fit ----
   useEffect(() => {
     if (!ready || didFit.current) return
@@ -342,6 +364,7 @@ export default function MapPanel({
       else if (z.geojson.type === 'Polygon') coords.push(...z.geojson.coordinates[0])
     }
     for (const p of Object.values(positions)) if (p.lng != null) coords.push([p.lng, p.lat])
+    if (treasure?.lng != null) coords.push([treasure.lng, treasure.lat])
     if (coords.length > 0) {
       const b = coords.reduce((acc, c) => acc.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]))
       mapRef.current.fitBounds(b, { padding: 80, maxZoom: 16, duration: 0 })
@@ -353,7 +376,13 @@ export default function MapPanel({
         () => {}, { timeout: 4000 }
       )
     }
-  }, [ready, zones, positions])
+  }, [ready, zones, positions, treasure])
+
+  // Another tab asked to show the treasure (a new treasureFocus value). Runs
+  // after the initial fit so the fit does not cancel the flight.
+  useEffect(() => {
+    if (ready && treasureFocus) flyToTreasure()
+  }, [ready, treasureFocus])
 
   const selectAndFly = (z) => {
     setSelectedId(z.id)
@@ -400,6 +429,13 @@ export default function MapPanel({
             </button>
           ))}
           {zones.length === 0 && !draw && <p className="hint">No zones yet. Draw one to trigger events when players arrive.</p>}
+          {treasure?.lat != null && (
+            <button type="button" className="zone-row" onClick={flyToTreasure}>
+              <span className="dot treasure" aria-hidden="true" />
+              <span>Treasure point</span>
+              <span className="meta">GM only · {treasure.lat.toFixed(5)}, {treasure.lng.toFixed(5)}</span>
+            </button>
+          )}
           {outcome?.tone === 'ok' && <Outcome outcome={outcome} onDismiss={clear} />}
         </div>
 

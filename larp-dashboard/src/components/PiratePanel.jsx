@@ -69,7 +69,7 @@ function ParleyRuling({ gameId, parley, busy, run, rpc, refresh }) {
   </div>
 }
 
-export default function PiratePanel({ game, state, zones, refresh }) {
+export default function PiratePanel({ game, state, zones, refresh, onShowTreasure }) {
   const { busy, outcome, clear, run } = useAction()
   const [readiness, setReadiness] = useState(null)
   const [zoneId, setZoneId] = useState('')
@@ -88,6 +88,23 @@ export default function PiratePanel({ game, state, zones, refresh }) {
   const phaseIndex = PHASES.indexOf(state?.phase)
   const canSetSite = state?.phase === 'setup'
   const canSetTreasure = ['setup', 'charting'].includes(state?.phase)
+  const siteOf = (id) => state?.sites?.find((site) => site.zone_id === id)
+
+  // Choosing a registered zone loads its saved settings for editing; a new
+  // zone keeps the chosen kind and reward. The answer and oath word are never
+  // sent back, so they start empty.
+  function chooseZone(id) {
+    const site = siteOf(id)
+    setZoneId(id)
+    if (site) {
+      setKind(site.kind)
+      setReward(site.reward ?? 'bearing')
+      setOathIndex(String(site.oath_index ?? 1))
+    }
+    setOathWord('')
+    setPrompt(site?.prompt ?? '')
+    setAnswer('')
+  }
 
   async function rpc(name, args) {
     const data = unwrap(await supabase.rpc(name, args))
@@ -129,9 +146,21 @@ export default function PiratePanel({ game, state, zones, refresh }) {
       await rpc('pirate_set_treasure', {
         g: game.id, lat: Number(lat), lng: Number(lng),
       })
+      setLat('')
+      setLng('')
       refresh()
       setReadiness(null)
-    }, { success: 'Treasure point saved for GMs.' })
+    }, { success: 'Treasure point saved. It is shown on the map for GMs only.' })
+  }
+
+  // Map apps copy a point as "42.1500, 24.7500"; split it into both fields.
+  function pasteTreasure(event) {
+    const match = event.clipboardData?.getData('text')
+      ?.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/)
+    if (!match) return
+    event.preventDefault()
+    setLat(match[1])
+    setLng(match[2])
   }
 
   function clearSite(site) {
@@ -210,13 +239,18 @@ export default function PiratePanel({ game, state, zones, refresh }) {
       </section>
       {canSetSite && <section className="command-card pirate-section">
         <h3>Register a Pirate site</h3>
-        <p className="hint">Create the zone on the map first. Setup needs 5 bearing riddles, 4 oath riddles and 3 lighthouses. Each riddle also pays 20 / 15 / 10 / 5 / 5 doubloons in the order crews answer it correctly. Answers are write only and disappear after save.</p>
-        <form onSubmit={saveSite}>
+        <p className="hint">Create the zone on the map first: an event zone set to "Log silently for GMs", with a dwell time (20 s is a good start). The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays 20 / 15 / 10 / 5 / 5 doubloons in the order crews answer it correctly.</p>
+        <p className="hint">Players see the prompt in the app's CHART tab once they have stood inside the zone for its dwell time with location sharing on, and type the answer there. The answer is stored only as a hash: it is cleared after saving and never shown again.</p>
+        <form onSubmit={saveSite} autoComplete="off">
           <div className="pirate-form-grid">
             <div className="field"><label htmlFor="pirate-zone">Zone</label>
-              <select id="pirate-zone" value={zoneId} required onChange={(event) => setZoneId(event.target.value)}>
+              <select id="pirate-zone" value={zoneId} required onChange={(event) => chooseZone(event.target.value)}>
                 <option value="">Choose zone</option>
-                {zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+                {zones.map((zone) => {
+                  const site = siteOf(zone.id)
+                  return <option key={zone.id} value={zone.id}>
+                    {zone.name}{site ? ` (${site.kind === 'riddle' ? `${site.reward} riddle` : site.kind})` : ''}</option>
+                })}
               </select></div>
             <div className="field"><label htmlFor="pirate-kind">Site kind</label>
               <select id="pirate-kind" value={kind} onChange={(event) => setKind(event.target.value)}>
@@ -236,31 +270,41 @@ export default function PiratePanel({ game, state, zones, refresh }) {
                 <input id="pirate-oath-word" value={oathWord} maxLength={40} required
                   onChange={(event) => setOathWord(event.target.value)} /></div>
             </>}
-            {kind === 'riddle' && <>
-              <div className="field"><label htmlFor="pirate-prompt">Prompt</label>
-                <input id="pirate-prompt" value={prompt} maxLength={500} required
-                  onChange={(event) => setPrompt(event.target.value)} /></div>
-              <div className="field"><label htmlFor="pirate-answer">Answer {state.sites?.find((site) => site.zone_id === zoneId)?.answer_set ? '(leave blank to keep)' : ''}</label>
-                <input id="pirate-answer" type="password" value={answer} maxLength={100}
-                  onChange={(event) => setAnswer(event.target.value)} autoComplete="off" /></div>
-            </>}
+            {kind === 'riddle' && <div className="field"><label htmlFor="pirate-answer">Answer {siteOf(zoneId)?.answer_set ? '(leave blank to keep)' : ''}</label>
+              <input id="pirate-answer" name="riddle-answer" type="text" value={answer} maxLength={100}
+                onChange={(event) => setAnswer(event.target.value)} autoComplete="off" spellCheck={false}
+                data-1p-ignore data-lpignore="true" /></div>}
+            {kind === 'riddle' && <div className="field pirate-wide"><label htmlFor="pirate-prompt">Prompt (shown to players at the site)</label>
+              <textarea id="pirate-prompt" name="riddle-prompt" rows={3} value={prompt} maxLength={500} required
+                onChange={(event) => setPrompt(event.target.value)} autoComplete="off" /></div>}
           </div>
           <button type="submit" disabled={!!busy || !zoneId}>Save site</button>
         </form>
       </section>}
-      {canSetTreasure && <section className="command-card pirate-section">
+      {(canSetTreasure || state.treasure) && <section className="command-card pirate-section">
         <h3>Treasure point</h3>
-        <p className="hint">Coordinates can be changed through charting. They lock at cursed, or after a reading exists. The treasure's value is set when the hoard opens: 40% of the leading crew's doubloons, rounded.</p>
-        <form onSubmit={saveTreasure} className="pirate-form-grid">
-          <div className="field"><label htmlFor="pirate-lat">Latitude</label><input id="pirate-lat" type="number" step="any" required min="-90" max="90" value={lat} onChange={(event) => setLat(event.target.value)} /></div>
-          <div className="field"><label htmlFor="pirate-lng">Longitude</label><input id="pirate-lng" type="number" step="any" required min="-180" max="180" value={lng} onChange={(event) => setLng(event.target.value)} /></div>
+        {state.treasure
+          ? <div className="row">
+              <span>Saved at {state.treasure.lat.toFixed(6)}, {state.treasure.lng.toFixed(6)}. GMs see it on the map as the treasure marker.</span>
+              {onShowTreasure && <button type="button" onClick={onShowTreasure}>Show on map</button>}
+            </div>
+          : <p className="hint">No treasure point saved yet.</p>}
+        {canSetTreasure && <p className="hint">Coordinates can be changed through charting. They lock at cursed, or after a reading exists. The treasure's value is set when the hoard opens: 40% of the leading crew's doubloons, rounded.</p>}
+        {canSetTreasure && <form onSubmit={saveTreasure} className="pirate-form-grid">
+          <div className="field"><label htmlFor="pirate-lat">Latitude</label><input id="pirate-lat" type="number" step="any" required min="-90" max="90" value={lat} onChange={(event) => setLat(event.target.value)} onPaste={pasteTreasure} /></div>
+          <div className="field"><label htmlFor="pirate-lng">Longitude</label><input id="pirate-lng" type="number" step="any" required min="-180" max="180" value={lng} onChange={(event) => setLng(event.target.value)} onPaste={pasteTreasure} /></div>
           <button type="submit" disabled={!!busy}>Save treasure</button>
-        </form>
+        </form>}
+        {canSetTreasure && <p className="hint">Tip: paste "latitude, longitude" copied from a map app into either field.</p>}
       </section>}
       {state.phase === 'setup' && <section className="command-card pirate-section">
         <h3>Readiness</h3><button type="button" disabled={!!busy} onClick={checkReadiness}>Check setup</button>
         {readiness && <div role="status"><strong>{readiness.ready ? 'Ready to chart' : 'Needs work'}</strong>
-          <ul>{readiness.issues?.map((issue) => <li key={issue}>{issue}</li>)}</ul></div>}
+          <ul>{readiness.issues?.map((issue) => <li key={issue}>{issue}</li>)}</ul>
+          {readiness.warnings?.length > 0 && <>
+            <p className="hint">Differs from the event plan (does not block charting):</p>
+            <ul className="hint">{readiness.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+          </>}</div>}
       </section>}
       <PirateCrews gameId={game.id} state={state} busy={busy} run={run} rpc={rpc} refresh={refresh} />
       {state.phase === 'hoard' && <section className="command-card pirate-section">

@@ -16,7 +16,7 @@ it('clears the write-only answer after saving a site', async () => {
   const refresh = vi.fn()
   render(<PiratePanel game={game} state={state} zones={[{ id: 'zone-1', name: 'Cove' }]} refresh={refresh} />)
   fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'zone-1' } })
-  fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'What is the tide?' } })
+  fireEvent.change(screen.getByLabelText(/^Prompt/), { target: { value: 'What is the tide?' } })
   fireEvent.change(screen.getByLabelText('Answer'), { target: { value: 'Black Tide' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save site' }))
   await waitFor(() => expect(rpc).toHaveBeenCalledWith('pirate_set_site',
@@ -24,6 +24,57 @@ it('clears the write-only answer after saving a site', async () => {
   await waitFor(() => expect(screen.getByLabelText('Answer').value).toBe(''))
   expect(screen.queryByText('Black Tide')).toBeNull()
   expect(refresh).toHaveBeenCalled()
+})
+
+it('keeps the riddle fields visible and out of password autofill', () => {
+  render(<PiratePanel game={game} state={state} zones={[]} refresh={() => {}} />)
+  const answer = screen.getByLabelText('Answer')
+  const prompt = screen.getByLabelText(/^Prompt/)
+  expect(answer.type).toBe('text')
+  expect(answer.getAttribute('autocomplete')).toBe('off')
+  expect(prompt.tagName).toBe('TEXTAREA')
+  expect(prompt.value).toBe('')
+  expect(document.querySelector('input[type="password"]')).toBeNull()
+})
+
+it('loads a registered site for editing without its answer', () => {
+  render(<PiratePanel game={game} state={{ ...state, sites: [
+    { zone_id: 'zone-1', name: 'Cove', kind: 'riddle', reward: 'oath', oath_index: 2,
+      prompt: 'Who keeps the light?', answer_set: true, claims: [] },
+  ] }} zones={[{ id: 'zone-1', name: 'Cove' }, { id: 'zone-2', name: 'Pier' }]} refresh={() => {}} />)
+  fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'zone-1' } })
+  expect(screen.getByLabelText(/^Prompt/).value).toBe('Who keeps the light?')
+  expect(screen.getByLabelText('Riddle reward').value).toBe('oath')
+  expect(screen.getByLabelText('Oath index').value).toBe('2')
+  expect(screen.getByLabelText(/^Answer/).value).toBe('')
+  fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'zone-2' } })
+  expect(screen.getByLabelText(/^Prompt/).value).toBe('')
+})
+
+it('lists event-plan differences as warnings that do not block', async () => {
+  rpc.mockResolvedValue({ data: { ready: true, issues: [],
+    warnings: ['Lighthouses: 1 of the 3 planned'] }, error: null })
+  render(<PiratePanel game={game} state={state} zones={[]} refresh={() => {}} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Check setup' }))
+  expect(await screen.findByText('Lighthouses: 1 of the 3 planned')).toBeTruthy()
+  expect(screen.getByText('Ready to chart')).toBeTruthy()
+})
+
+it('shows the saved treasure point and splits pasted coordinates', async () => {
+  rpc.mockResolvedValue({ data: { status: 'ok' }, error: null })
+  const onShowTreasure = vi.fn()
+  render(<PiratePanel game={game} state={{ ...state, treasure: { lat: 42.15, lng: 24.75 } }}
+    zones={[]} refresh={() => {}} onShowTreasure={onShowTreasure} />)
+  expect(screen.getByText(/Saved at 42\.150000, 24\.750000/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Show on map' }))
+  expect(onShowTreasure).toHaveBeenCalled()
+  fireEvent.paste(screen.getByLabelText('Latitude'),
+    { clipboardData: { getData: () => '42.1432, 24.7493' } })
+  expect(screen.getByLabelText('Latitude').value).toBe('42.1432')
+  expect(screen.getByLabelText('Longitude').value).toBe('24.7493')
+  fireEvent.click(screen.getByRole('button', { name: 'Save treasure' }))
+  await waitFor(() => expect(rpc).toHaveBeenCalledWith('pirate_set_treasure',
+    { g: 'game-1', lat: 42.1432, lng: 24.7493 }))
 })
 
 it('shows every readiness failure from the server', async () => {
@@ -104,4 +155,25 @@ it('voids a riddle claim only with a reason', async () => {
     await waitFor(() => expect(rpc).toHaveBeenCalledWith('gm_void_claim',
       { g: 'game-1', claim_id: 'claim-1', reason: 'Answer phoned in' }))
   } finally { confirm.mockRestore() }
+})
+
+it('keeps the chosen site kind when the GM picks another new zone', () => {
+  render(<PiratePanel game={game} state={state}
+    zones={[{ id: 'zone-1', name: 'Cove' }, { id: 'zone-2', name: 'Pier' }]} refresh={() => {}} />)
+  fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'zone-1' } })
+  fireEvent.change(screen.getByLabelText('Site kind'), { target: { value: 'lighthouse' } })
+  fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'zone-2' } })
+  expect(screen.getByLabelText('Site kind').value).toBe('lighthouse')
+})
+
+it('lets the GM captain a crew left without one after charting, and no other', () => {
+  render(<PiratePanel game={{ ...game, phase: 'cursed' }} state={{ ...state, phase: 'cursed', crews: [
+    { id: 'crew-1', name: 'Black Crew', captain_id: null,
+      members: [{ profile_id: 'p-1', name: 'Anne' }, { profile_id: 'p-2', name: 'Mary' }] },
+    { id: 'crew-2', name: 'Gold Crew', captain_id: 'p-3',
+      members: [{ profile_id: 'p-3', name: 'Jack' }, { profile_id: 'p-4', name: 'Read' }] },
+  ] }} zones={[]} refresh={() => {}} />)
+  expect(screen.getByLabelText('Captain of Black Crew')).toBeTruthy()
+  expect(screen.queryByLabelText('Captain of Gold Crew')).toBeNull()
+  expect(screen.getByText('Jack')).toBeTruthy()
 })
