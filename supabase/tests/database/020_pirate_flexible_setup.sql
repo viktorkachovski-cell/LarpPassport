@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(9);
+select extensions.plan(12);
 
 -- A test run: GM ...00, players ...01-03. Player 3 joins without a character.
 insert into auth.users (
@@ -75,6 +75,11 @@ select extensions.is(public.pirate_validate('20100000-0000-0000-0000-00000000000
     'Lighthouses: 1 of the 3 planned',
     '1 lighthouse(s) are not 200 to 1500 metres from the treasure; their bearings cross poorly'),
   'differences from the event plan are warnings');
+select public.pirate_set_treasure('20100000-0000-0000-0000-000000000001', 50, 30.001);
+select extensions.is(public.pirate_validate('20100000-0000-0000-0000-000000000001')->'issues',
+  '["A lighthouse cannot be centred on the treasure point"]'::jsonb,
+  'a lighthouse on the treasure point has no bearing and blocks charting');
+select public.pirate_set_treasure('20100000-0000-0000-0000-000000000001', 50, 30);
 select extensions.ok(exists (
     select 1 from pg_catalog.jsonb_array_elements(
       public.gm_pirate_overview('20100000-0000-0000-0000-000000000001')->'sites') site
@@ -103,6 +108,29 @@ select extensions.is(public.get_pirate_state('20100000-0000-0000-0000-0000000000
   'true', 'the only player of a crew carries the compass');
 select extensions.is(public.compass_reading('20100000-0000-0000-0000-000000000001')->>'status',
   'ok', 'the only lighthouse gives a reading');
+reset role;
+
+-- Player 3 joins crew 1 during the game; its captain stays locked.
+select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000000', true);
+insert into public.characters (game_id, user_id, name, faction_id)
+values ('20100000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000003',
+        'Sailor 3', '20200000-0000-0000-0000-000000000001');
+set local role authenticated;
+select extensions.is(public.pirate_set_captain('20100000-0000-0000-0000-000000000001',
+  '20200000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000003')->>'status',
+  'locked', 'a crew that has a captain keeps it after charting');
+reset role;
+-- The GM swaps sailors 1 and 2: crew 1 now has two players and no captain.
+update public.characters
+set faction_id = case user_id
+  when '20000000-0000-0000-0000-000000000001' then '20200000-0000-0000-0000-000000000002'::uuid
+  else '20200000-0000-0000-0000-000000000001'::uuid end
+where game_id = '20100000-0000-0000-0000-000000000001'
+  and user_id in ('20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002');
+set local role authenticated;
+select extensions.is(public.pirate_set_captain('20100000-0000-0000-0000-000000000001',
+  '20200000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000003')->>'status',
+  'ok', 'the GM can captain a crew left without one during the game');
 reset role;
 
 select * from extensions.finish();

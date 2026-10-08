@@ -156,3 +156,24 @@ it('voids a riddle claim only with a reason', async () => {
       { g: 'game-1', claim_id: 'claim-1', reason: 'Answer phoned in' }))
   } finally { confirm.mockRestore() }
 })
+
+it('keeps the chosen site kind when the GM picks another new zone', () => {
+  render(<PiratePanel game={game} state={state}
+    zones={[{ id: 'zone-1', name: 'Cove' }, { id: 'zone-2', name: 'Pier' }]} refresh={() => {}} />)
+  fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'zone-1' } })
+  fireEvent.change(screen.getByLabelText('Site kind'), { target: { value: 'lighthouse' } })
+  fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'zone-2' } })
+  expect(screen.getByLabelText('Site kind').value).toBe('lighthouse')
+})
+
+it('lets the GM captain a crew left without one after charting, and no other', () => {
+  render(<PiratePanel game={{ ...game, phase: 'cursed' }} state={{ ...state, phase: 'cursed', crews: [
+    { id: 'crew-1', name: 'Black Crew', captain_id: null,
+      members: [{ profile_id: 'p-1', name: 'Anne' }, { profile_id: 'p-2', name: 'Mary' }] },
+    { id: 'crew-2', name: 'Gold Crew', captain_id: 'p-3',
+      members: [{ profile_id: 'p-3', name: 'Jack' }, { profile_id: 'p-4', name: 'Read' }] },
+  ] }} zones={[]} refresh={() => {}} />)
+  expect(screen.getByLabelText('Captain of Black Crew')).toBeTruthy()
+  expect(screen.queryByLabelText('Captain of Gold Crew')).toBeNull()
+  expect(screen.getByText('Jack')).toBeTruthy()
+})

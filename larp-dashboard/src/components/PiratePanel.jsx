@@ -90,14 +90,17 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
   const canSetTreasure = ['setup', 'charting'].includes(state?.phase)
   const siteOf = (id) => state?.sites?.find((site) => site.zone_id === id)
 
-  // Choosing a registered zone loads its saved settings for editing. The
-  // answer and oath word are never sent back, so they start empty.
+  // Choosing a registered zone loads its saved settings for editing; a new
+  // zone keeps the chosen kind and reward. The answer and oath word are never
+  // sent back, so they start empty.
   function chooseZone(id) {
     const site = siteOf(id)
     setZoneId(id)
-    setKind(site?.kind ?? 'riddle')
-    setReward(site?.reward ?? 'bearing')
-    setOathIndex(String(site?.oath_index ?? 1))
+    if (site) {
+      setKind(site.kind)
+      setReward(site.reward ?? 'bearing')
+      setOathIndex(String(site.oath_index ?? 1))
+    }
     setOathWord('')
     setPrompt(site?.prompt ?? '')
     setAnswer('')

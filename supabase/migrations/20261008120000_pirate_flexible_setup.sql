@@ -10,8 +10,14 @@
 --   * no secret treasure point (the compass reads towards it);
 --   * a riddle without an answer;
 --   * overlapping site zones (a player inside both cannot claim either);
---   * a lighthouse that is not a circle (the reading starts at its centre).
+--   * a lighthouse that is not a circle (the reading starts at its centre);
+--   * a lighthouse centre on the treasure point (no bearing exists).
 -- Differences from the event plan come back as `warnings` and do not block.
+--
+-- Players may now join a crew after charting. A crew left without a valid
+-- captain (empty at charting, then two or more players joined, or the stored
+-- captain left it) can get one from the GM in any phase; a crew that has a
+-- captain stays locked as before.
 --
 -- gm_pirate_overview also returns each site's prompt, so the GM can edit a
 -- site without retyping it. Prompts are shown to players at the site anyway;
@@ -41,6 +47,7 @@ declare
   overlap_count integer;
   non_circle_lighthouse_count integer;
   far_lighthouse_count integer;
+  centred_lighthouse_count integer;
   treasure_point extensions.geography(Point, 4326);
 begin
   if caller is null then
@@ -144,11 +151,15 @@ begin
       'Lighthouses: ' || lighthouse_count || ' of the 3 planned');
   end if;
   if treasure_point is not null then
-    select count(*)::integer into far_lighthouse_count
+    select count(*) filter (where extensions.st_distance(z.geog, treasure_point) < 1),
+           count(*) filter (where extensions.st_distance(z.geog, treasure_point) not between 200 and 1500)
+      into centred_lighthouse_count, far_lighthouse_count
     from private.pirate_sites s
     join public.zones z on z.id = s.zone_id and z.active
-    where s.game_id = g and s.kind = 'lighthouse'
-      and extensions.st_distance(z.geog, treasure_point) not between 200 and 1500;
+    where s.game_id = g and s.kind = 'lighthouse';
+    if centred_lighthouse_count > 0 then
+      issues := pg_catalog.array_append(issues, 'A lighthouse cannot be centred on the treasure point');
+    end if;
     if far_lighthouse_count > 0 then
       warnings := pg_catalog.array_append(warnings,
         far_lighthouse_count || ' lighthouse(s) are not 200 to 1500 metres from the treasure; their bearings cross poorly');
@@ -165,6 +176,55 @@ begin
       'lighthouses', lighthouse_count
     )
   );
+end;
+$$;
+
+-- Unchanged except that after setup the GM may still choose a captain for a
+-- crew that has none.
+create or replace function public.pirate_set_captain(g uuid, crew uuid, captain uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller uuid := auth.uid();
+  game_phase text;
+  captain_name text;
+begin
+  if caller is null then
+    raise exception using errcode = '28000', message = 'not authenticated';
+  end if;
+  if g is null or crew is null or captain is null then
+    raise exception using errcode = '22023', message = 'game, crew and captain are required';
+  end if;
+  if not private.is_game_gm(g, caller) then
+    raise exception using errcode = '42501', message = 'GM access required';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('pirate:' || g::text, 0));
+  select game.phase into game_phase from public.games game
+  join private.pirate_games pirate on pirate.game_id = game.id
+  where game.id = g;
+  if not found then
+    raise exception using errcode = '55000', message = 'Pirate mode is not enabled';
+  end if;
+  if game_phase <> 'setup' and private.pirate_captain(g, crew) is not null then
+    return pg_catalog.jsonb_build_object('status', 'locked');
+  end if;
+  select member.name into captain_name from public.characters member
+  join public.game_players player on player.game_id = member.game_id
+    and player.profile_id = member.user_id and player.role = 'player'
+  where member.game_id = g and member.user_id = captain
+    and member.faction_id = crew and not member.is_npc;
+  if not found then return pg_catalog.jsonb_build_object('status', 'not_in_crew'); end if;
+  insert into private.pirate_captains (game_id, faction_id, profile_id, assigned_by)
+  values (g, crew, captain, caller)
+  on conflict on constraint pirate_captains_pkey do update
+  set profile_id = excluded.profile_id, assigned_by = excluded.assigned_by, assigned_at = now();
+  perform private.emit_pirate_crew_event(g, crew, 'pirate_captain', pg_catalog.jsonb_build_object(
+    'captain_name', captain_name,
+    'message', captain_name || ' is your captain and carries the compass.'));
+  return pg_catalog.jsonb_build_object('status', 'ok', 'captain_name', captain_name);
 end;
 $$;
 

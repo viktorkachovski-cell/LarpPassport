@@ -1,8 +1,10 @@
 // Crew scoreboard. During setup the GM picks the captain of each crew with
 // two or more players; a one-player crew's player is captain automatically.
 // Captains lock when charting starts, and only the captain has the compass.
+// A crew left without a captain later (players added during the game) can
+// still get one.
 export default function PirateCrews({ gameId, state, busy, run, rpc, refresh }) {
-  const canChoose = state.phase === 'setup'
+  const inSetup = state.phase === 'setup'
 
   function chooseCaptain(crew, captain) {
     run(async () => {
@@ -14,7 +16,8 @@ export default function PirateCrews({ gameId, state, busy, run, rpc, refresh }) 
   function captainCell(crew) {
     const members = crew.members ?? []
     const captain = members.find((member) => member.profile_id === crew.captain_id)
-    if (!canChoose || members.length < 2) return captain?.name ?? 'None'
+    const canChoose = members.length > 1 && (inSetup || !crew.captain_id)
+    if (!canChoose) return captain?.name ?? 'None'
     return <select aria-label={`Captain of ${crew.name}`} value={crew.captain_id ?? ''} disabled={!!busy}
       onChange={(event) => event.target.value && chooseCaptain(crew, event.target.value)}>
       <option value="">Choose captain</option>
@@ -24,9 +27,9 @@ export default function PirateCrews({ gameId, state, busy, run, rpc, refresh }) 
 
   return <section className="command-card pirate-section">
     <h3>Crews</h3>
-    <p className="hint">{canChoose
+    <p className="hint">{inSetup
       ? 'Choose a captain for every crew of two or more. Only the captain sees the compass. Captains lock when charting starts.'
-      : 'Captains are locked. Only the captain sees the compass.'}</p>
+      : 'Captains are locked. Only the captain sees the compass. A crew of two or more without a captain can still be given one.'}</p>
     <div className="table-scroll"><table className="grid">
       <thead><tr><th>Crew</th><th>Captain</th><th>Players</th><th>Shards</th><th>Doubloons</th><th>Oath</th><th>Readings</th></tr></thead>
       <tbody>{(state.crews ?? []).map((crew) => <tr key={crew.id}>
