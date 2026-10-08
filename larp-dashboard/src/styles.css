@@ -301,7 +301,9 @@ label.inline { display: inline-flex; align-items: center; gap: 6px; min-height: 
 .pirate-section form { margin: 0; }
 .pirate-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px 16px; align-items: end; }
 .pirate-form-grid .field { margin: 0; }
-.pirate-form-grid input, .pirate-form-grid select, .pirate-section input { width: 100%; }
+.pirate-form-grid input, .pirate-form-grid select, .pirate-form-grid textarea, .pirate-section input { width: 100%; }
+.pirate-form-grid .pirate-wide { grid-column: 1 / -1; }
+.pirate-form-grid textarea { resize: vertical; }
 .pirate-parley-row { padding: 12px; border: 1px solid var(--line-strong); border-radius: 6px; }
 .pirate-parley-row + .pirate-parley-row { margin-top: 10px; }
 .pirate-ruling { display: grid; gap: 10px; margin-top: 12px; }
@@ -494,6 +496,7 @@ table.grid input[type='text'] { width: 130px; }
 .zone-row.selected { background: var(--panel-2); outline: 1px solid var(--cyan-border); }
 .zone-row .dot { width: 8px; height: 8px; flex: none; background: var(--orange); border-radius: 50%; }
 .zone-row .dot.inactive { background: var(--line-strong); }
+.zone-row .dot.treasure { background: var(--amber); }
 .zone-row .meta { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-micro); }
 .pending-card { padding: 10px; margin-bottom: 10px; background: var(--panel-2); border: 1px solid var(--red-border); border-radius: 6px; }
 .pending-card .who { font-weight: 600; }
@@ -504,6 +507,9 @@ table.grid input[type='text'] { width: 130px; }
 .player-marker .tag { margin-top: 3px; padding: 1px 6px; color: var(--text); background: rgba(10, 14, 21, 0.88); border-radius: 4px; font-family: var(--font-mono); font-size: var(--fs-label); white-space: nowrap; }
 .player-marker.stale { opacity: 0.45; }
 .zone-tag { padding: 1px 7px; color: var(--orange-bright); background: rgba(10, 14, 21, 0.82); border: 1px solid rgba(255, 122, 51, 0.55); border-radius: 4px; font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.06em; white-space: nowrap; pointer-events: none; }
+.treasure-marker { display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.treasure-marker .cross { color: var(--amber); font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1; text-shadow: 0 0 3px var(--ink), 0 0 6px var(--ink); }
+.treasure-marker .tag { margin-top: 2px; padding: 1px 6px; color: var(--amber); background: rgba(10, 14, 21, 0.88); border: 1px solid var(--amber-border); border-radius: 4px; font-family: var(--font-mono); font-size: var(--fs-label); white-space: nowrap; }
 .maplibregl-popup-content { color: var(--text); background: var(--panel); border: 1px solid var(--line-strong); }
 .maplibregl-ctrl-attrib { font-size: 10px; }
 

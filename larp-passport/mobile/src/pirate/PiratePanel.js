@@ -30,10 +30,14 @@ function claimMessage(result) {
   if (result.status === 'no_site') return 'Check in at the marked site before claiming.'
   if (result.status === 'ambiguous') return 'You are inside overlapping sites. Ask the GM to check the map.'
   if (result.status === 'idempotency_conflict') return 'The answer changed during a retry. Try again.'
+  if (result.status === 'no_shards') return 'The glass is broken: your crew needs a bearing shard first. Solve a bearing riddle.'
+  if (result.status === 'wrong_phase') return 'Not open yet. Riddles open at charting; lighthouse readings once the curse wakes.'
+  if (result.status === 'no_crew') return 'You are not in a crew yet. Ask the GM to put you in one.'
+  if (result.status === 'not_ready') return 'The GM has not finished setting up this site or the treasure.'
   return `The site is unavailable (${result.status}).`
 }
 
-export function PiratePanel({ mode, state, error, gameId, refresh }) {
+export function PiratePanel({ mode, state, error, gameId, refresh, sharing, checkSpot }) {
   const [answer, setAnswer] = useState('')
   const [outcome, setOutcome] = useState('')
   const [busy, setBusy] = useState(false)
@@ -76,6 +80,16 @@ export function PiratePanel({ mode, state, error, gameId, refresh }) {
     } finally { setBusy(false) }
   }
 
+  // Sends any queued positions, then asks the server which site this is.
+  async function lookAround() {
+    if (busy) return
+    setBusy(true)
+    setOutcome('')
+    try {
+      await checkSpot()
+    } finally { setBusy(false) }
+  }
+
   async function takeReading() {
     if (busy || !compassOpen) return
     setBusy(true)
@@ -110,6 +124,11 @@ export function PiratePanel({ mode, state, error, gameId, refresh }) {
           {mode === 'chart' ? <>
             <Kicker style={styles.section}>Current site</Kicker>
             <Text style={styles.siteName}>{site?.site_name ?? 'No marked site in range.'}</Text>
+            {site?.status === 'ambiguous' && <Notice tone="warning" text={claimMessage(site)} />}
+            {!site && <Text style={styles.muted}>Stand inside a marked site with location sharing on and wait a moment. Its riddle and the answer box appear here.</Text>}
+            {!sharing && <Notice tone="warning" text="Location sharing is off. Turn it on in the SHARING tab, or the server cannot see you at a site." />}
+            {state.phase === 'setup' && <Notice text="Riddles open when the GM starts charting." />}
+            {!site?.prompt && checkSpot && <TideButton variant="ink" label={busy ? 'Checking…' : 'Check this spot'} disabled={busy} onPress={lookAround} />}
             {!!site?.reward && <Text style={styles.muted}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}, plus doubloons by the order crews answer it (20 / 15 / 10 / 5 / 5).</Text>}
             {!!site?.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
             {site?.claimed_by_my_crew && <Notice tone="ok" text="Your crew has claimed this site." />}

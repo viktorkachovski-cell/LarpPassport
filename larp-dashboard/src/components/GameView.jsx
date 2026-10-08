@@ -62,6 +62,8 @@ export default function GameView({ gameId, session, onBack }) {
   const [modeState, setModeState] = useState(null)
   const [tab, setTab] = useState(null)
   const [mapOpened, setMapOpened] = useState(false)
+  // Bumped to ask the map to fly to the Pirate treasure point.
+  const [treasureFocus, setTreasureFocus] = useState(0)
   const [copied, setCopied] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -454,7 +456,11 @@ export default function GameView({ gameId, session, onBack }) {
       )}
       <div className={`tab-body ${activeTab === 'map' ? 'no-scroll' : ''}`}>
         {activeTab === 'pirate' && <PiratePanel game={game} state={mode === PIRATE_MODE ? modeState : null} zones={zones}
-          refresh={refresh} />}
+          refresh={refresh} onShowTreasure={() => {
+            setMapOpened(true)
+            setTab('map')
+            setTreasureFocus((count) => count + 1)
+          }} />}
         {activeTab === 'hunt' && (
           <HuntPanel
             hunt={modeState}
@@ -484,6 +490,7 @@ export default function GameView({ gameId, session, onBack }) {
                   zones={zones} positions={positions} members={members} characters={characters} factions={factions}
                   pendingEvents={eventQueue} usernameOf={usernameOf} zoneNameOf={zoneNameOf}
                   saveZone={saveZone} deleteZone={deleteZone} confirmEvent={confirmEvent} dismissEvent={dismissEvent}
+                  treasure={mode === PIRATE_MODE ? modeState?.treasure : null} treasureFocus={treasureFocus}
                 />
               </Suspense>
             </ErrorBoundary>

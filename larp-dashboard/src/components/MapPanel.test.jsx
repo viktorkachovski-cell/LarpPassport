@@ -31,8 +31,8 @@ vi.mock('maplibre-gl', () => {
     getCanvas() { return this.canvas }
   }
   class Marker {
-    constructor() { mocks.markers.push(this) }
-    setLngLat() { return this }
+    constructor(options) { this.options = options; mocks.markers.push(this) }
+    setLngLat(lngLat) { this.lngLat = lngLat; return this }
     addTo() { return this }
     remove() {}
     getElement() { return document.createElement('div') }
@@ -172,5 +172,21 @@ describe('MapPanel touch polygon drawing', () => {
     rerender(<MapPanel {...props({ active: true })} />)
     expect(mocks.maps).toHaveLength(1)
     expect(mocks.maps[0].resize).toHaveBeenCalled()
+  })
+
+  it('shows the Pirate treasure point to the GM and flies to it on request', () => {
+    const treasure = { lat: 42.15, lng: 24.75 }
+    const { rerender } = render(<MapPanel {...props({ treasure })} />)
+    act(() => { mocks.handlers.load() })
+    const marker = mocks.markers.find((item) => item.options?.element?.className === 'treasure-marker')
+    expect(marker.lngLat).toEqual([24.75, 42.15])
+    expect(marker.options.element.textContent).toContain('Treasure')
+    expect(mocks.maps[0].fitBounds).toHaveBeenCalled()
+
+    rerender(<MapPanel {...props({ treasure, treasureFocus: 1 })} />)
+    expect(mocks.maps[0].flyTo).toHaveBeenLastCalledWith({ center: [24.75, 42.15], zoom: 16 })
+    mocks.maps[0].flyTo.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: /Treasure point/ }))
+    expect(mocks.maps[0].flyTo).toHaveBeenCalledOnce()
   })
 })
