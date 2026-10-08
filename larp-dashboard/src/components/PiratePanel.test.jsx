@@ -177,3 +177,37 @@ it('lets the GM captain a crew left without one after charting, and no other', (
   expect(screen.queryByLabelText('Captain of Gold Crew')).toBeNull()
   expect(screen.getByText('Jack')).toBeTruthy()
 })
+
+it("adds and removes a crew's shards with a reason", async () => {
+  rpc.mockResolvedValue({ data: { status: 'ok', balance: 2 }, error: null })
+  const refresh = vi.fn()
+  render(<PiratePanel game={{ ...game, phase: 'cursed' }} state={{ ...state, phase: 'cursed', crews: [
+    { id: 'crew-1', name: 'Black Crew', captain_id: 'p-1', members: [{ profile_id: 'p-1', name: 'Anne' }],
+      shards: 0, doubloons: 0 },
+  ] }} zones={[]} refresh={refresh} />)
+  const add = screen.getByRole('button', { name: 'Add' })
+  fireEvent.change(screen.getByLabelText('Adjust crew'), { target: { value: 'crew-1' } })
+  fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2' } })
+  expect(add.disabled).toBe(true)
+  fireEvent.change(screen.getByLabelText(/^Reason/), { target: { value: 'Testing the compass' } })
+  expect(add.disabled).toBe(false)
+  fireEvent.click(add)
+  await waitFor(() => expect(rpc).toHaveBeenCalledWith('gm_adjust',
+    { g: 'game-1', crew: 'crew-1', currency: 'bearing', delta: 2, reason: 'Testing the compass' }))
+  expect(await screen.findByText(/Added 2 bearing shards to Black Crew/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+  await waitFor(() => expect(rpc).toHaveBeenLastCalledWith('gm_adjust',
+    { g: 'game-1', crew: 'crew-1', currency: 'bearing', delta: -2, reason: 'Testing the compass' }))
+  expect(refresh).toHaveBeenCalledTimes(2)
+})
+
+it('reports a refused adjustment that would go below zero', async () => {
+  rpc.mockResolvedValue({ data: { status: 'insufficient_balance', balance: 0 }, error: null })
+  render(<PiratePanel game={game} state={{ ...state, crews: [
+    { id: 'crew-1', name: 'Black Crew', captain_id: 'p-1', members: [{ profile_id: 'p-1', name: 'Anne' }] },
+  ] }} zones={[]} refresh={() => {}} />)
+  fireEvent.change(screen.getByLabelText('Adjust crew'), { target: { value: 'crew-1' } })
+  fireEvent.change(screen.getByLabelText(/^Reason/), { target: { value: 'Testing' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+  expect(await screen.findByText('insufficient balance')).toBeTruthy()
+})
