@@ -5,8 +5,8 @@
 --
 -- pirate_validate keeps blocking only what would break play:
 --   * no crew at all;
---   * a crew of two or more players without a captain (captains lock at
---     charting, so that crew could never use the compass);
+--   * a crew of two or more players without a captain (only the captain
+--     has the compass, so the GM picks one before charting);
 --   * no secret treasure point (the compass reads towards it);
 --   * a riddle without an answer;
 --   * overlapping site zones (a player inside both cannot claim either);
