@@ -211,3 +211,15 @@ it('reports a refused adjustment that would go below zero', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
   expect(await screen.findByText('insufficient balance')).toBeTruthy()
 })
+
+it('forgets a crew that disappears from the adjust form', () => {
+  const crew = { id: 'crew-1', name: 'Black Crew', captain_id: 'p-1', members: [{ profile_id: 'p-1', name: 'Anne' }] }
+  const other = { id: 'crew-2', name: 'Gold Crew', captain_id: 'p-2', members: [{ profile_id: 'p-2', name: 'Jack' }] }
+  const { rerender } = render(<PiratePanel game={game} state={{ ...state, crews: [crew, other] }} zones={[]} refresh={() => {}} />)
+  fireEvent.change(screen.getByLabelText('Adjust crew'), { target: { value: 'crew-1' } })
+  fireEvent.change(screen.getByLabelText(/^Reason/), { target: { value: 'Testing' } })
+  expect(screen.getByRole('button', { name: 'Add' }).disabled).toBe(false)
+  rerender(<PiratePanel game={game} state={{ ...state, crews: [other] }} zones={[]} refresh={() => {}} />)
+  expect(screen.getByLabelText('Adjust crew').value).toBe('')
+  expect(screen.getByRole('button', { name: 'Add' }).disabled).toBe(true)
+})
