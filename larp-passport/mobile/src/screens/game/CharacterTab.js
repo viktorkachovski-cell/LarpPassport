@@ -1,11 +1,21 @@
 import { memo, useState } from 'react'
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { COPY } from '../../lib/brand'
 import { supabase } from '../../lib/supabase'
 import { C, F, S, T } from '../../lib/theme'
 import { common } from '../../ui/common'
 import { Field, OutcomeNote } from '../../ui/primitives'
 
-export const CharacterSheet = memo(function CharacterSheet({ character, stats }) {
+const copy = COPY.character
+
+// Scrolls on its own as a tab; `embedded` drops the ScrollView so another
+// panel (the pirate Hold) can place it inside its own scroll.
+function Scroll({ embedded, children }) {
+  if (embedded) return <View>{children}</View>
+  return <ScrollView style={common.flex} contentContainerStyle={common.scrollContent} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+}
+
+export const CharacterSheet = memo(function CharacterSheet({ character, stats, embedded = false }) {
   const [draft, setDraft] = useState(null)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -35,7 +45,7 @@ export const CharacterSheet = memo(function CharacterSheet({ character, stats })
   }
 
   return (
-    <ScrollView style={common.flex} contentContainerStyle={common.scrollContent} keyboardShouldPersistTaps="handled">
+    <Scroll embedded={embedded}>
       <View style={styles.identityRow}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{initials(character.name)}</Text></View>
         <View style={common.flex}>
@@ -46,7 +56,7 @@ export const CharacterSheet = memo(function CharacterSheet({ character, stats })
 
       {locked.length > 0 && (
         <>
-          <Text style={styles.sheetLabel}>SET BY YOUR GM // UPDATES LIVE</Text>
+          <Text style={styles.sheetLabel}>{copy.lockedLabel}</Text>
           <View style={styles.statGrid}>
             {locked.map((stat) => (
               <View key={stat.key} style={styles.statCard}>
@@ -60,7 +70,7 @@ export const CharacterSheet = memo(function CharacterSheet({ character, stats })
 
       {editable.length > 0 && (
         <View style={styles.editSection}>
-          <Text style={styles.sheetLabel}>YOURS TO EDIT</Text>
+          <Text style={styles.sheetLabel}>{copy.editLabel}</Text>
           {editable.map((stat) => (
             <View key={stat.key} style={common.field}>
               <Text style={common.inputLabel}>{String(stat.label || stat.key).toUpperCase()}{stat.type === 'number' && stat.min !== undefined && stat.max !== undefined ? ` // ${stat.min}-${stat.max}` : ''}</Text>
@@ -80,11 +90,11 @@ export const CharacterSheet = memo(function CharacterSheet({ character, stats })
           {saved && <OutcomeNote text="Changes saved." onDismiss={() => setSaved(false)} />}
         </View>
       )}
-    </ScrollView>
+    </Scroll>
   )
 })
 
-export function CreateCharacter({ game, uid, onCreated }) {
+export function CreateCharacter({ game, uid, onCreated, embedded = false }) {
   const stats = game.template?.stats ?? []
   const editable = stats.filter((stat) => stat.player_editable)
   const [name, setName] = useState('')
@@ -109,14 +119,14 @@ export function CreateCharacter({ game, uid, onCreated }) {
   }
 
   return (
-    <ScrollView style={common.flex} contentContainerStyle={common.scrollContent} keyboardShouldPersistTaps="handled">
+    <Scroll embedded={embedded}>
       <View style={common.neutralCard}>
-        <Text style={common.cyanKicker}>IDENTITY REGISTRY</Text>
-        <Text style={common.sectionTitle}>Create your character</Text>
+        <Text style={common.cyanKicker}>{copy.createKicker}</Text>
+        <Text style={common.sectionTitle}>{copy.createTitle}</Text>
         <Text style={common.bodyCopy}>This is who you will be in {game.name}.</Text>
         <View style={styles.editSection}>
-          <Field label="NAME" value={name} onChangeText={setName} placeholder="Agent name" />
-          <Field label="BIO" value={bio} onChangeText={setBio} multiline placeholder="A short field record" style={styles.bioInput} />
+          <Field label="NAME" value={name} onChangeText={setName} placeholder={copy.namePlaceholder} />
+          <Field label="BIO" value={bio} onChangeText={setBio} multiline placeholder={copy.bioPlaceholder} style={styles.bioInput} />
           {editable.map((stat) => (
             <Field
               key={stat.key}
@@ -127,13 +137,13 @@ export function CreateCharacter({ game, uid, onCreated }) {
             />
           ))}
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={create} style={[styles.cyanButton, busy && common.disabled]}>
-            <Text style={common.filledButtonText}>{busy ? 'CREATING...' : 'CREATE CHARACTER'}</Text>
+            <Text style={common.filledButtonText}>{busy ? copy.creatingButton : copy.createButton}</Text>
           </TouchableOpacity>
           {!!error && <Text style={common.errorText}>{error}</Text>}
-          <Text style={common.privateCaption}>GM-CONTROLLED STATS ARE ADDED AUTOMATICALLY.</Text>
+          {!!copy.gmStatsCaption && <Text style={common.privateCaption}>{copy.gmStatsCaption}</Text>}
         </View>
       </View>
-    </ScrollView>
+    </Scroll>
   )
 }
 

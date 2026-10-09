@@ -14,7 +14,10 @@ const MESSAGE = (label) => ({ label, color: C.cyan, borderColor: C.cyanBorder })
 const HUNT_GOOD = { label: 'HUNT', color: C.green }
 const HUNT_OPEN = { label: 'HUNT', color: C.amber }
 const HUNT_BAD = { label: 'HUNT', color: C.red }
-const PIRATE = { label: 'PIRATE', color: C.amber, borderColor: C.amberBorder }
+// The Black Tide sorts its events by who or what caused them.
+const PIRATE = (label) => ({ label, color: C.amber, borderColor: C.amberBorder })
+const TIDE = PIRATE('TIDE')
+const CREW = PIRATE('CREW')
 
 const DEFAULTS = {
   tag: FIELD,
@@ -59,20 +62,20 @@ const EVENTS = {
     body: 'Wait for the GM to assign your next target. A 10-minute temporal cloak is active.',
   },
   eliminated: { tag: HUNT_BAD, title: 'You have been eliminated', notification: 'You have been eliminated' },
-  pirate_phase: { tag: PIRATE, title: 'The tide has changed', notification: 'The tide has changed', body: 'Open your logbook for the current phase.' },
-  pirate_captain: { tag: PIRATE, title: 'Your crew has a captain', notification: 'Captain chosen', body: 'The captain carries the compass.' },
-  pirate_claim: { tag: PIRATE, title: 'Your crew claimed a site', notification: 'Site claimed', body: 'A reward has been added to your crew logbook.' },
-  pirate_reading: { tag: PIRATE, title: 'New lighthouse reading', notification: 'New bearing recorded', body: 'A new arc is in your compass logbook.' },
-  pirate_parley: { tag: PIRATE, title: 'Parley changed', notification: 'Parley update', body: 'Open the Parley screen to review the result.' },
-  pirate_ruling: { tag: PIRATE, title: 'Admiralty ruling', notification: 'Admiralty ruling', body: 'The GM has corrected a Pirate result.' },
-  pirate_treasure: { tag: PIRATE, title: 'The hoard was claimed', notification: 'The hoard was claimed', body: 'A crew has claimed the treasure.' },
+  pirate_phase: { tag: TIDE, title: 'The tide has changed', notification: 'The tide has changed', body: 'The phase line at the top says what is open now.' },
+  pirate_captain: { tag: CREW, title: 'Your crew has a captain', notification: 'Captain chosen', body: 'The captain carries the compass.' },
+  pirate_claim: { tag: CREW, title: 'Your crew claimed a site', notification: 'Site claimed', body: 'The reward is in your Hold.' },
+  pirate_reading: { tag: CREW, title: 'New lighthouse reading', notification: 'New lighthouse reading', body: "A new arc is on the captain's compass." },
+  pirate_parley: { tag: PIRATE('PARLEY'), title: 'Parley update', notification: 'Parley update', body: 'Open Parley to see what happens next.' },
+  pirate_ruling: { tag: PIRATE('ADMIRALTY'), title: 'The Admiralty has ruled', notification: 'The Admiralty has ruled', body: 'The GM has corrected a result.' },
+  pirate_treasure: { tag: TIDE, title: 'The hoard was claimed', notification: 'The hoard was claimed', body: 'A crew has claimed the treasure.' },
 }
 
 // Installed APKs lag the server, so a type added later still gets its game's tag.
 function fallback(type) {
   if (type.startsWith('elimination_')) return { tag: HUNT_OPEN }
   if (type.startsWith('hunt_')) return { tag: HUNT_GOOD }
-  if (type.startsWith('pirate_')) return { tag: PIRATE }
+  if (type.startsWith('pirate_')) return { tag: TIDE }
   return {}
 }
 

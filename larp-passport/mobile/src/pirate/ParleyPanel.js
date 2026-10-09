@@ -17,18 +17,29 @@ function statusText(result) {
     target_stale: 'The other player needs a fresh location fix.',
     treasure_exclusion: 'Parley is closed near the hoard.',
     target_treasure_exclusion: 'The other player is too near the hoard.',
-    mercy: 'Davy’s Mercy protects this crew for now.',
+    mercy: 'Davy’s Mercy protects this crew for now. No one can challenge them.',
     pair_cooldown: 'These crews must wait before another Parley.',
     hourly_limit: 'Your crew has used its three Parleys this hour.',
     crew_busy: 'Your crew already has an active Parley.',
     invalid_code: 'That code has expired or is unavailable.',
     same_crew: 'A crew cannot Parley with itself.',
-    wrong_state: 'The Parley has moved on. Refresh the logbook.',
+    wrong_state: 'The Parley has moved on. Pull down to refresh.',
     no_shards: 'The losing crew has no bearing shard to take.',
     disputed: 'The reports disagree. The GM must rule.',
     idempotency_conflict: 'This retry belongs to a different code.',
   }
   return messages[result.status] ?? `Parley status: ${result.status}`
+}
+
+// What the player should do next, in words, for each Parley state.
+function stepText(active) {
+  if (active.state === 'open') return active.can_act ? 'Show this code to the challenger in person.' : 'Waiting for the challenger to enter the code.'
+  if (active.state === 'joined') return active.role === 'target' ? 'Choose: Yield or Fight.' : 'Waiting for them to choose Yield or Fight.'
+  if (active.state === 'yielded') return 'They yielded. Both players confirm the result before doubloons move.'
+  if (active.state === 'fighting') return 'Play rock-paper-scissors in person, then each player reports the winner.'
+  if (active.state === 'awaiting_choice') return 'The winner chooses the plunder.'
+  if (active.state === 'disputed') return 'Waiting for the GM to rule.'
+  return ''
 }
 
 function ActionButton({ label, disabled, onPress, variant }) {
@@ -68,7 +79,7 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
     if (!actions.canJoin || !/^\d{4}$/.test(code)) return
     const idem = pendingJoin.current?.code === code ? pendingJoin.current.id : pirateRequestId()
     pendingJoin.current = { code, id: idem }
-    const result = await call('join_parley', { code, idem }, () => 'Joined. Wait for the target player to choose Yield or Fight.')
+    const result = await call('join_parley', { code, idem }, () => 'Code accepted. They now choose Yield or Fight.')
     if (result) pendingJoin.current = null
   }
 
@@ -76,37 +87,35 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
     {!!error && <Notice tone="error" text={error} />}
     <Sheet>
       <SheetTitle>Parley</SheetTitle>
-      <Text style={styles.muted}>The target shows a code. Both players confirm the result after the physical exchange.</Text>
+      <Text style={styles.muted}>Challenged in person? Show your code. Challenging someone? Enter their code. Then settle it with Yield or Fight.</Text>
       {!state && <Text style={styles.body}>Loading Parley…</Text>}
       {state && <>
         {state.mercy_until && new Date(state.mercy_until).getTime() > now
-          && <Notice tone="warning" text={`Davy’s Mercy protects your crew until ${new Date(state.mercy_until).toLocaleTimeString()}.`} />}
+          && <Notice tone="warning" text={`Davy’s Mercy: no one can challenge your crew until ${new Date(state.mercy_until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`} />}
         {!active && <>
-          <ActionButton label="Open parley code" disabled={!actions.canOpen || busy}
-            onPress={() => call('open_parley', {}, (data) => `Show code ${data.code} to the other player.`)} />
+          <Kicker>You were challenged</Kicker>
+          <ActionButton label="Show your code" disabled={!actions.canOpen || busy}
+            onPress={() => call('open_parley', {}, (data) => `Show code ${data.code} to the challenger.`)} />
           <View style={styles.rule} />
-          <Kicker>Join another crew</Kicker>
+          <Kicker>You are challenging</Kicker>
           <TextInput style={styles.input} value={code} onChangeText={setCode}
             accessibilityLabel="Parley code" keyboardType="number-pad" maxLength={4}
-            placeholder="Four digit code" placeholderTextColor={C.sheetMuted} />
-          <ActionButton label="Join parley" variant="plank" disabled={!actions.canJoin || busy || !/^\d{4}$/.test(code)} onPress={join} />
+            placeholder="Their 4-digit code" placeholderTextColor={C.sheetMuted} />
+          <ActionButton label="Enter code" variant="plank" disabled={!actions.canJoin || busy || !/^\d{4}$/.test(code)} onPress={join} />
         </>}
         {active && <>
-          <Kicker>Current parley · {active.state}</Kicker>
-          {!!active.opponent_name && <Text style={styles.body}>Other crew: {active.opponent_name}</Text>}
+          <Kicker>Parley{active.opponent_name ? ` with ${active.opponent_name}` : ''}</Kicker>
+          <Text style={styles.step}>{stepText(active)}</Text>
           {active.far_apart && <Notice tone="warning" text="The players were far apart when this Parley began. The GM can review it." />}
           {active.code && <View style={styles.codeBox} accessibilityLabel={`Parley code ${active.code.split('').join(' ')}, ${secondsLeft} seconds left`}>
             <Text style={styles.code}>{active.code}</Text>
             <Text style={styles.muted}>{secondsLeft}s left</Text>
           </View>}
-          {!active.can_act && <Text style={styles.body}>The two players in this Parley must handle its decisions.</Text>}
-          {active.state === 'open' && active.can_act && <Text style={styles.body}>Show this code to the other player in person.</Text>}
-          {active.state === 'joined' && active.role === 'attacker' && <Text style={styles.body}>Waiting for the target to choose Yield or Fight.</Text>}
-          {active.state === 'yielded' && <Text style={styles.body}>Yield chosen. Both players must confirm that the attacker won before doubloons move.</Text>}
-          {active.state === 'fighting' && <Text style={styles.body}>Play the physical rock-paper-scissors exchange, then each player reports the winner.</Text>}
+          {!active.can_act && <Text style={styles.body}>Only the two players who met in person make the choices.</Text>}
           {active.self_reported && ['yielded', 'fighting'].includes(active.state)
             && <Text style={styles.body}>Your report is saved. Waiting for the other player.</Text>}
           {active.state === 'disputed' && <Notice tone="warning" text="Reports disagree or the session timed out. The GM must rule." />}
+          {actions.canChoose && <Text style={styles.muted}>Yield: you give 10% of your doubloons (at least 3). Fight: the loser gives 1 shard or 25% of doubloons (at least 5), winner’s choice.</Text>}
           {actions.canChoose && <View style={styles.row}>
             <ActionButton label="Yield" variant="plank" disabled={busy}
               onPress={() => call('parley_choice', { parley_id: active.id, choice: 'yield' }, () => 'Yield recorded. Both players must confirm the outcome.')} />
@@ -114,22 +123,22 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
               onPress={() => call('parley_choice', { parley_id: active.id, choice: 'fight' }, () => 'Fight recorded. Play the physical exchange.')} />
           </View>}
           {actions.canReport && active.state === 'yielded' && <View style={styles.row}>
-            <ActionButton label="Confirm attacker won" disabled={busy}
+            <ActionButton label={active.role === 'attacker' ? 'Confirm we won' : `Confirm ${active.opponent_name ?? 'they'} won`} disabled={busy}
               onPress={() => call('parley_report', { parley_id: active.id, winner_faction: active.attacker_faction },
                 (data) => data.state === 'resolved' ? 'Both reports agree. Yield is resolved.' : 'Your report is saved.')} />
           </View>}
           {actions.canReport && active.state === 'fighting' && <View style={styles.row}>
-            <ActionButton label="Our crew won" variant="plank" disabled={busy}
+            <ActionButton label="We won" variant="plank" disabled={busy}
               onPress={() => call('parley_report', { parley_id: active.id, winner_faction: ourFaction },
                 (data) => data.state === 'resolved' ? 'Both reports agree. The fight is resolved.' : 'Your report is saved.')} />
-            <ActionButton label="Other crew won" variant="plank" disabled={busy || !otherFaction}
+            <ActionButton label={`${active.opponent_name ?? 'They'} won`} variant="plank" disabled={busy || !otherFaction}
               onPress={() => call('parley_report', { parley_id: active.id, winner_faction: otherFaction },
                 (data) => data.state === 'resolved' ? 'Both reports agree. The fight is resolved.' : 'Your report is saved.')} />
           </View>}
           {actions.canPlunder && <View style={styles.row}>
-            <ActionButton label="Take one shard" variant="plank" disabled={busy}
+            <ActionButton label="Take 1 shard" variant="plank" disabled={busy}
               onPress={() => call('parley_plunder', { parley_id: active.id, currency: 'bearing' }, () => 'One bearing shard transferred.')} />
-            <ActionButton label="Take doubloons" variant="plank" disabled={busy}
+            <ActionButton label="Take 25% of doubloons" variant="plank" disabled={busy}
               onPress={() => call('parley_plunder', { parley_id: active.id, currency: 'doubloon' },
                 (data) => `${data.amount} doubloons transferred.`)} />
           </View>}
@@ -143,6 +152,7 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
 const styles = StyleSheet.create({
   root: { padding: S.pad, gap: 10, paddingBottom: 40 },
   body: { color: C.sheetInk, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: T.lineBody },
+  step: { color: C.sheetInk, fontFamily: F.bodyBold, fontSize: 19, lineHeight: 25 },
   muted: { color: C.sheetMuted, fontFamily: F.body, fontSize: 15, lineHeight: 21 },
   rule: { height: 1, backgroundColor: C.sheetRule, marginVertical: 6 },
   input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 6,

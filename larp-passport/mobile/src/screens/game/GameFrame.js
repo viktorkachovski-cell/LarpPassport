@@ -1,8 +1,8 @@
 import { memo } from 'react'
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { OTHER_APP, ownsGame } from '../../lib/brand'
-import { describeServerSync } from '../../lib/syncStatus'
+import { COPY, OTHER_APP, ownsGame } from '../../lib/brand'
+import { describeServerSync, describeSharing } from '../../lib/syncStatus'
 import { C, F, S, T, toneColor } from '../../lib/theme'
 import { useNow } from '../../lib/useNow'
 import { common } from '../../ui/common'
@@ -16,10 +16,15 @@ import { skin } from './frameSkin'
 // tab bar and the character, events and sharing tabs. Each app supplies its
 // own state cells, mode tabs and, as children, the panel for its mode tabs.
 // Each app's frameSkin may restyle the chrome (Time Hunt's skin is empty).
+// Optional: a phase line under the header (the phase chip moves into it), the
+// character or sharing tab left out of the bar, and a GPS button in the header
+// that opens the sharing view instead.
 const sk = skin.styles
 
 export function GameFrame({
-  session, onBack, phase, phaseLabel, phaseColor, cells, banner, modeTabs, eventsLabel = 'EVENTS', scrollTabs = false, tab, setTab, children,
+  session, onBack, phase, phaseLabel, phaseColor, phaseHint, cells, banner, modeTabs, eventsLabel = 'EVENTS',
+  sheetTab = ['sheet', 'CHARACTER'], shareTab = ['share', 'SHARING'], gpsInHeader = false,
+  scrollTabs = false, tab, setTab, children,
 }) {
   const { game, character } = session
   if (session.loadError) return (
@@ -31,7 +36,7 @@ export function GameFrame({
   )
   if (!game || character === undefined) return (
     <SafeAreaView style={[styles.loading, sk.loading]}>
-      <Text style={[styles.loadingText, sk.loadingText]}>LOADING GAME...</Text>
+      <Text style={[styles.loadingText, sk.loadingText]}>{COPY.loadingGame}</Text>
     </SafeAreaView>
   )
   if (!ownsGame(game)) return (
@@ -41,14 +46,22 @@ export function GameFrame({
     </SafeAreaView>
   )
 
-  const tabButtons = [...modeTabs, ['sheet', 'CHARACTER'], ['events', eventsLabel], ['share', 'SHARING']]
+  const tabButtons = [...modeTabs, sheetTab, ['events', eventsLabel], shareTab].filter(Boolean)
     .map(([key, label]) => (
       <TouchableOpacity key={key} accessibilityRole="tab" accessibilityState={{ selected: tab === key }}
         accessibilityLabel={label.toLowerCase()} onPress={() => setTab(key)}
         style={[styles.tab, sk.tab, scrollTabs && styles.scrollTab, scrollTabs && sk.scrollTab, tab === key && styles.activeTab, tab === key && sk.activeTab]}>
-        <Text style={[styles.tabText, sk.tabText, tab === key && styles.activeTabText, tab === key && sk.activeTabText]}>{label}</Text>
+        <Text style={[styles.tabText, sk.tabText, tab === key && styles.activeTabText, tab === key && sk.activeTabText]}
+          numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{label}</Text>
       </TouchableOpacity>
     ))
+
+  const phaseChip = (
+    <View style={[styles.phaseChip, sk.phaseChip, { borderColor: phaseColor }]} accessibilityLabel={`Game ${phaseLabel.toLowerCase()}`}>
+      {phase === 'active' && <LiveDot color={C.green} />}
+      <Text style={[styles.phaseText, sk.phaseText, { color: phaseColor }]}>{phaseLabel}</Text>
+    </View>
+  )
 
   return (
     <SafeAreaView style={[styles.safe, sk.safe]}>
@@ -59,11 +72,16 @@ export function GameFrame({
           {skin.BackGlyph ? <skin.BackGlyph /> : <Text style={styles.backText}>&lt;</Text>}
         </TouchableOpacity>
         <Text style={[styles.gameName, sk.gameName]} numberOfLines={1}>{skin.upperName ? game.name.toUpperCase() : game.name}</Text>
-        <View style={[styles.phaseChip, sk.phaseChip, { borderColor: phaseColor }]} accessibilityLabel={`Game ${phaseLabel.toLowerCase()}`}>
-          {phase === 'active' && <LiveDot color={C.green} />}
-          <Text style={[styles.phaseText, sk.phaseText, { color: phaseColor }]}>{phaseLabel}</Text>
-        </View>
+        {!phaseHint && phaseChip}
+        {gpsInHeader && <GpsButton session={session} selected={tab === 'share'} onPress={() => setTab('share')} />}
       </View>
+
+      {!!phaseHint && (
+        <View style={[styles.phaseLine, sk.phaseLine]}>
+          {phaseChip}
+          <Text style={[styles.phaseHint, sk.phaseHint]}>{phaseHint}</Text>
+        </View>
+      )}
 
       <SyncStatusLine sync={session.sync} realtime={session.realtime} onRetry={session.refresh} />
 
@@ -78,7 +96,7 @@ export function GameFrame({
 
       {children}
 
-      {tab === 'sheet' && (
+      {tab === 'sheet' && sheetTab && (
         character === null
           ? <CreateCharacter game={game} uid={session.uid} onCreated={session.setCharacter} />
           : <CharacterSheet character={character} stats={game.template?.stats ?? []} />
@@ -110,6 +128,7 @@ function SyncStatusLine({ sync, realtime, onRetry }) {
   const now = useNow(10000)
   const status = describeServerSync({ ...sync, realtime, now })
   const color = toneColor(status.tone)
+  if (skin.quietSync && (status.tone === 'ok' || status.tone === 'checking')) return null
   return (
     <View style={[styles.syncLine, sk.syncLine]}>
       <View style={common.flex}>
@@ -122,6 +141,25 @@ function SyncStatusLine({ sync, realtime, onRetry }) {
         </TouchableOpacity>
       )}
     </View>
+  )
+}
+
+// Location sharing at a glance. The colour follows the sharing status tone and
+// the label carries the meaning, so colour is never the only signal.
+function GpsButton({ session, selected, onPress }) {
+  const now = useNow(10000)
+  const { queue } = session
+  const status = describeSharing({
+    sharing: session.sharing, permission: session.permission, lastFixAt: queue.lastFixAt,
+    queued: queue.queued ?? 0, failed: queue.failed ?? 0, lastError: queue.lastError, now,
+  })
+  const color = toneColor(status.tone)
+  return (
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${status.text}. Open location sharing`}
+      accessibilityState={{ selected }} onPress={onPress} style={[styles.gpsButton, sk.gpsButton, selected && sk.gpsButtonSelected]}>
+      <View style={[styles.gpsDot, { backgroundColor: color }]} />
+      <Text style={[styles.gpsText, sk.gpsText]}>{session.sharing ? 'GPS' : 'GPS off'}</Text>
+    </TouchableOpacity>
   )
 }
 
@@ -147,6 +185,11 @@ const styles = StyleSheet.create({
   phaseChip: { minWidth: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 6 },
   phaseText: { fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.1 },
   syncLine: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingBottom: 8, gap: 10 },
+  phaseLine: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, paddingBottom: 8, gap: 10 },
+  phaseHint: { flex: 1, color: C.text, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody },
+  gpsButton: { minHeight: S.touch, minWidth: S.touch, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: C.line, borderWidth: 1, borderRadius: 22, paddingHorizontal: 10 },
+  gpsDot: { width: 10, height: 10, borderRadius: 5 },
+  gpsText: { color: C.text, fontFamily: F.bodySemiBold, fontSize: T.label },
   syncText: { fontFamily: F.bodyMedium, fontSize: T.body },
   syncDetail: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, marginTop: 1 },
   syncRetry: { minHeight: S.touch, justifyContent: 'center', borderColor: C.lineStrong, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12 },

@@ -21,9 +21,11 @@ test('unknown or missing types fall back to neutral wording', () => {
 
 test('pirate events have crew-safe wording', () => {
   expect(eventInfo('pirate_claim')).toMatchObject({
-    title: 'Your crew claimed a site', tag: { label: 'PIRATE' },
+    title: 'Your crew claimed a site', tag: { label: 'CREW' },
   })
-  expect(eventInfo('pirate_reading').body).toContain('compass logbook')
-  expect(eventInfo('pirate_ruling')).toMatchObject({ tag: { label: 'PIRATE' } })
+  expect(eventInfo('pirate_reading').body).toContain('compass')
+  expect(eventInfo('pirate_ruling')).toMatchObject({ tag: { label: 'ADMIRALTY' } })
+  expect(eventInfo('pirate_parley').tag.label).toBe('PARLEY')
   expect(eventInfo('pirate_captain').body).toContain('compass')
+  expect(eventInfo('pirate_something_new').tag.label).toBe('TIDE')
 })

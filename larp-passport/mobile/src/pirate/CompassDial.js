@@ -130,7 +130,7 @@ export const CompassDial = memo(function CompassDial({ reading, active = true })
     )
   }, [reading?.centre_deg, reading?.half_width_deg])
 
-  if (!reading || !range) return <Text style={styles.note}>Take a reading inside a lighthouse.</Text>
+  if (!reading || !range) return <Text style={styles.note}>Take a reading at a lighthouse to draw your first arc.</Text>
   const spin = rotation.interpolate({
     inputRange: [-360, 0, 360], outputRange: ['-360deg', '0deg', '360deg'], extrapolate: 'extend',
   })
@@ -143,7 +143,7 @@ export const CompassDial = memo(function CompassDial({ reading, active = true })
         </Animated.View>
         <Lubber />
         <View style={styles.headingTag} importantForAccessibility="no-hide-descendants">
-          <Text style={styles.headingText}>HDG {trueHeading == null ? '---' : formatBearing(trueHeading)}</Text>
+          <Text style={styles.headingText}>Facing {trueHeading == null ? '---' : formatBearing(trueHeading)}</Text>
         </View>
       </View>
       <Text style={styles.range}>{range}</Text>
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   root: { alignItems: 'center', gap: 6 },
   dial: { width: WIDTH, height: HEIGHT },
   card: { position: 'absolute', left: CX - CARD, top: CY - CARD, width: BOX, height: BOX },
-  headingTag: { position: 'absolute', top: 0, left: CX - 40, width: 80, height: 24, borderRadius: 12, backgroundColor: C.wood900, borderWidth: 1, borderColor: C.brassDeep, alignItems: 'center', justifyContent: 'center' },
+  headingTag: { position: 'absolute', top: 0, left: CX - 52, width: 104, height: 24, borderRadius: 12, backgroundColor: C.wood900, borderWidth: 1, borderColor: C.brassDeep, alignItems: 'center', justifyContent: 'center' },
   headingText: { color: C.onWood, fontFamily: F.numeric, fontSize: 13, lineHeight: 16 },
   range: { color: C.sheetInk, fontFamily: F.numeric, fontSize: 28, lineHeight: 32, letterSpacing: 0.5 },
   note: { color: C.sheetMuted, fontFamily: F.body, fontSize: 15, lineHeight: 20, textAlign: 'center' },

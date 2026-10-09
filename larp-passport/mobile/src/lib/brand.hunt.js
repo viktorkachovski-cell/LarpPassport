@@ -57,3 +57,49 @@ export const SHARING_FOOTNOTE = 'Sharing stops and your map position is removed 
 // Pirate games carry a phase; this app plays every other game.
 export const ownsGame = (game) => !game.phase
 export const OTHER_APP = 'The Black Tide'
+
+// Player-facing wording and small layout choices the shared screens read.
+export const COPY = {
+  booting: 'INITIALIZING...',
+  loadingGame: 'LOADING GAME...',
+  auth: {
+    eyebrow: EYEBROW,
+    title: 'LARP PASSPORT',
+    tagline: 'PLAYER APP // SIGN IN TO JOIN A GAME',
+    signinKicker: 'PLAYER ACCESS',
+    signupKicker: 'NEW PLAYER ACCOUNT',
+    emailPlaceholder: 'agent@example.com',
+    submitSignin: 'SIGN IN',
+    submitSignup: 'CREATE ACCOUNT',
+    busySignin: 'SIGNING IN...',
+    busySignup: 'SIGNING IN...',
+    footer: 'SECURE CHANNEL // BUILD 2141.07',
+  },
+  games: {
+    eyebrow: EYEBROW,
+    title: 'GAMES',
+    section: 'YOUR GAMES',
+    showCount: true,
+    decor: true,
+    quietSync: false,
+    autoOpenSingle: false,
+    status: (game) => game.status?.toUpperCase() ?? 'UNKNOWN',
+  },
+  character: {
+    createKicker: 'IDENTITY REGISTRY',
+    createTitle: 'Create your character',
+    namePlaceholder: 'Agent name',
+    bioPlaceholder: 'A short field record',
+    gmStatsCaption: 'GM-CONTROLLED STATS ARE ADDED AUTOMATICALLY.',
+    lockedLabel: 'SET BY YOUR GM // UPDATES LIVE',
+    editLabel: 'YOURS TO EDIT',
+    createButton: 'CREATE CHARACTER',
+    creatingButton: 'CREATING...',
+  },
+  log: {
+    messageCaption: 'ONLY YOU AND THE GMS SEE THIS // 3s COOLDOWN',
+    hiddenTypes: [],
+    showReasons: false,
+  },
+  sharing: { collapseDetails: false },
+}

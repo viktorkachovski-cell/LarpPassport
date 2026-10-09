@@ -1,7 +1,7 @@
-import { memo } from 'react'
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
-import { SHARING_FOOTNOTE } from '../../lib/brand'
-import { C, F, T, toneColor } from '../../lib/theme'
+import { memo, useState } from 'react'
+import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
+import { COPY, SHARING_FOOTNOTE } from '../../lib/brand'
+import { C, F, S, T, toneColor } from '../../lib/theme'
 import { describeSharing } from '../../lib/syncStatus'
 import { formatAge } from '../../lib/time'
 import { common } from '../../ui/common'
@@ -12,6 +12,8 @@ export const SharingTab = memo(function SharingTab({ game, phase, sharing, permi
     sharing, permission, lastFixAt: queue.lastFixAt, queued: queue.queued ?? 0, failed: queue.failed ?? 0, lastError: queue.lastError,
   })
   const stateColor = toneColor(status.tone)
+  // Telemetry is for troubleshooting; a brand may fold it away until asked.
+  const [detailsOpen, setDetailsOpen] = useState(!COPY.sharing.collapseDetails)
   return (
     <ScrollView style={common.flex} contentContainerStyle={common.scrollContent}>
       <View style={common.neutralCard}>
@@ -44,7 +46,13 @@ export const SharingTab = memo(function SharingTab({ game, phase, sharing, permi
         {!!error && !sharing && <GhostButton label="RETRY STOP SHARING" onPress={() => toggleSharing(false)} />}
       </View>
 
-      <View style={styles.telemetryCard}>
+      {COPY.sharing.collapseDetails && (
+        <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }}
+          onPress={() => setDetailsOpen((open) => !open)} style={styles.detailsToggle}>
+          <Text style={styles.detailsToggleText}>{detailsOpen ? 'Hide details' : 'Show details'}</Text>
+        </TouchableOpacity>
+      )}
+      {detailsOpen && <View style={styles.telemetryCard}>
         <Text style={styles.telemetryKicker}>SYNC DETAILS</Text>
         <View style={styles.telemetryRow}>
           <TelemetryCell label="QUEUED" value={queue.queued ?? 0} color={C.cyan} />
@@ -57,8 +65,8 @@ export const SharingTab = memo(function SharingTab({ game, phase, sharing, permi
         )}
         <Text style={styles.telemetryNote}>Queued updates are sent automatically. "Last sent" is about location updates only; it does not prove the rest of the game data is current.</Text>
         <GhostButton label="SEND NOW" onPress={sendNow} />
-      </View>
-      <Text style={styles.sharingFootnote}>{SHARING_FOOTNOTE}</Text>
+      </View>}
+      {!!SHARING_FOOTNOTE && <Text style={styles.sharingFootnote}>{SHARING_FOOTNOTE}</Text>}
     </ScrollView>
   )
 })
@@ -80,6 +88,8 @@ const styles = StyleSheet.create({
   sharingFact: { color: C.text, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 4 },
   telemetryNote: { color: C.muted, fontFamily: F.body, fontSize: T.label, lineHeight: T.lineLabel, marginTop: 10 },
   warningCopy: { color: C.amber, fontFamily: F.bodyMedium, fontSize: T.body, lineHeight: T.lineBody, marginTop: 11 },
+  detailsToggle: { minHeight: S.touch, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  detailsToggleText: { color: C.text, fontFamily: F.bodySemiBold, fontSize: T.body, textDecorationLine: 'underline' },
   telemetryCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 14, marginTop: 12 },
   telemetryKicker: { color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.2 },
   telemetryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 11 },

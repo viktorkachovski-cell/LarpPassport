@@ -3,12 +3,17 @@ import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { stopSharing } from '../lib/locationTask'
-import { EYEBROW, ownsGame } from '../lib/brand'
+import { COPY, ownsGame } from '../lib/brand'
 import { C, F, S, T, toneColor } from '../lib/theme'
 import { describeServerSync } from '../lib/syncStatus'
 import { useNow } from '../lib/useNow'
 
 const STATUS_COLORS = { active: C.green, draft: C.amber, finished: C.muted }
+const copy = COPY.games
+
+// Opening the only running game happens once per app launch, so Back still
+// lands on this list.
+let autoOpened = false
 
 export default function GamesScreen({ onOpen }) {
   const [games, setGames] = useState([])
@@ -27,7 +32,12 @@ export default function GamesScreen({ onOpen }) {
     try {
       const { data, error } = await supabase.from('games').select(GAME_COLUMNS).order('created_at', { ascending: false })
       if (error) throw error
-      setGames((data ?? []).filter(ownsGame))
+      const owned = (data ?? []).filter(ownsGame)
+      setGames(owned)
+      const running = owned.filter((game) => game.status === 'active')
+      const openNow = copy.autoOpenSingle && !autoOpened && running.length === 1
+      autoOpened = true
+      if (openNow) onOpen(running[0])
       setSync((current) => ({ ...current, lastOkAt: Date.now() }))
     } catch (error) {
       setError(error.message)
@@ -53,8 +63,8 @@ export default function GamesScreen({ onOpen }) {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>{EYEBROW}</Text>
-          <Text style={styles.title}>GAMES</Text>
+          {!!copy.eyebrow && <Text style={styles.eyebrow}>{copy.eyebrow}</Text>}
+          <Text style={styles.title} accessibilityRole="header">{copy.title}</Text>
         </View>
         <ListSyncStatus sync={sync} loading={loading} />
       </View>
@@ -82,26 +92,28 @@ export default function GamesScreen({ onOpen }) {
         {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
       </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionLabel}>YOUR GAMES</Text>
-        <Text style={styles.sectionCount}>{String(games.length).padStart(2, '0')}</Text>
-      </View>
+      {!!copy.section && <View style={styles.sectionHeader}>
+        <Text style={styles.sectionLabel}>{copy.section}</Text>
+        {copy.showCount && <Text style={styles.sectionCount}>{String(games.length).padStart(2, '0')}</Text>}
+      </View>}
       <FlatList
         data={games}
         keyExtractor={(game) => game.id}
+        style={!copy.section && styles.listGap}
         contentContainerStyle={games.length === 0 ? styles.emptyList : styles.list}
         refreshing={loading} onRefresh={load}
         ListEmptyComponent={<Text style={styles.empty}>{loading ? 'Loading games...' : error ? 'Could not load games. Pull to retry.' : 'No games yet. Join one with a code from your GM.'}</Text>}
         renderItem={({ item }) => {
           const color = STATUS_COLORS[item.status] ?? C.muted
+          const status = copy.status(item)
           return (
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${item.name}, ${item.status ?? 'unknown'}`} onPress={() => onOpen(item)} style={styles.gameCard}>
-              <View style={styles.gameIndex}><Text style={styles.gameIndexText}>//</Text></View>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${item.name}, ${status}`} onPress={() => onOpen(item)} style={styles.gameCard}>
+              {copy.decor && <View style={styles.gameIndex}><Text style={styles.gameIndexText}>//</Text></View>}
               <View style={styles.gameBody}>
                 <Text style={styles.gameName} numberOfLines={1}>{item.name}</Text>
-                <Text style={[styles.gameStatus, { color }]}>{item.status?.toUpperCase() ?? 'UNKNOWN'}</Text>
+                <Text style={[styles.gameStatus, { color }]}>{status}</Text>
               </View>
-              <Text style={styles.arrow}>-&gt;</Text>
+              <Text style={styles.arrow}>{copy.decor ? '->' : '›'}</Text>
             </TouchableOpacity>
           )
         }}
@@ -121,6 +133,7 @@ function ListSyncStatus({ sync, loading }) {
   const status = describeServerSync({ ...sync, realtime: null, subject: 'Games', now })
   const color = toneColor(status.tone)
   const text = loading && !sync.lastOkAt ? 'Checking server' : status.text
+  if (copy.quietSync && (status.tone === 'ok' || status.tone === 'checking')) return null
   return (
     <View style={styles.syncChip}>
       <Text style={[styles.syncChipText, { color }]} numberOfLines={2}>{text}</Text>
@@ -148,6 +161,7 @@ const styles = StyleSheet.create({
   sectionLabel: { flex: 1, color: C.muted, fontFamily: F.monoSemiBold, fontSize: T.label, letterSpacing: 1.2 },
   sectionCount: { color: C.cyan, fontFamily: F.mono, fontSize: T.label },
   list: { paddingBottom: 12 },
+  listGap: { marginTop: 18 },
   emptyList: { flexGrow: 1, justifyContent: 'center' },
   empty: { color: C.muted, textAlign: 'center', fontFamily: F.body, fontSize: T.body, lineHeight: T.lineBody, paddingHorizontal: 20 },
   gameCard: { minHeight: S.touch, backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 8, padding: 14, marginBottom: 9, flexDirection: 'row', alignItems: 'center' },

@@ -29,3 +29,15 @@ export function smoothHeading(previous, next, alpha = 0.25) {
   const weight = Math.max(0, Math.min(1, alpha))
   return previous + shortestAngleDelta(previous, normalized) * weight
 }
+
+// Arc half-width by crew shard count, from the game guide (section 4). The
+// server computes the real arc; this only tells the captain what the next
+// shard is worth.
+export const ARC_BY_SHARDS = [null, 90, 45, 25, 12, 5]
+
+export function compassProgress(shards) {
+  const n = Math.max(0, Math.floor(Number(shards) || 0))
+  const now = ARC_BY_SHARDS[Math.min(n, 5)]
+  const next = n >= 5 ? null : ARC_BY_SHARDS[n + 1]
+  return { shards: n, now, next }
+}

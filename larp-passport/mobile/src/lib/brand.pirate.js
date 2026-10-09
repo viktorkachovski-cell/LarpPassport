@@ -2,6 +2,8 @@
 // counterpart is brand.hunt.js; Metro picks one per build (see variant.js).
 // Values come from The Black Tide design system.
 
+import { phaseName } from '../pirate/phases'
+
 // Two themes with the same token names: `deck` (daylight parchment) and
 // `lantern` (night: dark vellum, so the sheet never glares). Chosen once at
 // launch from the phone's light/dark setting.
@@ -140,9 +142,63 @@ export const typeScale = {
   lineLabel: 18,
 }
 
-export const EYEBROW = 'THE ADMIRALTY'
-export const SHARING_FOOTNOTE = 'Location sharing is voluntary. History follows the retention period above.'
+// The Admiralty is the GM in this fiction, so player screens carry no eyebrow.
+export const EYEBROW = ''
+// The sharing card already states the retention period once.
+export const SHARING_FOOTNOTE = ''
 
 // Pirate games carry a phase; ordinary and Time Hunt games belong to the other app.
 export const ownsGame = (game) => !!game.phase
 export const OTHER_APP = 'LARP Time Hunt'
+
+const GAME_STATUS = { draft: 'Not started', active: 'Under way', finished: 'Over' }
+
+// Player-facing wording and small layout choices the shared screens read.
+// System status stays quiet unless something is wrong.
+export const COPY = {
+  booting: 'Loading…',
+  loadingGame: 'Loading the game…',
+  auth: {
+    eyebrow: '',
+    title: 'The Black Tide',
+    tagline: 'Sign in to join your crew',
+    signinKicker: '',
+    signupKicker: '',
+    emailPlaceholder: 'you@example.com',
+    submitSignin: 'Sign in',
+    submitSignup: 'Create account',
+    busySignin: 'Signing in…',
+    busySignup: 'Creating account…',
+    footer: '',
+  },
+  games: {
+    eyebrow: '',
+    title: 'Your games',
+    section: '',
+    showCount: false,
+    decor: false,
+    quietSync: true,
+    autoOpenSingle: true,
+    status: (game) => {
+      const status = GAME_STATUS[game.status] ?? 'Waiting'
+      return game.status === 'active' && game.phase ? `${status} · ${phaseName(game.phase).long}` : status
+    },
+  },
+  character: {
+    createKicker: 'Your pirate',
+    createTitle: 'Name your pirate',
+    namePlaceholder: 'Pirate name',
+    bioPlaceholder: 'One line about your pirate',
+    gmStatsCaption: '',
+    lockedLabel: 'SET BY THE GM',
+    editLabel: 'YOURS TO EDIT',
+    createButton: 'Save your pirate',
+    creatingButton: 'Saving…',
+  },
+  log: {
+    messageCaption: 'Only the GMs see this.',
+    hiddenTypes: ['zone_enter', 'zone_exit', 'consent_granted', 'consent_revoked'],
+    showReasons: true,
+  },
+  sharing: { collapseDetails: true },
+}

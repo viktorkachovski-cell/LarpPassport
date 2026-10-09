@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { COPY } from '../../lib/brand'
 import { supabase } from '../../lib/supabase'
 import { C, F, S, T } from '../../lib/theme'
 import { eventInfo } from '../../lib/events'
@@ -7,14 +8,24 @@ import { formatAge } from '../../lib/time'
 import { common } from '../../ui/common'
 import { OutcomeNote } from '../../ui/primitives'
 
-export const EventsTab = memo(function EventsTab({ gameId, events }) {
+const copy = COPY.log
+
+// GM corrections carry a reason; the brand decides whether players see it.
+function eventMessage(event, body) {
+  const message = event.payload?.message || body
+  const reason = copy.showReasons && event.payload?.reason
+  return reason ? `${message} Reason: ${reason}`.trim() : message
+}
+
+export const EventsTab = memo(function EventsTab({ gameId, events: allEvents }) {
+  const events = copy.hiddenTypes.length ? allEvents.filter((event) => !copy.hiddenTypes.includes(event.type)) : allEvents
   return (
     <ScrollView style={common.flex} contentContainerStyle={common.scrollContent} keyboardShouldPersistTaps="handled">
       <PlayerMessageBox gameId={gameId} />
       {events.length === 0 && <Text style={styles.emptyText}>No events yet.</Text>}
       {events.map((event) => {
         const { tag, title, body } = eventInfo(event.type)
-        const message = event.payload?.message || body
+        const message = eventMessage(event, body)
         return (
           <View key={event.id} style={[styles.eventCard, tag.borderColor && { borderColor: tag.borderColor }]}>
             <View style={styles.eventTopRow}>
@@ -67,7 +78,7 @@ function PlayerMessageBox({ gameId }) {
           <Text style={styles.smallCyanButtonText}>{busy ? 'SENDING...' : 'SEND TO GM'}</Text>
         </TouchableOpacity>
       </View>
-      <Text style={common.privateCaption}>ONLY YOU AND THE GMS SEE THIS // 3s COOLDOWN</Text>
+      <Text style={common.privateCaption}>{copy.messageCaption}</Text>
       {!!status && <OutcomeNote text={status} tone={status === 'Sent to the GM.' ? 'ok' : 'error'} onDismiss={() => setStatus('')} />}
     </View>
   )

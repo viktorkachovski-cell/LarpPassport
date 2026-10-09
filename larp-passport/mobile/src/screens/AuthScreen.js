@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
-import { EYEBROW } from '../lib/brand'
+import { COPY, themeName } from '../lib/brand'
 import { C, F, S, T } from '../lib/theme'
 
 export default function AuthScreen() {
@@ -42,6 +42,8 @@ export default function AuthScreen() {
   }
 
   const signingIn = mode === 'signin'
+  const copy = COPY.auth
+  const kicker = signingIn ? copy.signinKicker : copy.signupKicker
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -51,25 +53,25 @@ export default function AuthScreen() {
       <ScrollView contentContainerStyle={styles.keyboard} keyboardShouldPersistTaps="handled">
         <View style={styles.identityBlock}>
           <View style={styles.markOuter}><View style={styles.markInner} /></View>
-          <Text style={styles.eyebrow}>{EYEBROW}</Text>
-          <Text style={styles.brand}>LARP PASSPORT</Text>
-          <Text style={styles.tagline}>PLAYER APP // SIGN IN TO JOIN A GAME</Text>
+          {!!copy.eyebrow && <Text style={styles.eyebrow}>{copy.eyebrow}</Text>}
+          <Text style={styles.brand} accessibilityRole="header">{copy.title}</Text>
+          <Text style={styles.tagline}>{copy.tagline}</Text>
         </View>
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardKicker}>{signingIn ? 'PLAYER ACCESS' : 'NEW PLAYER ACCOUNT'}</Text>
+            {!!kicker && <Text style={styles.cardKicker}>{kicker}</Text>}
             <Text style={styles.cardTitle}>{signingIn ? 'Sign in' : 'Create account'}</Text>
           </View>
 
           {mode === 'signup' && (
             <Field label="USERNAME" value={username} onChangeText={setUsername} placeholder="your_name" autoCapitalize="none" />
           )}
-          <Field label="EMAIL" value={email} onChangeText={setEmail} placeholder="agent@example.com" autoCapitalize="none" keyboardType="email-address" />
+          <Field label="EMAIL" value={email} onChangeText={setEmail} placeholder={copy.emailPlaceholder} autoCapitalize="none" keyboardType="email-address" />
           <Field label="PASSWORD" value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
 
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={submit} style={[styles.primaryButton, busy && styles.disabled]}>
-            <Text style={styles.primaryButtonText}>{busy ? 'SIGNING IN...' : signingIn ? 'SIGN IN' : 'CREATE ACCOUNT'}</Text>
+            <Text style={styles.primaryButtonText}>{busy ? (signingIn ? copy.busySignin : copy.busySignup) : signingIn ? copy.submitSignin : copy.submitSignup}</Text>
           </TouchableOpacity>
           {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
           {!!notice && <Text style={styles.notice} accessibilityLiveRegion="polite">{notice}</Text>}
@@ -78,7 +80,7 @@ export default function AuthScreen() {
             <Text style={styles.modeCopy}>{signingIn ? 'New here? ' : 'Already have an account? '}<Text style={styles.modeLink}>{signingIn ? 'Create an account' : 'Sign in'}</Text></Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.footer}>SECURE CHANNEL // BUILD 2141.07</Text>
+        {!!copy.footer && <Text style={styles.footer}>{copy.footer}</Text>}
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -104,7 +106,8 @@ const styles = StyleSheet.create({
   markOuter: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, borderColor: C.cyanBorder, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   markInner: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: C.cyan },
   eyebrow: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.6 },
-  brand: { color: C.text, fontFamily: F.displayBold, fontSize: 29, letterSpacing: 2.5, marginTop: 5 },
+  // Time Hunt's blackletter role is its display face, so only the pirate title changes.
+  brand: { color: C.text, fontFamily: F.blackletter, fontSize: themeName === 'hunt' ? 29 : 40, letterSpacing: themeName === 'hunt' ? 2.5 : 0, marginTop: 5 },
   tagline: { color: C.muted, fontFamily: F.mono, fontSize: T.micro, letterSpacing: 1, marginTop: 7 },
   card: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 18 },
   cardHeader: { borderBottomColor: C.line, borderBottomWidth: 1, paddingBottom: 13, marginBottom: 16 },

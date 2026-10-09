@@ -6,6 +6,7 @@ import { useFonts } from 'expo-font'
 import * as Notifications from 'expo-notifications'
 import { fontAssets } from './src/lib/fontAssets'
 import { reconcileTracking } from './src/lib/locationTask'
+import { COPY } from './src/lib/brand'
 import { supabase } from './src/lib/supabase'
 import { C, F } from './src/lib/theme'
 import AuthScreen from './src/screens/AuthScreen'
@@ -54,7 +55,7 @@ export default function App() {
   if ((!fontsLoaded && !fontError) || session === undefined) {
     body = (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.ink }}>
-        <Text style={{ color: C.cyan, fontFamily: F.mono, fontSize: 11, letterSpacing: 2 }}>INITIALIZING...</Text>
+        <Text style={{ color: C.cyan, fontFamily: F.mono, fontSize: 11, letterSpacing: 2 }}>{COPY.booting}</Text>
       </View>
     )
   } else if (!session) {
