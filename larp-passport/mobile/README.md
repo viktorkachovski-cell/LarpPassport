@@ -35,7 +35,7 @@ Metro, so the previous app's package and bundle are not reused.
 For complete location testing, use an Android emulator or USB-connected phone:
 
 ```powershell
-npm install
+npm ci
 npm run android                                  # Pirate app
 $env:APP_VARIANT='hunt'; npx expo prebuild --clean; npm run android   # Time Hunt app
 ```
@@ -55,7 +55,7 @@ With EAS (environment variables come from the EAS `preview`/`production`
 environments):
 
 ```powershell
-npm install
+npm ci
 npx eas-cli login
 npx eas-cli build -p android --profile preview         # The Black Tide
 npx eas-cli build -p android --profile preview-hunt    # LARP Time Hunt
@@ -84,7 +84,7 @@ has an EAS-signed install of the same package must uninstall it first.
   permission is required and requested in-app.
 - Event alerts use Supabase Realtime while the app is active and are also
   piggybacked on background location flushes. No Firebase/FCM setup is needed.
-- Offline: pings queue on-device (up to 500) and flush when signal returns.
+- Offline: pings queue on-device (a 1000-entry per-game retention target, sent in batches of 100; overflow drops the oldest pending entries while retaining failed batches) and flush when signal returns.
   Game actions (site claims, Parley, elimination claims) are direct calls and
   are not queued offline.
 - Time Hunt: eliminated players have sharing revoked automatically and must

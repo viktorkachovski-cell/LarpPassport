@@ -99,25 +99,6 @@ export function Notice({ text, tone = 'info' }) {
   )
 }
 
-export function DoubloonIcon({ size = 20 }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Circle cx="12" cy="12" r="10" fill="#C9A23F" stroke="#7A5B1E" strokeWidth="1.5" />
-      <Circle cx="12" cy="12" r="7" fill="none" stroke="#ECD58C" strokeWidth="1" />
-      <Path d="M12 7.5v9M8.5 10.5h7" stroke="#7A5B1E" strokeWidth="2" strokeLinecap="round" />
-    </Svg>
-  )
-}
-
-export function ShardIcon({ size = 20 }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Path d="M9 2.5l7.5 3.5 2 8-6 7.5-6.5-4.5-1-8.5z" fill="#5FA8A2" stroke="#1F4F55" strokeWidth="1.5" strokeLinejoin="round" />
-      <Path d="M9 2.5l3 9 6.5 2.5M12 11.5l-7-2" stroke="#A9DCD4" strokeWidth="1" fill="none" />
-    </Svg>
-  )
-}
-
 export function BackIcon({ size = 24, color = '#1C120A' }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

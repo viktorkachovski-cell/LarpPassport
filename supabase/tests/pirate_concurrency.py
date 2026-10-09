@@ -152,6 +152,36 @@ try:
     assert sorted(race([(uid(4), report), (uid(attacker), report)])) == ['awaiting_report', 'resolved']
     assert query(f"select count(*) || ',' || sum(delta) from private.pirate_ledger where ref_id='{parley_id}'") == '2,0'
     print('PASS: simultaneous yield confirmations transfer doubloons once')
+
+    # A separate agreed Fight: identical simultaneous plunder retries must
+    # return the same amount and create only one balanced ledger transfer.
+    fight_id = '19500000-0000-0000-0000-000000000001'
+    query(f"""insert into private.pirate_parleys
+      (id, game_id, target_faction, target_profile, attacker_faction, attacker_profile,
+       state, choice, winner_faction, code, code_expires_at)
+      select '{fight_id}', game_id, target_faction, target_profile, attacker_faction, attacker_profile,
+             'awaiting_choice', 'fight', attacker_faction, '9876', now()
+      from private.pirate_parleys where id='{parley_id}';""")
+    plunder = f"select public.parley_plunder('{GAME}','{fight_id}','doubloon')->>'amount';"
+    amounts = race([(uid(attacker), plunder), (uid(attacker), plunder)])
+    assert amounts[0] == amounts[1] and int(amounts[0]) > 0, amounts
+    assert query(f"select count(*) || ',' || sum(delta) from private.pirate_ledger where ref_id='{fight_id}'") == '2,0'
+    print('PASS: simultaneous plunder retries return one original amount and transfer once')
+
+    # Expiry happens during player/GM reads under the same game lock. Two
+    # readers observing a timed-out exchange must emit exactly one dispute.
+    timeout_id = '19500000-0000-0000-0000-000000000002'
+    query(f"""insert into private.pirate_parleys
+      (id, game_id, target_faction, target_profile, attacker_faction, attacker_profile,
+       state, choice, code, code_expires_at, updated_at)
+      select '{timeout_id}', game_id, target_faction, target_profile, attacker_faction, attacker_profile,
+             'fighting', 'fight', '9877', now(), now()-interval '301 seconds'
+      from private.pirate_parleys where id='{fight_id}';""")
+    race([(GM, f"select public.gm_pirate_overview('{GAME}') is not null;"),
+          (uid(4), f"select public.get_pirate_state('{GAME}') is not null;")])
+    assert query(f"select state from private.pirate_parleys where id='{timeout_id}'") == 'disputed'
+    assert query(f"select count(*) from public.game_events where game_id='{GAME}' and type='pirate_dispute' and payload->>'parley_id'='{timeout_id}'") == '1'
+    print('PASS: simultaneous player/GM status sweeps create one timeout dispute')
 finally:
     query(f"delete from public.games where id='{GAME}';")
     query("delete from auth.users where id::text like '19000000-0000-0000-0000-%';")

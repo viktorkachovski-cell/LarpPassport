@@ -1,18 +1,18 @@
 # The Black Tide — Plovdiv event readiness checklist
 
-Working plan, 7 October 2026. Event: Saturday 31 October, 16:30–23:00, up to 20 players, five crews of up to four, two GMs. The [game guide](GAME_GUIDE.md) defines approved rules; [implementation status](IMPLEMENTATION_STATUS.md) records code evidence. A checkbox here means work still to do unless explicitly marked complete. No venue, outdoor point, permit, or APK is booked, surveyed, or approved by this document.
+Internal readiness updated 9 October 2026; location/venue research remains dated 7 October. Event: Saturday 31 October, 16:30–23:00, up to 20 players, five crews of up to four, two GMs. The [game guide](GAME_GUIDE.md) defines approved rules; [implementation status](IMPLEMENTATION_STATUS.md) records code evidence. A checkbox here means work still to do unless explicitly marked complete. No venue, outdoor point, permit, or APK is booked, surveyed, or approved by this document.
 
 **Latest scope:** 5 shard riddles (each +1 shard and doubloons), 4 oath riddles (each one word and doubloons), 3 reading-only lighthouses, and a separate staffed treasure point: **12 activity sites, 13 physical locations**. Each riddle site's doubloons follow the order of correct answers, 20/15/10/5/5. No caches or Safe Harbour zones. This supersedes the earlier layouts.
 
 ## 1. Decisions and critical path
 
-- [x] Fix city, date, maximum attendance, five-crew structure, and fifth correct-answer rank: Plovdiv; 31 October; 20 players; five crews of up to four; all nine riddle sites pay 20/15/10/5/5. They distribute at most 495 doubloons. This rule is **documented but not implemented**.
+- [x] Fix city, date, maximum attendance, five-crew structure, and fifth correct-answer rank: Plovdiv; 31 October; 20 players; five crews of up to four; all nine riddle sites pay 20/15/10/5/5. They distribute at most 495 doubloons. The riddle rewards and frozen treasure value are implemented; field balance remains unverified.
 - [ ] Name the event owner, Admiralty GM, Ghost Captain GM, and a backup contact. Decide who can make a final safety call and who can change game rules on the night.
-- [ ] Confirm player age range, accessibility needs, language, budget per person, and whether everyone can use an Android phone. The current build has no iOS path. Arrange loaner Android phones if needed.
+- [ ] Confirm player age range, accessibility needs, language, budget per person, and whether everyone can use an Android phone. Android is the supported distribution here; an iOS build and device flow have not been verified. Arrange loaner Android phones if needed.
 - [ ] Choose and reserve one central, indoor Tavern Truce and Final Muster venue for approximately 22 people (20 players plus two GMs), 16:30 check-in if used for Muster, 19:45–20:30 meal, and 23:00 awards. Confirm seating, food, toilets, charging, noise, costumes, payment and late closing. The `truce` phase pauses play globally; the venue has no Safe Harbour zone.
 - [ ] Complete a daylight scouting walk, then a dusk/night walk, before locking any zone. Confirm accessibility at the exact intended hours; do not put an answer behind a ticket gate or inside a building that closes before the last crew arrives.
 - [ ] Fix the separate treasure point and three lighthouse centres, run `tools/pirate/simulate_triangulation.py`, and validate on the ground. Keep the exact treasure point GM-only.
-- [ ] Write and test all 11 riddles against the chosen physical features. Enter the content only after code, database, and route are ready.
+- [ ] Write and test all 9 riddles against the chosen physical features. Enter the content only after code, database, and route are ready.
 - [ ] Complete the code and release gates in sections 5–6, then run a real-field rehearsal on 24 October. Fix blocking defects before printing final charts.
 
 ## 2. Plovdiv location research and selection
@@ -77,36 +77,31 @@ These are **candidate clusters, not approved game pins**. Some contain several p
 - [ ] Prepare a one-page GM incident log and scoring sheet: timestamps, missing player, site outage, Parley dispute, correction, reason, outcome and crew notified. Keep emergency contact details outside the app as a backup.
 - [ ] Budget venue/meal, printing, armbands, loaner phones/SIMs, power banks, prizes, staff transport and contingency. Confirm who pays and when.
 
-## 5. Code and database work still required
+## 5. Code and database verification
 
-The current `main` contains the Pirate migration, dashboard and Android screens, and the original Pirate pgTAP suites passed in remote CI against a local Supabase stack. The Pirate migration was applied to the hosted project before this rules change. The **new** site and treasure rules have no migration or client implementation yet, and full device-gameplay QA has not happened. JavaScript tests and an Android export do not prove the field game works.
+The implemented rules, source files and current checks are recorded in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+The revised riddle layout, payouts, frozen hoard value, flexible setup, captains, claim voids and GM balance adjustments already exist.
+Do not reimplement them. Future correction tools and editable settings are [deferred work](AGENT_PLAN.md), not event prerequisites unless the owner promotes them.
 
-- [ ] **New site rule:** change `pirate_validate` to five crews, five shard sites, four oath sites, three lighthouses, zero caches and harbours, and one separate treasure zone. A correct shard-site answer atomically awards +1 shard and doubloons; a correct oath-site answer reveals its word and awards doubloons. Rank is by correct-answer order at each site, 20/15/10/5/5. Test five simultaneous correct answers, retries, void/reclaim of all rewards, and the 495-doubloon maximum.
-- [ ] **Treasure value:** on the first GM transition to `hoard` (normally 22:00), freeze `round(0.40 × highest crew doubloon balance)` before any treasure award. Include earlier riddle, Parley and GM ledger changes. Store the leading balance, value and snapshot time for audit. Phase re-entry, later transfers, void and re-award retain that value. Test fractional rounding, ties, zero balances and concurrent scoring at opening. Remove the fixed `40` input from setup and dashboard.
-- [ ] **GM recovery:** implement audited, reason-required `gm_adjust`, `gm_claim_for`, `gm_void_claim`, `gm_void_reading`, and `gm_set_mercy`; expose them in the dashboard, including phone-width controls. Existing treasure award/void and Parley ruling/void are present but require database and device verification.
-- [ ] **GM overview:** add ledger, claims, riddle-site correct-answer ranks, readings and Parley drill-down; crew-member staleness/spread alert; site status and quick deactivate; map or mapless view that remains usable when tiles fail.
-- [ ] **Second GM:** verify a supported path for the Ghost Captain to join as GM and retain access from a phone. If absent, add a guarded role-management path that cannot remove the last GM.
-- [ ] **Player flow:** complete or verify all Landfall status and retry messages, oath/hold visibility, reading display and heading calibration, Parley restart recovery, dispute feedback, phase events and logbook copy. Ensure Pirate mode stays isolated from ordinary Time Hunt.
-- [ ] **Test data:** add a local-only five-crew seed fixture for all 13 physical sites, with no chance of running it on hosted production.
-- [ ] **Security/edge cases:** execute RLS and function authorization tests for GM-only answers and treasure; negative balances; double claims; simultaneous correct-answer ranks at both riddle types, Parley joins and plunder; phase and pause gates; stale GPS; overlapping zones; revoked location consent; wrong answer lockout; offline retry. Preserve the Time Hunt privacy and confirmation invariants.
-- [ ] Run all pgTAP suites and concurrency checks on an isolated Supabase/PostGIS stack (or the existing GitHub Actions Docker database job), plus dashboard tests/build, mobile tests/Doctor/export. Do not use production as the test database.
-- [ ] Create and review a new additive migration for the revised rules; run its pgTAP and concurrency tests in an isolated Supabase stack, then verify migration order against the already reconciled hosted history before applying it. Record the resulting hosted version and advisor delta.
+- [ ] Apply the reviewed Parley corrective migration to the hosted backend after verification; compare migration histories and record exact version.
+- [ ] Verify both GM accounts, strict proximity at every Parley decision, location outage recovery, expiry/disputes and correction controls against the deployed dashboard and candidate APK.
+- [ ] Rehearse the actual event layout. `pirate_validate` warnings about counts do not block smaller test games; structural issues still block charting.
 
 ## 6. Release and field rehearsal
 
 - [ ] Produce an installable Pirate APK with the correct public Supabase configuration and an agreed signing/distribution plan. Its package ID replaces the ordinary LARP Passport app on the same phone; warn testers and plan rollback/reinstall.
 - [ ] Boot the exact candidate APK on at least two Android models. Verify login, joining, location sharing and consent, foreground/background recovery, compass heading, all four player tabs, Parley, and battery drain over at least 60 minutes.
 - [ ] Deploy a preview dashboard and verify mobile-width Ghost Captain actions. Confirm the dashboard and APK target the same reviewed backend. Record exact commit, CI run, migration list, deployment ID and APK hash in a release record.
-- [ ] Before the real-game database is populated, enter five crews, zone geometry, 13 site records, answers, oath words, treasure and GM roles. Run `pirate_validate` and inspect every failure. Restrict the treasure point and answer list to GMs.
+- [ ] Before the real-game database is populated, enter five crews, zone geometry, 12 activity-site records and the separate treasure point, answers, oath words, treasure and GM roles. Run `pirate_validate` and inspect every failure. Restrict the treasure point and answer list to GMs.
 - [ ] Rehearse on **24 October** with two GMs and 4–6 testers at dusk. Walk every proposed point with two Android models. Solve every riddle in place; claim all site types; take and plot several lighthouse arcs; find the treasure from readings; run Yield, Fight, conflicting reports, GM ruling and void; test pause and PvP off; lose data for five minutes and recover; award/void treasure from the Ghost Captain’s phone.
 - [ ] Time three realistic crew routes. The old 29-point timing estimate is invalid; confirm this shorter map sustains the 285 playable minutes without forcing every crew to visit every site. Adjust pacing, walking distances or puzzle time from rehearsal evidence.
 - [ ] Fix rehearsal defects and freeze gameplay changes by **27 October**. Reprint charts and recheck all pins after any site move. Keep 28–31 October for content, enrolment and verified bug fixes.
 - [ ] On 31 October, before Muster: confirm weather and public access, charge devices, test both GM logins, count crews, verify recent GPS from every phone, perform one private test claim/reading/Parley in a test game, confirm venue and Ghost Captain position, and send the emergency contact/rules to all players.
-- [ ] At Final Muster: pause/finish server phase, account for every person, resolve pending disputes, export/screenshot the final ledger, announce results and record incidents and improvements for the next run.
+- [ ] At Final Muster: pause/finish server phase, account for every person, resolve pending disputes, capture the final crew scoreboard and GM correction notes, announce results and record incidents and improvements for the next run.
 
 ## 7. Go / no-go gates
 
-Do **not** start the live hunt if any of these remain false: safe and permitted route; staffed indoor Truce and Final Muster; both GMs have working access; every player is accounted for and can contact a GM; the five-crew rule is implemented and tested; database migrations and concurrency suite pass in an isolated environment; production migration history is reconciled; exact APK works on real devices against the exact backend; treasure and answers stay private; pause/PvP off and GM corrections work; a field rehearsal finds no critical route or GPS failure. The owner and both GMs should sign this off together.
+Do **not** start the live hunt if any of these remain false: safe and permitted route; staffed indoor Truce and Final Muster; both GMs have working access; every player is accounted for and can contact a GM; the planned crew/site layout has been rehearsed; database migrations and concurrency suite pass in an isolated environment; production migration history is reconciled; exact APK works on real devices against the exact backend; treasure and answers stay private; pause/PvP off and GM corrections work; a field rehearsal finds no critical route or GPS failure. The owner and both GMs should sign this off together.
 
 ## Source status and references
 

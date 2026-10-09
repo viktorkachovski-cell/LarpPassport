@@ -1,6 +1,6 @@
 export function parleyActions(state, now = Date.now()) {
   const active = state?.active_parley
-  const allowed = state?.is_pirate && state.role === 'player' && !state.paused
+  const allowed = state?.is_pirate && state.role === 'player' && !!state.crew?.id && !state.paused
     && state.pvp_enabled && ['cursed', 'hunt', 'hoard'].includes(state.phase)
   const mercy = state?.mercy_until && new Date(state.mercy_until).getTime() > now
   return {

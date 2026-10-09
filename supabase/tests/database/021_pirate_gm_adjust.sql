@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(15);
+select extensions.plan(16);
 
 select extensions.ok(
   has_function_privilege('authenticated', 'public.gm_adjust(uuid,uuid,text,integer,text)', 'EXECUTE')
@@ -67,6 +67,11 @@ select extensions.throws_ok(
        '21200000-0000-0000-0000-000000000001', 'doubloon', -1001, 'Testing the compass') $$,
   '22023', 'game, crew, currency, an amount from 1 to 1000 and a correction reason are required',
   'an amount above 1000 is refused');
+select extensions.throws_ok(
+  $$ select public.gm_adjust('21100000-0000-0000-0000-000000000001',
+       '21200000-0000-0000-0000-000000000001', 'doubloon', '-2147483648'::integer, 'Invalid amount') $$,
+  '22023', 'game, crew, currency, an amount from 1 to 1000 and a correction reason are required',
+  'minimum integer is rejected as invalid input rather than overflowing abs');
 select extensions.is(public.gm_adjust('21100000-0000-0000-0000-000000000001',
   '21200000-0000-0000-0000-000000000002', 'bearing', 1, 'Testing the compass')->>'status',
   'not_found', 'a crew from another game cannot be adjusted');

@@ -27,3 +27,11 @@ test('pause, truce, PvP kill switch and mercy block new Parleys', () => {
     { mercy_until: '2026-10-07T16:15:00Z' },
   ]) expect(parleyActions({ ...base, ...state }, Date.parse('2026-10-07T16:00:00Z')).canOpen).toBe(false)
 })
+
+test('players without a crew cannot open or join a Parley', () => {
+  for (const crew of [null, {}, undefined]) {
+    const actions = parleyActions({ ...base, crew })
+    expect(actions.canOpen).toBe(false)
+    expect(actions.canJoin).toBe(false)
+  }
+})

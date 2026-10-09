@@ -1,5 +1,7 @@
 # Supabase Architecture
 
+Updated 2026-10-09 against the ordered repository migrations. Hosted migration history is recorded in [Pirate implementation status](pirate-game/IMPLEMENTATION_STATUS.md); source code and a live deployment are separate evidence.
+
 ## Overview
 
 The rebuilt stack keeps application logic close to the data while retaining
@@ -45,6 +47,12 @@ Internal `private` tables:
 | `hunt_rounds` | Server-owned lifecycle and winner for each time hunt |
 | `hunt_players` | Secret target chain, eliminations, and cloak expiry |
 | `hunt_claims` | Victim-confirmed elimination workflow |
+| `pirate_games` | Pirate mode, pause/PvP, secret treasure/HMAC state and frozen value |
+| `pirate_sites` / `pirate_attempts` | Private site answers/oath words and crew-wide wrong-answer lockout |
+| `pirate_claims` / `pirate_ledger` | Crew claims and append-only bearing/doubloon accounting |
+| `pirate_readings` / `pirate_captains` | Deterministic compass records and captain ownership |
+| `pirate_parleys` / `pirate_mercy` | Two-player encounters, reports, transfers and loser immunity |
+| `pirate_treasure_awards` | Audited one-active-award hoard history |
 
 `zones_view` and `player_positions_view` are security-invoker views. Realtime
 publishes only `characters`, `game_events`, `game_players`,
@@ -60,7 +68,7 @@ game. The `games.join_code` column is excluded from the member SELECT grant
 (clients must name columns; `select *` on `games` fails) and is served to GMs
 through `gm_get_join_code`.
 
-The callable RPCs are:
+Core membership/Time Hunt RPCs include:
 
 - `join_game(code)`: validates/rate-limits the join code and creates membership.
 - `gm_get_join_code(g)`: returns the game's join code to its GMs only.
@@ -91,11 +99,30 @@ The callable RPCs are:
 - `send_gm_message(g, message)`: records a rate-limited player message of at
   most 100 characters in the GM event stream.
 
-These RPCs intentionally use `SECURITY DEFINER` with `search_path = ''` because
-they cross RLS/private-table boundaries. Supabase's security advisor therefore
-reports sixteen expected warnings. Removing definer execution would break these
-API contracts; any new definer RPC needs the same explicit authentication,
-validation, schema qualification, revocation, and test coverage.
+Core and Pirate RPCs intentionally use `SECURITY DEFINER` with `search_path = ''` where they cross RLS/private-table boundaries. They require explicit authentication/authorization, input validation, schema qualification and restricted grants. Check advisor findings against actual callable functions rather than relying on a historical warning count.
+
+## Pirate mode
+
+A row in `private.pirate_games` identifies the mode; `public.games.phase` stores its phase.
+Pirate setup and Hunt start reject incompatible mode state. The ten private Pirate tables deny direct client access;
+players use scoped RPCs and GMs use privileged overview/setup/correction calls. No Pirate table is added to Realtime.
+Treasure coordinates are GM-only; answer hashes and the HMAC secret are never returned to clients.
+
+Player API and mechanics are described once in [GAME_GUIDE.md](pirate-game/GAME_GUIDE.md).
+GM setup uses `pirate_enable`, `pirate_set_site`, `pirate_clear_site`, `pirate_set_treasure`, `pirate_validate`,
+`pirate_set_captain`, `pirate_set_phase`, `pirate_set_paused`, `pirate_set_pvp` and `gm_pirate_overview`.
+Correction RPCs are `gm_adjust`, `gm_void_claim`, `gm_award_treasure`, `gm_void_treasure`, `gm_resolve_parley` and `gm_void_parley`.
+The GM overview returns site prompts and claim ranks, never answers or oath words.
+
+Mutations serialize with the game's `pirate:` advisory transaction lock. In the corrective review migration,
+`get_pirate_state` and `gm_pirate_overview` are volatile: they also take that lock and sweep expired Parleys before returning state.
+This makes polling release stale codes and surface disputes; it creates no timer/background job. Public RPC signatures/grants remain unchanged.
+`private.pirate_parley_pair_presence` shares the fresh-location, exclusion and <=75 m checks at each new participant decision.
+Existing committed retries return their saved outcome without a second transfer.
+
+Ledger entries are append-only; claim/Parley/treasure voids compensate them and reject overdraws.
+The first `hoard` transition freezes `round(0.40 * highest crew doubloon balance)` once; re-entry and re-awards retain it.
+`pirate_games.settings` is reserved storage, not an implemented tunable-settings API.
 
 ## Time Hunt
 
@@ -178,32 +205,13 @@ npx supabase test db supabase/tests/database
 ```
 
 The hosted production project is `Passport` (`ufcnxkowpkwayczbfnzy`). The
-production dashboard is <https://larp-passport.vercel.app>. Database migrations
-and both clients are currently aligned to this project.
+production dashboard is <https://larp-passport.vercel.app>. Client environment configuration must target the reviewed project; verify it for each deployment/APK. A repository push does not apply database migrations.
 
-Current hosted test coverage is transactional and leaves no fixtures behind.
-The 42-check architecture suite verifies schema/RLS/grants, Auth profile
-creation, GM membership, join flow, zone privacy, join-code containment,
-profile visibility, consent (including position deletion on revocation),
-draft-game pings, per-point validation, idempotent pings, stale-ping zone
-skipping, PostGIS zone state, and event emission.
-The time-hunt suite adds 66 checks covering secret assignments, roster and
-character locks, messages, anonymous confirmation, elimination, GM target
-assignment, cloak, location revocation, final-winner completion, GM recovery,
-and account deletion with hunt history. A separate 12-check PostGIS suite
-covers safe interior positions, edge warnings, exits with hysteresis, claim
-forfeiture, duplicate suppression, never-entered players, and warning
-rearming.
+The maintained pgTAP suite lives in `supabase/tests/database`; it covers architecture/RLS, Hunt privacy/recovery, tracking/delivery and Pirate gameplay. Tests run transactionally and roll back fixtures. `supabase/tests/concurrency.py` and `pirate_concurrency.py` use real concurrent connections to the disposable local database and clean up their fixtures. Current counts and verification limits live in [IMPLEMENTATION_STATUS.md](pirate-game/IMPLEMENTATION_STATUS.md).
 
 ### Hosted Auth URL
 
-The fresh project requires one platform setting that is not database-managed.
-In Supabase Dashboard, open **Authentication > URL Configuration**, set **Site
-URL** to `https://larp-passport.vercel.app`, and add that same URL to **Redirect
-URLs**. Email confirmation is enabled, so this prevents successful confirmation
-links from ending on the default `http://localhost:3000` page. Until this is
-changed, confirmation still verifies the user, who can return to the app and
-sign in manually.
+Auth URL configuration is outside the migrations. Before a release, verify the hosted **Authentication > URL Configuration** Site URL and allowed redirect URLs against `https://larp-passport.vercel.app` (and intentional previews). This review did not inspect hosted Auth settings, so an old setup instruction is not evidence that the setting is still wrong. Local Auth settings in `supabase/config.toml` are separate.
 
 ## Local And Device Testing
 
@@ -212,7 +220,7 @@ not need access to a backend running on the laptop.
 
 ```powershell
 cd larp-passport\mobile
-npm install
+npm ci
 npm run android
 ```
 
@@ -230,7 +238,7 @@ Run the dashboard locally with:
 
 ```powershell
 cd larp-dashboard
-npm install
+npm ci
 npm run dev -- --host
 ```
 
@@ -241,7 +249,7 @@ It is closer to production and does not expose a laptop port directly.
 
 1. Apply versioned Supabase migrations before deploying clients that depend on
    new RPCs or columns.
-2. Run both pgTAP suites, dashboard tests/build, and an Android Expo export.
+2. Run the full gate in [RELEASE.md](RELEASE.md), including all database suites, both concurrency scripts, dashboard tests/build and both Android exports.
 3. Push the tested revision to GitHub and deploy that exact revision to Vercel.
 4. Build the mobile preview/production binary with the corresponding Expo
    environment variables.
