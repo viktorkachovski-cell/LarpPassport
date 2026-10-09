@@ -1,11 +1,25 @@
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { C, F, T } from '../../lib/theme'
-import { BackIcon, Rivets, WoodBackdrop } from '../../pirate/ui'
+import { BackIcon, PressPlank, Rivets, WoodBackdrop } from '../../pirate/ui'
 
 // The Black Tide dresses GameFrame as a ship: a riveted wooden rail, a brass
 // back boss, plank tabs and plank state cells over deck planking.
 function BrassBack() {
   return <View style={styles.brassBoss}><BackIcon size={22} color={C.wood900} /></View>
+}
+
+// A nailed plank per tab. The selected plank is seated into the rail and
+// takes the tide-green stain with a brass edge.
+function PlankTab({ label, selected, scroll, onPress }) {
+  return (
+    <PressPlank accessibilityRole="tab" accessibilityLabel={label.toLowerCase()} accessibilityState={{ selected }}
+      selected={selected} onPress={onPress} nails
+      face={selected ? C.tide : C.wood600} lip={selected ? C.brassDeep : C.woodSeam} edge={selected ? C.brass : C.onWoodMuted}
+      style={scroll ? styles.plankTabScroll : styles.plankTab}>
+      <Text style={[styles.tabText, selected && styles.activeTabText]} numberOfLines={1}
+        adjustsFontSizeToFit minimumFontScale={0.8}>{label}</Text>
+    </PressPlank>
+  )
 }
 
 const styles = StyleSheet.create({
@@ -35,12 +49,11 @@ const styles = StyleSheet.create({
   tabs: { backgroundColor: 'transparent', borderBottomWidth: 0, paddingHorizontal: 10, paddingVertical: 10, gap: 6 },
   scrollTabsWrap: { backgroundColor: 'transparent', borderBottomWidth: 0 },
   scrollTabs: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
-  tab: { backgroundColor: C.wood600, borderRadius: 10, borderWidth: 1, borderColor: C.woodSeam, borderBottomWidth: 3, borderBottomColor: C.woodSeam, elevation: 3 },
-  scrollTab: { minWidth: 96, paddingHorizontal: 12 },
-  activeTab: { backgroundColor: C.tide, borderBottomColor: C.brass, elevation: 0, transform: [{ translateY: 2 }] },
-  tabText: { color: C.onWood, fontFamily: F.displayBold, fontSize: 16, letterSpacing: 0.2 },
-  activeTabText: { color: C.onWood },
+  plankTab: { flex: 1 },
+  plankTabScroll: { minWidth: 96 },
+  tabText: { color: C.onWoodMuted, fontFamily: F.displayBold, fontSize: 16, letterSpacing: 0.2, paddingHorizontal: 4, textAlign: 'center' },
+  activeTabText: { color: C.onWood, textShadowColor: C.woodSeam, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
 })
 
 // quietSync: the sync line shows only when data is old or a request failed.
-export const skin = { styles, Backdrop: WoodBackdrop, HeaderDecor: Rivets, BackGlyph: BrassBack, upperName: false, quietSync: true }
+export const skin = { styles, Backdrop: WoodBackdrop, HeaderDecor: Rivets, BackGlyph: BrassBack, upperName: false, quietSync: true, TabButton: PlankTab }

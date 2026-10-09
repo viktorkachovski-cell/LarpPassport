@@ -1,7 +1,8 @@
-import { memo } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { memo, useEffect, useRef, useState } from 'react'
+import { Animated, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import Svg, { Circle, Defs, Line, Path, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg'
 import { C, F, S, T } from '../lib/theme'
+import { useReducedMotion } from '../lib/useReducedMotion'
 
 // The Black Tide building blocks: wood, parchment and brass. Pirate build only.
 
@@ -67,15 +68,74 @@ export function SheetTitle({ children }) {
   return <Text style={styles.sheetTitle} accessibilityRole="header">{children}</Text>
 }
 
+// A raised plank or brass plate on a dark lip. The face sinks onto the lip
+// while pressed and stays seated while selected. Only a transform animates,
+// on the native driver; reduced motion snaps instead of springing.
+const LIP = 5
+const SEATED = 0.7 // a selected tab sits most of the way down
+
+export function PressPlank({
+  children, onPress, disabled, selected = false, face, lip, edge, nails = false, grain = true,
+  style, faceStyle, accessibilityRole = 'button', accessibilityLabel, accessibilityState,
+}) {
+  const reduced = useReducedMotion()
+  const [pressed, setPressed] = useState(false)
+  const depth = useRef(new Animated.Value(selected ? SEATED : 0)).current
+  const target = pressed ? 1 : selected ? SEATED : 0
+
+  useEffect(() => {
+    if (reduced) { depth.setValue(target); return undefined }
+    const animation = Animated.spring(depth, {
+      toValue: target, useNativeDriver: true, speed: pressed ? 40 : 18, bounciness: pressed ? 0 : 6,
+    })
+    animation.start()
+    return () => animation.stop()
+  }, [depth, target, pressed, reduced])
+
+  const translateY = depth.interpolate({ inputRange: [0, 1], outputRange: [0, LIP - 1] })
+  return (
+    <Pressable accessibilityRole={accessibilityRole} accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: !!disabled, ...accessibilityState }} disabled={disabled}
+      onPress={onPress} onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)}
+      style={[styles.plankOuter, disabled && styles.disabled, style]}>
+      <View style={[styles.plankLip, { backgroundColor: lip }]} />
+      <Animated.View style={[styles.plankFace, { backgroundColor: face, borderTopColor: edge }, faceStyle, { transform: [{ translateY }] }]}>
+        {grain && <View pointerEvents="none" style={styles.grainWrap} importantForAccessibility="no-hide-descendants">
+          <View style={[styles.grain, { top: '28%' }]} />
+          <View style={[styles.grain, styles.grainFaint, { top: '62%' }]} />
+        </View>}
+        {nails && <View pointerEvents="none" style={[styles.nail, styles.nailLeft]} />}
+        {nails && <View pointerEvents="none" style={[styles.nail, styles.nailRight]} />}
+        {children}
+      </Animated.View>
+    </Pressable>
+  )
+}
+
+const PLATES = {
+  brass: { face: C.brass, lip: C.brassDeep, edge: C.brassLight, text: 'brassText', grain: false },
+  plank: { face: C.wood600, lip: C.woodSeam, edge: C.onWoodMuted, text: 'woodText', grain: true },
+  blood: { face: C.bloodFill, lip: C.woodSeam, edge: C.blood, text: 'woodText', grain: true },
+}
+
 // Brass for the one action that matters, plank for the rest, blood for hostile
 // or irreversible choices, ink for quiet actions on the sheet.
 export function TideButton({ label, onPress, disabled, variant = 'brass', style, accessibilityLabel }) {
+  const plate = PLATES[variant]
+  if (!plate) {
+    return (
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress} activeOpacity={0.75}
+        style={[styles.button, styles.ink, disabled && styles.disabled, style]}>
+        <Text style={[styles.buttonText, styles.inkText]}>{label}</Text>
+      </TouchableOpacity>
+    )
+  }
   return (
-    <TouchableOpacity accessibilityRole="button" accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress} activeOpacity={0.75}
-      style={[styles.button, styles[variant], disabled && styles.disabled, style]}>
-      <Text style={[styles.buttonText, variant === 'brass' ? styles.brassText : variant === 'ink' ? styles.inkText : styles.woodText]}>{label}</Text>
-    </TouchableOpacity>
+    <PressPlank onPress={onPress} disabled={disabled} face={plate.face} lip={plate.lip} edge={plate.edge}
+      grain={plate.grain} style={style} faceStyle={styles.buttonFace} accessibilityLabel={accessibilityLabel}>
+      <Text style={[styles.buttonText, styles[plate.text]]}>{label}</Text>
+    </PressPlank>
   )
 }
 
@@ -134,11 +194,19 @@ const styles = StyleSheet.create({
   sheet: { borderRadius: 4, borderWidth: 1, borderColor: C.sheetEdge, backgroundColor: C.sheet, padding: 20, gap: 10, overflow: 'hidden' },
   kicker: { color: C.sheetMuted, fontFamily: F.mono, fontSize: 15, lineHeight: 18, letterSpacing: 0.9 },
   sheetTitle: { color: C.sheetInk, fontFamily: F.blackletter, fontSize: 28, lineHeight: 32 },
-  button: { minHeight: S.touch, borderRadius: 6, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 10, elevation: 3 },
-  brass: { backgroundColor: C.brass, borderColor: C.woodSeam, borderTopColor: C.brassLight, borderBottomWidth: 3, borderBottomColor: C.brassDeep },
-  plank: { backgroundColor: C.wood600, borderColor: C.woodSeam, borderBottomWidth: 3 },
-  blood: { backgroundColor: C.bloodFill, borderColor: C.woodSeam, borderBottomWidth: 3 },
-  ink: { backgroundColor: 'transparent', borderColor: C.sheetInk, borderWidth: 1.5, elevation: 0 },
+  button: { minHeight: S.touch, borderRadius: 6, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 10 },
+  ink: { backgroundColor: 'transparent', borderColor: C.sheetInk, borderWidth: 1.5 },
+  plankOuter: { minHeight: S.touch + LIP, paddingBottom: LIP },
+  plankLip: { position: 'absolute', left: 0, right: 0, top: LIP, bottom: 0, borderRadius: 8 },
+  plankFace: { flex: 1, minHeight: S.touch, borderRadius: 8, borderWidth: 1, borderColor: C.woodSeam, borderTopWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  buttonFace: { paddingHorizontal: 16, paddingVertical: 10 },
+  grainWrap: { ...StyleSheet.absoluteFillObject },
+  grain: { position: 'absolute', left: -4, right: -4, height: 1.5, backgroundColor: C.woodSeam, opacity: 0.22, transform: [{ rotate: '-0.6deg' }] },
+  grainFaint: { backgroundColor: C.onWood, opacity: 0.07, height: 2, transform: [{ rotate: '0.5deg' }] },
+  nail: { position: 'absolute', top: 5, width: 5, height: 5, borderRadius: 3, backgroundColor: C.brassDeep, borderWidth: 0.5, borderColor: C.woodSeam },
+  nailLeft: { left: 5 },
+  nailRight: { right: 5 },
   disabled: { opacity: 0.5 },
   buttonText: { fontFamily: F.displayBold, fontSize: T.button, lineHeight: 21, letterSpacing: 0.3, textAlign: 'center' },
   brassText: { color: C.wood900 },

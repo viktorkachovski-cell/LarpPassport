@@ -15,7 +15,8 @@ import { skin } from './frameSkin'
 // Layout shared by both apps' game screens: header, sync line, state strip,
 // tab bar and the character, events and sharing tabs. Each app supplies its
 // own state cells, mode tabs and, as children, the panel for its mode tabs.
-// Each app's frameSkin may restyle the chrome (Time Hunt's skin is empty).
+// Each app's frameSkin may restyle the chrome or supply its own tab button
+// (Time Hunt's skin is empty).
 // Optional: a phase line under the header (the phase chip moves into it), the
 // character or sharing tab left out of the bar, and a GPS button in the header
 // that opens the sharing view instead.
@@ -47,7 +48,9 @@ export function GameFrame({
   )
 
   const tabButtons = [...modeTabs, sheetTab, ['events', eventsLabel], shareTab].filter(Boolean)
-    .map(([key, label]) => (
+    .map(([key, label]) => skin.TabButton ? (
+      <skin.TabButton key={key} label={label} selected={tab === key} scroll={scrollTabs} onPress={() => setTab(key)} />
+    ) : (
       <TouchableOpacity key={key} accessibilityRole="tab" accessibilityState={{ selected: tab === key }}
         accessibilityLabel={label.toLowerCase()} onPress={() => setTab(key)}
         style={[styles.tab, sk.tab, scrollTabs && styles.scrollTab, scrollTabs && sk.scrollTab, tab === key && styles.activeTab, tab === key && sk.activeTab]}>
