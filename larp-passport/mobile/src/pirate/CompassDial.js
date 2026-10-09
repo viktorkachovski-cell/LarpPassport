@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, StyleSheet, Text, View } from 'react-native'
-import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg'
+import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Stop, Text as SvgText } from 'react-native-svg'
 import { cardinalLabel, formatBearing, headingQuality, usableTrueHeading } from '../lib/direction'
 import { arcPath, bearingRangeLabel, smoothHeading } from '../lib/pirateCompass'
 import { C, F } from '../lib/theme'
@@ -37,7 +37,12 @@ function rosePoint(deg, length, width, light, dark, key) {
 const Bezel = memo(function Bezel() {
   return (
     <Svg width={WIDTH} height={HEIGHT} style={StyleSheet.absoluteFill}>
-      <Circle cx={CX} cy={CY} r={128} fill={C.brass} stroke={C.woodSeam} strokeWidth={2} />
+      <Defs><LinearGradient id="bezelLight" x1="0" y1="0" x2="0.8" y2="1">
+        <Stop offset="0" stopColor={C.brassLight} />
+        <Stop offset="0.38" stopColor={C.brass} />
+        <Stop offset="1" stopColor={C.brassDeep} />
+      </LinearGradient></Defs>
+      <Circle cx={CX} cy={CY} r={128} fill="url(#bezelLight)" stroke={C.woodSeam} strokeWidth={2} />
       <Circle cx={CX} cy={CY} r={125} fill="none" stroke={C.brassLight} strokeWidth={1.5} />
       <Circle cx={CX} cy={CY} r={114} fill="none" stroke={C.brassDeep} strokeWidth={3} />
     </Svg>
@@ -63,6 +68,10 @@ export const CompassDial = memo(function CompassDial({ reading, active = true })
   const reduced = useReducedMotion()
   const rotation = useRef(new Animated.Value(0)).current
   const lastHeading = useRef(null)
+  // Only the drawing is scaled. Its original SVG coordinates and heading/
+  // bearing calculations stay unchanged, including on narrow phones.
+  const [availableWidth, setAvailableWidth] = useState(WIDTH)
+  const scale = Math.min(1, Math.max(1, availableWidth) / WIDTH)
   const range = reading && bearingRangeLabel(reading.centre_deg, reading.half_width_deg)
   const cardinal = reading ? cardinalLabel(reading.centre_deg) : null
 
@@ -135,15 +144,19 @@ export const CompassDial = memo(function CompassDial({ reading, active = true })
     inputRange: [-360, 0, 360], outputRange: ['-360deg', '0deg', '360deg'], extrapolate: 'extend',
   })
   return (
-    <View style={styles.root} accessibilityLabel={`Compass arc ${range}, centred ${cardinal} from true north`}>
-      <View style={styles.dial}>
-        <Bezel />
-        <Animated.View style={[styles.card, { opacity: quality === 'ok' ? 1 : 0.6, transform: [{ rotate: spin }] }]}>
-          {card}
-        </Animated.View>
-        <Lubber />
-        <View style={styles.headingTag} importantForAccessibility="no-hide-descendants">
-          <Text style={styles.headingText}>Facing {trueHeading == null ? '---' : formatBearing(trueHeading)}</Text>
+    <View style={styles.root} onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)}
+      accessibilityLabel={`Compass arc ${range}, centred ${cardinal} from true north`}>
+      <View style={{ width: WIDTH * scale, height: HEIGHT * scale }}>
+        <View style={[styles.dial, { position: 'absolute', left: (WIDTH * scale - WIDTH) / 2,
+          top: (HEIGHT * scale - HEIGHT) / 2, transform: [{ scale }] }]}>
+          <Bezel />
+          <Animated.View style={[styles.card, { opacity: quality === 'ok' ? 1 : 0.6, transform: [{ rotate: spin }] }]}>
+            {card}
+          </Animated.View>
+          <Lubber />
+          <View style={styles.headingTag} importantForAccessibility="no-hide-descendants">
+            <Text style={styles.headingText}>Facing {trueHeading == null ? '---' : formatBearing(trueHeading)}</Text>
+          </View>
         </View>
       </View>
       <Text style={styles.range}>{range}</Text>
@@ -154,7 +167,7 @@ export const CompassDial = memo(function CompassDial({ reading, active = true })
 })
 
 const styles = StyleSheet.create({
-  root: { alignItems: 'center', gap: 6 },
+  root: { alignSelf: 'stretch', alignItems: 'center', gap: 8 },
   dial: { width: WIDTH, height: HEIGHT },
   card: { position: 'absolute', left: CX - CARD, top: CY - CARD, width: BOX, height: BOX },
   headingTag: { position: 'absolute', top: 0, left: CX - 52, width: 104, height: 24, borderRadius: 12, backgroundColor: C.wood900, borderWidth: 1, borderColor: C.brassDeep, alignItems: 'center', justifyContent: 'center' },

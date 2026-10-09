@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { StyleSheet, Text, TextInput, View } from 'react-native'
 import { supabase } from '../lib/supabase'
 import { C, F, S, T } from '../lib/theme'
 import { compassProgress } from '../lib/pirateCompass'
@@ -8,6 +8,7 @@ import { riddleRewardText } from '../lib/pirateRules'
 import { CompassDial } from './CompassDial'
 import { claimClosedReason, claimsOpen, compassOpen, readingClosedReason } from './phases'
 import { Kicker, Notice, Sheet, SheetTitle, TideButton } from './ui'
+import { MotionScrollView as ScrollView, TouchableOpacity } from '../ui/presentation'
 
 const ordinal = (n) => ['first', 'second', 'third', 'fourth', 'fifth'][n - 1] ?? `#${n}`
 
@@ -197,17 +198,17 @@ export function PiratePanel({ mode, state, error, gameId, refresh, sharing, chec
 }
 
 const styles = StyleSheet.create({
-  root: { padding: S.pad, gap: 10, paddingBottom: 40 },
+  root: { padding: 16, gap: 16, paddingBottom: 40 },
   body: { color: C.sheetInk, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: T.lineBody },
   muted: { color: C.sheetMuted, fontFamily: F.body, fontSize: 15, lineHeight: 21 },
   prompt: { color: C.sheetInk, fontFamily: F.bodyMedium, fontStyle: 'italic', fontSize: 18, lineHeight: 26, marginVertical: 4 },
-  input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 6,
-    fontFamily: F.body, fontSize: 18, minHeight: S.touch, paddingHorizontal: 14 },
+  input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 10,
+    fontFamily: F.body, fontSize: 18, minHeight: S.touch, paddingHorizontal: 16, paddingVertical: 12 },
   rule: { height: 1, backgroundColor: C.sheetRule, marginVertical: 6 },
-  ledgerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 },
-  ledgerLabel: { color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
+  ledgerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 },
+  ledgerLabel: { flex: 1, color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
   ledgerValue: { flexShrink: 1, color: C.sheetInk, fontFamily: F.bodyMedium, fontSize: 18, lineHeight: 25, textAlign: 'right' },
-  reading: { minHeight: S.touch, justifyContent: 'center', borderColor: C.sheetMuted, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8 },
-  readingSelected: { backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 2 },
+  reading: { minHeight: S.touch, justifyContent: 'center', borderColor: C.sheetMuted, borderWidth: 1, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 },
+  readingSelected: { backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5 },
   readingName: { color: C.sheetInk, fontFamily: F.bodySemiBold, fontSize: 17, lineHeight: 22 },
 })

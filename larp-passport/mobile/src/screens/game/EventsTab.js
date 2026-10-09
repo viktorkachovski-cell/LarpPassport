@@ -1,11 +1,12 @@
 import { memo, useState } from 'react'
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ScrollView, Text, TextInput, View } from 'react-native'
 import { COPY } from '../../lib/brand'
 import { supabase } from '../../lib/supabase'
 import { C, F, S, T } from '../../lib/theme'
 import { eventInfo } from '../../lib/events'
 import { formatAge } from '../../lib/time'
 import { common } from '../../ui/common'
+import { screenStyles, TouchableOpacity } from '../../ui/presentation'
 import { OutcomeNote } from '../../ui/primitives'
 
 const copy = COPY.log
@@ -84,7 +85,7 @@ function PlayerMessageBox({ gameId }) {
   )
 }
 
-const styles = StyleSheet.create({
+const styles = screenStyles('events', {
   messageCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 13, marginBottom: 13 },
   messageTitle: { color: C.text, fontFamily: F.bodyBold, fontSize: T.bodyLarge },
   messageInput: { marginTop: 9 },

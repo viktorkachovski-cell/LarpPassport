@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { COPY, themeName } from '../lib/brand'
 import { C, F, S, T } from '../lib/theme'
+import { ScreenEntrance, screenStyles, TouchableOpacity } from '../ui/presentation'
 
 export default function AuthScreen() {
   const [mode, setMode] = useState('signin')
@@ -51,6 +52,7 @@ export default function AuthScreen() {
       <View pointerEvents="none" importantForAccessibility="no" style={styles.scanLineTwo} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
       <ScrollView contentContainerStyle={styles.keyboard} keyboardShouldPersistTaps="handled">
+        <ScreenEntrance transitionKey={mode}>
         <View style={styles.identityBlock}>
           <View style={styles.markOuter}><View style={styles.markInner} /></View>
           {!!copy.eyebrow && <Text style={styles.eyebrow}>{copy.eyebrow}</Text>}
@@ -81,6 +83,7 @@ export default function AuthScreen() {
           </TouchableOpacity>
         </View>
         {!!copy.footer && <Text style={styles.footer}>{copy.footer}</Text>}
+        </ScreenEntrance>
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -96,7 +99,7 @@ function Field({ label, ...props }) {
   )
 }
 
-const styles = StyleSheet.create({
+const styles = screenStyles('auth', {
   safe: { flex: 1, backgroundColor: C.ink },
   flex: { flex: 1 },
   keyboard: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 22, paddingVertical: 26 },

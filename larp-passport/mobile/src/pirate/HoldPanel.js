@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { MotionScrollView as ScrollView } from '../ui/presentation'
+import { StyleSheet, Text, View } from 'react-native'
 import { C, F, S, T } from '../lib/theme'
 import { CharacterSheet, CreateCharacter } from '../screens/game/CharacterTab'
 import { DoubloonIcon, Kicker, Notice, ShardIcon, Sheet, SheetTitle } from './ui'
@@ -69,15 +70,15 @@ export function HoldPanel({ state, error, session }) {
 }
 
 const styles = StyleSheet.create({
-  root: { padding: S.pad, gap: 10, paddingBottom: 40 },
+  root: { padding: 16, gap: 16, paddingBottom: 40 },
   crewName: { color: C.onWood, fontFamily: F.blackletter, fontSize: 34, lineHeight: 40, textShadowColor: C.woodSeam, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   body: { color: C.sheetInk, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: T.lineBody },
   muted: { color: C.sheetMuted, fontFamily: F.body, fontSize: 15, lineHeight: 21 },
   rule: { height: 1, backgroundColor: C.sheetRule, marginVertical: 6 },
-  ledgerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16, minHeight: 30 },
-  ledgerName: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ledgerLabel: { color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
+  ledgerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16, minHeight: 40 },
+  ledgerName: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ledgerLabel: { flexShrink: 1, color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
   ledgerValue: { flexShrink: 1, color: C.sheetInk, fontFamily: F.numeric, fontSize: 19, lineHeight: 25, textAlign: 'right' },
   missing: { color: C.sheetMuted, fontFamily: F.body },
-  pirate: { marginTop: 6 },
+  pirate: { marginTop: 8 },
 })

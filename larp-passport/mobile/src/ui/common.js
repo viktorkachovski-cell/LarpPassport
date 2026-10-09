@@ -1,8 +1,8 @@
-import { StyleSheet } from 'react-native'
 import { C, F, S, T } from '../lib/theme'
+import { screenStyles } from './presentation'
 
 // Styles shared by more than one game tab and the UI primitives.
-export const common = StyleSheet.create({
+export const common = screenStyles('common', {
   flex: { flex: 1 },
   scrollContent: { padding: 15, paddingBottom: 32 },
   neutralCard: { backgroundColor: C.panel, borderColor: C.line, borderWidth: 1, borderRadius: 10, padding: 17 },

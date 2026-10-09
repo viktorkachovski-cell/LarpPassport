@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { COPY, OTHER_APP, ownsGame } from '../../lib/brand'
 import { describeServerSync, describeSharing } from '../../lib/syncStatus'
@@ -7,6 +7,7 @@ import { C, F, S, T, toneColor } from '../../lib/theme'
 import { useNow } from '../../lib/useNow'
 import { common } from '../../ui/common'
 import { LiveDot } from '../../ui/primitives'
+import { ScreenEntrance, TouchableOpacity } from '../../ui/presentation'
 import { CharacterSheet, CreateCharacter } from './CharacterTab'
 import { EventsTab } from './EventsTab'
 import { SharingTab } from './SharingTab'
@@ -74,7 +75,7 @@ export function GameFrame({
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to games" onPress={onBack} style={[styles.backButton, sk.backButton]}>
           {skin.BackGlyph ? <skin.BackGlyph /> : <Text style={styles.backText}>&lt;</Text>}
         </TouchableOpacity>
-        <Text style={[styles.gameName, sk.gameName]} numberOfLines={1}>{skin.upperName ? game.name.toUpperCase() : game.name}</Text>
+        <Text style={[styles.gameName, sk.gameName]} numberOfLines={skin.nameLines ?? 1}>{skin.upperName ? game.name.toUpperCase() : game.name}</Text>
         {!phaseHint && phaseChip}
         {gpsInHeader && <GpsButton session={session} selected={tab === 'share'} onPress={() => setTab('share')} />}
       </View>
@@ -97,6 +98,7 @@ export function GameFrame({
             contentContainerStyle={[styles.scrollTabs, sk.scrollTabs]}>{tabButtons}</ScrollView>
         : <View style={[styles.tabs, sk.tabs]}>{tabButtons}</View>}
 
+      <ScreenEntrance transitionKey={tab} style={common.flex}>
       {children}
 
       {tab === 'sheet' && sheetTab && (
@@ -120,6 +122,7 @@ export function GameFrame({
           sendNow={session.sendNow}
         />
       )}
+      </ScreenEntrance>
     </SafeAreaView>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { FlatList, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { GAME_COLUMNS, supabase } from '../lib/supabase'
 import { stopSharing } from '../lib/locationTask'
@@ -7,6 +7,7 @@ import { COPY, ownsGame } from '../lib/brand'
 import { C, F, S, T, toneColor } from '../lib/theme'
 import { describeServerSync } from '../lib/syncStatus'
 import { useNow } from '../lib/useNow'
+import { ScreenEntrance, screenStyles, TouchableOpacity } from '../ui/presentation'
 
 const STATUS_COLORS = { active: C.green, draft: C.amber, finished: C.muted }
 const copy = COPY.games
@@ -61,6 +62,7 @@ export default function GamesScreen({ onOpen }) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <ScreenEntrance style={{ flex: 1 }}>
       <View style={styles.header}>
         <View>
           {!!copy.eyebrow && <Text style={styles.eyebrow}>{copy.eyebrow}</Text>}
@@ -124,6 +126,7 @@ export default function GamesScreen({ onOpen }) {
       }} style={styles.signout}>
         <Text style={styles.signoutText}>SIGN OUT</Text>
       </TouchableOpacity>
+      </ScreenEntrance>
     </SafeAreaView>
   )
 }
@@ -141,7 +144,7 @@ function ListSyncStatus({ sync, loading }) {
   )
 }
 
-const styles = StyleSheet.create({
+const styles = screenStyles('games', {
   safe: { flex: 1, backgroundColor: C.ink, paddingHorizontal: 18 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, paddingBottom: 18 },
   eyebrow: { color: C.cyan, fontFamily: F.monoSemiBold, fontSize: T.micro, letterSpacing: 1.3 },

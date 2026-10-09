@@ -1,5 +1,6 @@
+import { MotionScrollView as ScrollView } from '../ui/presentation'
 import { useRef, useState } from 'react'
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { StyleSheet, Text, TextInput, View } from 'react-native'
 import { parleyActions } from '../lib/pirateParley'
 import { pirateRequestId } from '../lib/pirateRequestId'
 import { parleyTerms } from '../lib/pirateRules'
@@ -154,15 +155,15 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
 }
 
 const styles = StyleSheet.create({
-  root: { padding: S.pad, gap: 10, paddingBottom: 40 },
+  root: { padding: 16, gap: 16, paddingBottom: 40 },
   body: { color: C.sheetInk, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: T.lineBody },
   step: { color: C.sheetInk, fontFamily: F.bodyBold, fontSize: 19, lineHeight: 25 },
   muted: { color: C.sheetMuted, fontFamily: F.body, fontSize: 15, lineHeight: 21 },
   rule: { height: 1, backgroundColor: C.sheetRule, marginVertical: 6 },
-  input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 6,
-    fontFamily: F.numeric, fontSize: 22, letterSpacing: 6, minHeight: S.touch, paddingHorizontal: 14 },
-  codeBox: { alignItems: 'center', gap: 2, borderColor: C.sheetInk, borderWidth: 2, borderStyle: 'dashed', borderRadius: 6, paddingVertical: 12 },
+  input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 10,
+    fontFamily: F.numeric, fontSize: 22, letterSpacing: 6, minHeight: S.touch, paddingHorizontal: 16, paddingVertical: 12 },
+  codeBox: { alignItems: 'center', gap: 8, borderColor: C.sheetInk, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 12, paddingVertical: 16 },
   code: { color: C.sheetInk, fontFamily: F.numeric, fontSize: 44, lineHeight: 50, letterSpacing: 10, paddingLeft: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  action: { flexGrow: 1 },
+  action: { flexGrow: 1, flexShrink: 1, maxWidth: '100%' },
 })

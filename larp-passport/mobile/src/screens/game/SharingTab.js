@@ -1,10 +1,11 @@
 import { memo, useState } from 'react'
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native'
+import { ScrollView, Switch, Text, View } from 'react-native'
 import { COPY, SHARING_FOOTNOTE } from '../../lib/brand'
 import { C, F, S, T, toneColor } from '../../lib/theme'
 import { describeSharing } from '../../lib/syncStatus'
 import { formatAge } from '../../lib/time'
 import { common } from '../../ui/common'
+import { screenStyles, TouchableOpacity } from '../../ui/presentation'
 import { GhostButton } from '../../ui/primitives'
 
 export const SharingTab = memo(function SharingTab({ game, phase, sharing, permission, queue, error, sharingBusy, toggleSharing, sendNow }) {
@@ -80,7 +81,7 @@ const TelemetryCell = memo(function TelemetryCell({ label, value, color = C.text
   )
 })
 
-const styles = StyleSheet.create({
+const styles = screenStyles('sharing', {
   sharingHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   sharingTitle: { color: C.text, fontFamily: F.bodySemiBold, fontSize: 16 },
   sharingState: { color: C.cyan, fontFamily: F.bodyMedium, fontSize: T.body, marginTop: 3 },

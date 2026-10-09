@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { Animated, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { Animated, Text, TextInput, View } from 'react-native'
 import { C, F, S, T } from '../lib/theme'
 import { useReducedMotion } from '../lib/useReducedMotion'
 import { common } from './common'
+import { screenStyles, TouchableOpacity } from './presentation'
 
 export function Field({ label, style, ...props }) {
   return (
@@ -54,7 +55,7 @@ export function LiveDot({ color }) {
   return <Animated.View importantForAccessibility="no" accessibilityElementsHidden style={[styles.liveDot, { backgroundColor: color, opacity }]} />
 }
 
-const styles = StyleSheet.create({
+const styles = screenStyles('primitives', {
   liveDot: { width: 7, height: 7, borderRadius: 4, marginRight: 6 },
   outcomeNote: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(63,214,143,0.08)', borderColor: C.greenBorder, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, marginTop: 12 },
   outcomeNoteError: { backgroundColor: 'rgba(255,84,73,0.08)', borderColor: C.redBorder },
