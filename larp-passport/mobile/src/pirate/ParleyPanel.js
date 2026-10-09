@@ -15,6 +15,9 @@ function statusText(result) {
     wrong_phase: 'Parley is closed during this phase.',
     stale: 'Your location is stale. Send a fresh fix.',
     target_stale: 'The other player needs a fresh location fix.',
+    too_far: 'Move within 75 m of the other player, send fresh locations, then try again.',
+    no_crew: 'Ask the GM to put you in a crew before starting a Parley.',
+    already_reported: 'Your saved report cannot be changed. Ask the GM to rule.',
     treasure_exclusion: 'Parley is closed near the hoard.',
     target_treasure_exclusion: 'The other player is too near the hoard.',
     mercy: 'Davy’s Mercy protects this crew for now. No one can challenge them.',
@@ -87,7 +90,7 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
     {!!error && <Notice tone="error" text={error} />}
     <Sheet>
       <SheetTitle>Parley</SheetTitle>
-      <Text style={styles.muted}>Challenged in person? Show your code. Challenging someone? Enter their code. Then settle it with Yield or Fight.</Text>
+      <Text style={styles.muted}>Challenged in person? Show your code. Challenging someone? Enter their code. Stay within 75 m with location sharing on, then settle it with Yield or Fight.</Text>
       {!state && <Text style={styles.body}>Loading Parley…</Text>}
       {state && <>
         {state.mercy_until && new Date(state.mercy_until).getTime() > now

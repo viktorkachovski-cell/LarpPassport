@@ -3,18 +3,17 @@
 ## The gate
 
 `.github/workflows/ci.yml` runs on every pull request and every push to
-`main`. It fails the check when any of the following fails:
+`main` and `codex/**` branches. It fails the check when any of the following fails:
 
 - dashboard: `npm ci`, `npm test` (vitest), `npm run build`
 - mobile: `npm ci`, `npx expo-doctor@1.20.4`, `npm test`, and
   `npx expo export --platform android` for both apps (`APP_VARIANT=pirate`
   and `APP_VARIANT=hunt`)
 - database: `supabase start` + `supabase test db supabase/tests/database`
-  (the full pgTAP suite against a clean local stack)
+  (the full pgTAP suite against a clean local stack), then
+  `python supabase/tests/concurrency.py` and `python supabase/tests/pirate_concurrency.py`
 
-Rule: nothing merges to `main` while the gate is red. Enable branch
-protection on `main` requiring the three CI jobs once this lands (Settings >
-Branches > Add rule > require status checks).
+Rule: nothing merges to `main` while the gate is red. Repository administrators should require all three CI jobs in branch protection; this document does not establish the current GitHub protection settings.
 
 The mobile export job uses placeholder `EXPO_PUBLIC_*` values on purpose: CI
 proves the bundle compiles; real values are injected by the EAS
@@ -47,13 +46,15 @@ from the tag.
 Each tagged release consumes one EAS build from the free-tier monthly quota,
 so tag deliberately, not for experiments.
 
-## Feature freeze
+## Stabilisation
 
-- Feature changes stop at least four weeks before the game.
-- After the freeze, only verified bug fixes merge: a fix must reproduce the
-  bug, include or update a test where feasible, and pass the full gate.
-- No Expo SDK upgrades inside the freeze window (see the `expo-upgrade`
-  branch plan in the architecture notes).
+For the 2026-10-31 Pirate test run, the owner waived the original four-week feature freeze.
+The readiness plan targets a field rehearsal on 24 October and gameplay stabilisation by 27 October.
+After that, merge only reproduced and verified bug fixes; avoid Expo SDK changes during event stabilisation.
+Other events should set their own freeze date rather than inherit this one-time waiver.
+
+Pushing `main` is a source publication. Supabase migrations, a Vercel deployment and a new signed APK are distinct release steps.
+Record their exact identities, and do not call a JavaScript export a device test.
 
 ## What "record" means for game day
 

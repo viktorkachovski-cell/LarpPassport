@@ -16,7 +16,7 @@ live-combat safety rules remain the responsibility of the game team.
 - One GM account with access to the web dashboard.
 - At least two game members with the `player` role.
 - Exactly one non-NPC character for every participating player.
-- The Android player app connected to the production Supabase project.
+- The LARP Time Hunt Android app (`APP_VARIANT=hunt`) connected to the reviewed Supabase project; the Pirate app lists Pirate games only.
 - Location permission and location sharing enabled on each participating phone.
 - Mobile data or Wi-Fi for claims and confirmations. Location pings can queue
   temporarily offline, but elimination actions require a live connection.
@@ -74,7 +74,7 @@ Proximity is calculated only when both positions are less than two minutes old:
 | `distant` | More than 300 m and up to 1 km | 1000 |
 | `far` | More than 1 km | 1000 |
 
-The displayed approximate distance is rounded to 10 metres. A missing location
+With direction off, the displayed approximate distance is rounded to 10 metres. A missing location
 shows **waiting for location**; a position older than two minutes shows
 **stale**.
 

@@ -99,6 +99,7 @@ export function Notice({ text, tone = 'info' }) {
   )
 }
 
+// Currency marks for the Hold ledger.
 export function DoubloonIcon({ size = 20 }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

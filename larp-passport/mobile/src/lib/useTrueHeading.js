@@ -11,20 +11,22 @@ export function useTrueHeading(enabled, minIntervalMs = 0) {
     if (!enabled) { setHeading(null); return undefined }
     let subscription = null
     let alive = true
+    let starting = false
     const stop = () => { subscription?.remove?.(); subscription = null; if (alive) setHeading(null) }
     const start = async () => {
-      if (!alive || subscription || AppState.currentState !== 'active') return
+      if (!alive || starting || subscription || AppState.currentState !== 'active') return
+      starting = true
       try {
         const sub = await Location.watchHeadingAsync((value) => {
           const now = Date.now()
-          if (alive && (minIntervalMs === 0 || now - lastEmitted.current >= minIntervalMs)) {
+          if (alive && AppState.currentState === 'active' && (minIntervalMs === 0 || now - lastEmitted.current >= minIntervalMs)) {
             lastEmitted.current = now
             setHeading(value)
           }
         })
         if (!alive || AppState.currentState !== 'active') { sub.remove(); return }
         subscription = sub
-      } catch { if (alive) setHeading(null) }
+      } catch { if (alive) setHeading(null) } finally { starting = false }
     }
     start()
     const appState = AppState.addEventListener('change', (state) => { if (state === 'active') start(); else stop() })

@@ -35,7 +35,7 @@ Metro, so the previous app's package and bundle are not reused.
 For complete location testing, use an Android emulator or USB-connected phone:
 
 ```powershell
-npm install
+npm ci
 npm run android                                  # Pirate app
 $env:APP_VARIANT='hunt'; npx expo prebuild --clean; npm run android   # Time Hunt app
 ```
@@ -55,7 +55,7 @@ With EAS (environment variables come from the EAS `preview`/`production`
 environments):
 
 ```powershell
-npm install
+npm ci
 npx eas-cli login
 npx eas-cli build -p android --profile preview         # The Black Tide
 npx eas-cli build -p android --profile preview-hunt    # LARP Time Hunt
@@ -82,9 +82,10 @@ has an EAS-signed install of the same package must uninstall it first.
 - Background tracking uses a foreground service, so players always see a
   persistent notification while sharing. "Allow all the time" location
   permission is required and requested in-app.
+- UI clocks and heading sensors stop when the app is inactive and recover on return. Heading startup is single-flight, including rapid foreground/background transitions. GPS still uses the existing high-accuracy near-site and balanced/deferred far-site profiles; notification delivery and location freshness rules are unchanged. Device battery measurements remain part of field rehearsal.
 - Event alerts use Supabase Realtime while the app is active and are also
   piggybacked on background location flushes. No Firebase/FCM setup is needed.
-- Offline: pings queue on-device (up to 500) and flush when signal returns.
+- Offline: pings queue on-device (a 1000-entry per-game retention target, sent in batches of 100; overflow drops the oldest pending entries while retaining failed batches) and flush when signal returns.
   Game actions (site claims, Parley, elimination claims) are direct calls and
   are not queued offline.
 - Time Hunt: eliminated players have sharing revoked automatically and must

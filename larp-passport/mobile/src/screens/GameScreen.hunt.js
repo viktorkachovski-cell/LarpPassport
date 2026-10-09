@@ -10,21 +10,10 @@ import { GameFrame, StateCell } from './game/GameFrame'
 import { HuntPanel } from './game/HuntPanel'
 import { useGameRpc, useGameSession, useSyncLog } from './game/session'
 
-// Self-ticking countdown. The one-second timer lives HERE, so it re-renders
-// this single <Text> instead of the whole game screen; it also stops itself
-// once the target time has passed.
+// Only this text ticks; it stops in the background and when the cloak expires.
 function Countdown({ to }) {
-  const [tick, setTick] = useState(() => Date.now())
-  useEffect(() => {
-    if (!to || new Date(to).getTime() <= Date.now()) return undefined
-    const timer = setInterval(() => {
-      const t = Date.now()
-      setTick(t)
-      if (new Date(to).getTime() <= t) clearInterval(timer)
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [to])
-  return <Text>{countdown(to, tick)}</Text>
+  const now = useNow(to ? 1000 : null, to)
+  return <Text>{countdown(to, now)}</Text>
 }
 
 function getPlayerStatus(hunt) {

@@ -32,6 +32,10 @@ function claimMessage(result) {
   if (result.status === 'no_site') return 'Stand inside a marked site for 20 seconds, then try again.'
   if (result.status === 'ambiguous') return 'You are inside overlapping sites. Ask the GM to check the map.'
   if (result.status === 'idempotency_conflict') return 'The answer changed during a retry. Try again.'
+  if (result.status === 'no_shards') return 'The glass is broken: your crew needs a bearing shard first. Solve a bearing riddle.'
+  if (result.status === 'wrong_phase') return 'Not open yet. Riddles open at Charting; lighthouse readings once the Curse wakes.'
+  if (result.status === 'no_crew') return 'You are not in a crew yet. Ask the GM to put you in one.'
+  if (result.status === 'not_ready') return 'The GM has not finished setting up this site or the treasure.'
   return `The site is unavailable (${result.status}).`
 }
 
@@ -46,7 +50,7 @@ function bandLabel(state) {
 }
 
 // Sites (mode 'sites') and the captain's Compass (mode 'compass').
-export function PiratePanel({ mode, state, error, gameId, refresh, sendNow }) {
+export function PiratePanel({ mode, state, error, gameId, refresh, sharing, checkSpot }) {
   const [answer, setAnswer] = useState('')
   const [outcome, setOutcome] = useState({ text: '', status: '' })
   const [busy, setBusy] = useState(false)
@@ -89,6 +93,16 @@ export function PiratePanel({ mode, state, error, gameId, refresh, sendNow }) {
     } finally { setBusy(false) }
   }
 
+  // Sends any queued positions, then asks the server which site this is.
+  async function lookAround() {
+    if (busy || !checkSpot) return
+    setBusy(true)
+    setOutcome({ text: '', status: '' })
+    try {
+      await checkSpot()
+    } finally { setBusy(false) }
+  }
+
   async function takeReading() {
     if (busy || !canRead) return
     setBusy(true)
@@ -117,10 +131,12 @@ export function PiratePanel({ mode, state, error, gameId, refresh, sendNow }) {
       {state && <Sheet>
         {mode === 'sites' ? <>
           <Kicker>Where you stand</Kicker>
-          {site ? <>
+          {!sharing && <Notice tone="warning" text="Location sharing is off. Tap GPS at the top and turn it on, or the server cannot see you at a site." />}
+          {site?.status === 'ambiguous' && <Notice tone="warning" text={claimMessage(site)} />}
+          {site?.site_name ? <>
             <SheetTitle>{site.site_name}</SheetTitle>
             {!!site.reward && <Text style={styles.muted}>
-              Prize: {site.reward === 'bearing' ? '1 bearing shard' : '1 oath word'} + doubloons (20 if your crew is first, then 15 / 10 / 5 / 5)
+              Prize: {site.reward === 'bearing' ? '1 bearing shard' : '1 oath word'} + doubloons (20 if your crew is first, then 15, 10, and 5 for every later crew)
             </Text>}
             {!!site.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
             {site.claimed_by_my_crew && <Notice tone="ok" text="Your crew has solved this site." />}
@@ -135,8 +151,10 @@ export function PiratePanel({ mode, state, error, gameId, refresh, sendNow }) {
             </>}
           </> : <>
             <SheetTitle>No site here</SheetTitle>
-            <Text style={styles.body}>Walk to a marked site on your chart. Stay inside for 20 seconds and its riddle appears here.</Text>
+            <Text style={styles.body}>Walk to a marked site on your chart. Stay inside for 20 seconds with location sharing on and its riddle appears here.</Text>
+            {!!claimReason && <Text style={styles.muted}>{claimReason}</Text>}
           </>}
+          {!site?.prompt && !!checkSpot && <TideButton variant="ink" label={busy ? 'Checking…' : 'Check this spot'} disabled={busy} onPress={lookAround} />}
         </> : <>
           <Kicker>{reading ? `Reading at ${reading.lighthouse_name}` : 'Your compass'}</Kicker>
           <CompassDial reading={reading} active={mode === 'compass'} />
@@ -170,8 +188,8 @@ export function PiratePanel({ mode, state, error, gameId, refresh, sendNow }) {
             })}
         </>}
         {!!outcome.text && <Notice tone={tone} text={outcome.text} />}
-        {outcome.status === 'stale' && !!sendNow
-          && <TideButton label="Send my position" variant="plank" onPress={sendNow} />}
+        {outcome.status === 'stale' && !!checkSpot
+          && <TideButton label={busy ? 'Sending…' : 'Send my position'} variant="plank" disabled={busy} onPress={lookAround} />}
       </Sheet>}
     </ScrollView>
   )

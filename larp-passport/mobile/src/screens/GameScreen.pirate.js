@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { C } from '../lib/theme'
 import { HoldPanel } from '../pirate/HoldPanel'
 import { ParleyPanel } from '../pirate/ParleyPanel'
@@ -17,6 +17,9 @@ export default function GameScreen({ gameId, session: auth, onBack }) {
   const { data: pirate, error: pirateError, load: loadPirate } = useGameRpc('get_pirate_state', gameId, syncLog)
   const session = useGameSession({ gameId, uid: auth.user.id, syncLog, loadMode: loadPirate })
   const [selectedTab, setTab] = useState('sites')
+  const { sendNow } = session
+  // Sends queued positions, then asks the server which site this is.
+  const checkSpot = useCallback(async () => { await sendNow(); await loadPirate() }, [sendNow, loadPirate])
   const modeTabs = pirate?.is_captain ? CAPTAIN_TABS : CREW_TABS
   const tab = selectedTab === 'compass' && !pirate?.is_captain ? 'sites' : selectedTab
 
@@ -40,7 +43,7 @@ export default function GameScreen({ gameId, session: auth, onBack }) {
     >
       {(tab === 'sites' || tab === 'compass') && (
         <PiratePanel mode={tab} state={pirate} error={pirateError}
-          gameId={gameId} refresh={loadPirate} sendNow={session.sendNow} />
+          gameId={gameId} refresh={loadPirate} sharing={session.sharing} checkSpot={checkSpot} />
       )}
       {tab === 'parley' && <ParleyPanel state={pirate} error={pirateError} gameId={gameId} refresh={loadPirate} />}
       {tab === 'hold' && <HoldPanel state={pirate} error={pirateError} session={session} />}
