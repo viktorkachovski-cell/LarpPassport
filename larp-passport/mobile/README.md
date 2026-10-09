@@ -82,6 +82,7 @@ has an EAS-signed install of the same package must uninstall it first.
 - Background tracking uses a foreground service, so players always see a
   persistent notification while sharing. "Allow all the time" location
   permission is required and requested in-app.
+- UI clocks and heading sensors stop when the app is inactive and recover on return. Heading startup is single-flight, including rapid foreground/background transitions. GPS still uses the existing high-accuracy near-site and balanced/deferred far-site profiles; notification delivery and location freshness rules are unchanged. Device battery measurements remain part of field rehearsal.
 - Event alerts use Supabase Realtime while the app is active and are also
   piggybacked on background location flushes. No Firebase/FCM setup is needed.
 - Offline: pings queue on-device (a 1000-entry per-game retention target, sent in batches of 100; overflow drops the oldest pending entries while retaining failed batches) and flush when signal returns.

@@ -2,8 +2,8 @@
 
 Each race parks its contenders behind the game's Pirate advisory lock, then
 releases them together, so the requests really arrive at the same moment.
-Fixtures come from 019_pirate_captains_and_claim_void.sql: crew 1 is players
-1-3, crews 2-5 are players 4-7, zones 1-9 are riddles answered by "gold".
+Fixtures extend 019_pirate_captains_and_claim_void.sql: crew 1 is players
+1-3, crews 2-6 are players 4-8, zones 1-9 are riddles answered by "gold".
 """
 from pathlib import Path
 import subprocess
@@ -87,6 +87,8 @@ def void(claim_id):
 
 source = Path('supabase/tests/database/019_pirate_captains_and_claim_void.sql').read_text()
 setup = source[source.index('insert into auth.users'):source.index('-- Setup: the GM picks')]
+# Extend the known fixture to six crews without changing the pgTAP source.
+setup = setup.replace('generate_series(0, 7)', 'generate_series(0, 8)').replace('generate_series(1, 7)', 'generate_series(1, 8)').replace('generate_series(1, 5)', 'generate_series(1, 6)')
 query('begin;' + setup + 'commit;')
 try:
     assert as_gm(f"select public.pirate_set_captain('{GAME}','{crew(1)}','{uid(2)}')->>'status';") == 'ok'
@@ -97,16 +99,16 @@ try:
     stored = query(f"select profile_id from private.pirate_captains where game_id='{GAME}' and faction_id='{crew(1)}'")
     assert phase == 'ok' and captain in ('ok', 'locked'), (phase, captain)
     assert stored == (uid(3) if captain == 'ok' else uid(2)), (captain, stored)
-    assert query(f"select count(*) from private.pirate_captains where game_id='{GAME}'") == '5'
+    assert query(f"select count(*) from private.pirate_captains where game_id='{GAME}'") == '6'
     print('PASS: a captain change racing charting either lands before the lock or is refused')
 
     # One player from each crew answers riddle 1 at the same moment.
-    stand_at([1, 4, 5, 6, 7], 1)
-    assert race([claim(player, player) for player in (1, 4, 5, 6, 7)]) == ['ok'] * 5
+    stand_at([1, 4, 5, 6, 7, 8], 1)
+    assert race([claim(player, player) for player in (1, 4, 5, 6, 7, 8)]) == ['ok'] * 6
     ranks = query(f"select string_agg(rank::text, ',' order by rank) from private.pirate_claims where zone_id='{zone(1)}'")
     payouts = query(f"select string_agg(delta::text, ',' order by delta desc) from private.pirate_ledger ledger join private.pirate_claims claim on claim.id = ledger.ref_id where claim.zone_id='{zone(1)}' and ledger.currency='doubloon'")
-    assert ranks == '1,2,3,4,5' and payouts == '20,15,10,5,5', (ranks, payouts)
-    print('PASS: five crews solving at once get distinct ranks and 20/15/10/5/5')
+    assert ranks == '1,2,3,4,5,6' and payouts == '20,15,10,5,5,5', (ranks, payouts)
+    print('PASS: six crews solving at once get distinct ranks and 20/15/10/5/5/5')
 
     # Three crewmates answer riddle 2 at the same moment: one claim for the crew.
     stand_at([1, 2, 3], 2)

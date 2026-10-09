@@ -239,7 +239,7 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
       </section>
       {canSetSite && <section className="command-card pirate-section">
         <h3>Register a Pirate site</h3>
-        <p className="hint">Create the zone on the map first: an event zone set to "Log silently for GMs", with a dwell time (20 s is a good start). The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays 20 / 15 / 10 / 5 / 5 doubloons in the order crews answer it correctly.</p>
+        <p className="hint">Create the zone on the map first: an event zone set to "Log silently for GMs", with a dwell time (20 s is a good start). The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays 20 / 15 / 10 doubloons for the first three correct crews, then 5 for every later crew. Crew count and crew size are uncapped.</p>
         <p className="hint">Players see the prompt in the app's CHART tab once they have stood inside the zone for its dwell time with location sharing on, and type the answer there. The answer is stored only as a hash: it is cleared after saving and never shown again.</p>
         <form onSubmit={saveSite} autoComplete="off">
           <div className="pirate-form-grid">

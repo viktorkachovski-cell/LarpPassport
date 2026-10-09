@@ -129,7 +129,7 @@ export function PiratePanel({ mode, state, error, gameId, refresh, sharing, chec
             {!sharing && <Notice tone="warning" text="Location sharing is off. Turn it on in the SHARING tab, or the server cannot see you at a site." />}
             {state.phase === 'setup' && <Notice text="Riddles open when the GM starts charting." />}
             {!site?.prompt && checkSpot && <TideButton variant="ink" label={busy ? 'Checking…' : 'Check this spot'} disabled={busy} onPress={lookAround} />}
-            {!!site?.reward && <Text style={styles.muted}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}, plus doubloons by the order crews answer it (20 / 15 / 10 / 5 / 5).</Text>}
+            {!!site?.reward && <Text style={styles.muted}>Reward: {site.reward === 'bearing' ? 'bearing shard' : 'oath word'}, plus doubloons by the order crews answer it (20 / 15 / 10, then 5 for every later crew).</Text>}
             {!!site?.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
             {site?.claimed_by_my_crew && <Notice tone="ok" text="Your crew has claimed this site." />}
             {site?.kind === 'riddle' && !site.claimed_by_my_crew && <>

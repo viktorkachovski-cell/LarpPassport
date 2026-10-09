@@ -1,6 +1,6 @@
 # Pirate game: remaining work
 
-Updated 2026-10-09 after reviewing merged `main` (`bb66945`) and the corrective Parley migration.
+Updated 2026-10-09 after reviewing merged `main` (`3853aa6`), the uncapped-crew migration and battery lifecycle fixes.
 
 [GAME_GUIDE.md](GAME_GUIDE.md) describes the implemented rules and event schedule.
 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) records verification and deployment limits.
@@ -11,7 +11,7 @@ This file is the deferred backlog. It does not instruct an agent to rebuild comp
 Private Pirate schema and RPCs, flexible setup, ranked riddle rewards, frozen treasure value,
 captains and captain-only compass, claims and claim voids, independent Parley confirmations,
 GM Parley rulings/voids, treasure awards/voids, GM balance adjustments, and separate Pirate/Time Hunt builds exist.
-The review adds strict Parley proximity, location rechecks, refresh-driven expiry, and idempotent report/plunder fixes.
+The review adds strict Parley proximity, location rechecks, refresh-driven expiry, and idempotent report/plunder fixes. Attendance is uncapped; new riddle rewards pay five doubloons from fourth place onward. UI clocks pause while inactive and async heading startup cannot orphan a sensor subscription.
 Use the latest definition of each function across ordered migrations; older applied definitions are history, not unused code to delete.
 
 ## Deferred features
@@ -30,7 +30,7 @@ These are retained at the owner's request on 2026-10-09. They are proposals, not
 
 ## Release and field work
 
-- Apply the verified corrective migration to the hosted backend before treating the new Parley behavior as live; record the hosted version and compare it with the repository.
+- Apply the verified Parley and uncapped-crew migrations to the hosted backend before treating the new Parley behavior as live; record the hosted version and compare it with the repository.
 - Build a signed Pirate APK from the reviewed commit and test it on real Android devices. An Expo export proves bundling, not installation, sensors or background GPS.
 - Verify both GM accounts, including phone-width dashboard controls, and the exact dashboard deployment against the hosted backend.
 - Survey the treasure/lighthouse geometry with `tools/pirate/simulate_triangulation.py`; retain its estimates as planning inputs, then test real readings.
