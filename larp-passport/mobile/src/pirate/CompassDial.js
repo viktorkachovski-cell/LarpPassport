@@ -61,8 +61,8 @@ const Lubber = memo(function Lubber() {
 
 // The SVG is rebuilt only for a new reading. Heading samples rotate its native
 // wrapper at at most 15 Hz; they never redraw the vector paths.
-export const CompassDial = memo(function CompassDial({ reading, active = true }) {
-  const heading = useTrueHeading(active && !!reading, 66)
+export const CompassDial = memo(function CompassDial({ reading }) {
+  const heading = useTrueHeading(!!reading, 66)
   const quality = headingQuality(heading)
   const trueHeading = usableTrueHeading(heading)
   const reduced = useReducedMotion()
@@ -76,7 +76,7 @@ export const CompassDial = memo(function CompassDial({ reading, active = true })
   const cardinal = reading ? cardinalLabel(reading.centre_deg) : null
 
   useEffect(() => {
-    if (!active || trueHeading == null) {
+    if (trueHeading == null) {
       lastHeading.current = null
       rotation.setValue(0)
       return undefined
@@ -90,7 +90,7 @@ export const CompassDial = memo(function CompassDial({ reading, active = true })
     const animation = Animated.timing(rotation, { toValue: -next, duration: 80, useNativeDriver: true })
     animation.start()
     return () => animation.stop()
-  }, [active, trueHeading, reduced, rotation])
+  }, [trueHeading, reduced, rotation])
 
   const card = useMemo(() => {
     if (!reading) return null

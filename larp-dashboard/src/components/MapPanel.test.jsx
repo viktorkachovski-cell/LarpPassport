@@ -44,23 +44,18 @@ vi.mock('maplibre-gl', () => {
 
 import MapPanel from './MapPanel'
 
-function props(overrides = {}) {
-  return {
-    active: true,
-    zones: [],
-    positions: {},
-    members: [],
-    characters: [],
-    factions: [],
-    pendingEvents: [],
-    usernameOf: () => 'someone',
-    zoneNameOf: () => 'a zone',
-    saveZone: vi.fn().mockResolvedValue(null),
-    deleteZone: vi.fn().mockResolvedValue(null),
-    confirmEvent: vi.fn(),
-    dismissEvent: vi.fn(),
-    ...overrides,
-  }
+const props = (overrides = {}) => ({
+  active: true, zones: [], positions: {}, members: [], characters: [], factions: [], pendingEvents: [],
+  usernameOf: () => 'someone', zoneNameOf: () => 'a zone', saveZone: vi.fn().mockResolvedValue(null),
+  deleteZone: vi.fn().mockResolvedValue(null), confirmEvent: vi.fn(), dismissEvent: vi.fn(), ...overrides,
+})
+
+// Renders the panel and fires the map's load event.
+function mount(overrides) {
+  const panelProps = props(overrides)
+  render(<MapPanel {...panelProps} />)
+  act(() => { mocks.handlers.load() })
+  return panelProps
 }
 
 const tap = (lng, lat) => act(() => { mocks.handlers.click({ lngLat: { lng, lat } }) })
@@ -77,9 +72,7 @@ afterEach(() => {
 
 describe('MapPanel touch polygon drawing', () => {
   it('draws with taps, undoes committed points, finishes into the editor and saves a ring closed once', async () => {
-    const panelProps = props()
-    render(<MapPanel {...panelProps} />)
-    act(() => { mocks.handlers.load() })
+    const panelProps = mount()
 
     fireEvent.click(screen.getByRole('button', { name: '+ Polygon' }))
     const finish = screen.getByRole('button', { name: 'Finish polygon' })
@@ -118,9 +111,7 @@ describe('MapPanel touch polygon drawing', () => {
   })
 
   it('cancel saves nothing and clears the draft', () => {
-    const panelProps = props()
-    render(<MapPanel {...panelProps} />)
-    act(() => { mocks.handlers.load() })
+    const panelProps = mount()
     fireEvent.click(screen.getByRole('button', { name: '+ Polygon' }))
     tap(24.70, 42.10)
     tap(24.71, 42.10)
@@ -133,8 +124,7 @@ describe('MapPanel touch polygon drawing', () => {
   })
 
   it('keeps desktop double-click finishing and Escape cancelling', async () => {
-    render(<MapPanel {...props()} />)
-    act(() => { mocks.handlers.load() })
+    mount()
     fireEvent.click(screen.getByRole('button', { name: '+ Polygon' }))
     tap(24.70, 42.10)
     tap(24.71, 42.10)
@@ -153,9 +143,7 @@ describe('MapPanel touch polygon drawing', () => {
   })
 
   it('sets a circle radius from the second tap when no hover events exist', async () => {
-    const panelProps = props()
-    render(<MapPanel {...panelProps} />)
-    act(() => { mocks.handlers.load() })
+    mount()
     fireEvent.click(screen.getByRole('button', { name: '+ Circle' }))
     tap(24.70, 42.10)
     tap(24.70, 42.101) // ~111 m north

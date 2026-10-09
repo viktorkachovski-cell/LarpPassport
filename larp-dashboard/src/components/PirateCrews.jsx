@@ -1,14 +1,11 @@
 import { useState } from 'react'
 import { useAction } from '../lib/useAction'
 import Outcome from './Outcome'
+import { CrewSelect, Reason, validReason } from './pirateCommon'
 
-// Crew scoreboard. During setup the GM picks the captain of each crew with
-// two or more players; a one-player crew's player is captain automatically.
-// Initial selection locks at charting; audited replacement lives in GM controls.
-// Only the current captain has the compass.
-// A crew left without a captain later (players added during the game) can
-// still get one. The GM can add or remove a crew's shards or doubloons with a
-// reason (gm_adjust); the crew reads the ruling in its logbook.
+// Crew scoreboard and gm_adjust. The GM picks captains for crews of two or
+// more during setup, or later for a crew still without one; a one-player crew
+// captains itself. Audited replacement lives in PirateGmControls.
 export default function PirateCrews({ gameId, state, busy, run, rpc, refresh }) {
   const inSetup = state.phase === 'setup'
   const [adjustCrew, setAdjustCrew] = useState('')
@@ -21,7 +18,7 @@ export default function PirateCrews({ gameId, state, busy, run, rpc, refresh }) 
   const adjustTarget = crews.find((crew) => crew.id === adjustCrew)
   const amountValue = Number(amount)
   const canAdjust = !busy && !adjusting.busy && !!adjustTarget && Number.isInteger(amountValue)
-    && amountValue >= 1 && amountValue <= 1000 && reason.trim().length >= 3
+    && amountValue >= 1 && amountValue <= 1000 && validReason(reason)
 
   // The amount and reason stay filled in, so repeated test adjustments are quick.
   function adjust(sign) {
@@ -68,11 +65,7 @@ export default function PirateCrews({ gameId, state, busy, run, rpc, refresh }) 
     {crews.length > 0 && <>
       <p className="hint">Add or remove a crew's shards or doubloons, for testing or to correct a result. Each change is recorded with its reason; a balance cannot go below zero.</p>
       <form className="pirate-form-grid" onSubmit={(event) => event.preventDefault()}>
-        <div className="field"><label htmlFor="pirate-adjust-crew">Adjust crew</label>
-          <select id="pirate-adjust-crew" value={adjustTarget ? adjustCrew : ''} onChange={(event) => setAdjustCrew(event.target.value)}>
-            <option value="">Choose crew</option>
-            {crews.map((crew) => <option key={crew.id} value={crew.id}>{crew.name}</option>)}
-          </select></div>
+        <CrewSelect id="pirate-adjust-crew" label="Adjust crew" value={adjustCrew} onChange={setAdjustCrew} crews={crews} />
         <div className="field"><label htmlFor="pirate-adjust-currency">Currency</label>
           <select id="pirate-adjust-currency" value={currency} onChange={(event) => setCurrency(event.target.value)}>
             <option value="bearing">Bearing shards</option><option value="doubloon">Doubloons</option>
@@ -80,9 +73,7 @@ export default function PirateCrews({ gameId, state, busy, run, rpc, refresh }) 
         <div className="field"><label htmlFor="pirate-adjust-amount">Amount</label>
           <input id="pirate-adjust-amount" type="number" min="1" max="1000" step="1" value={amount}
             onChange={(event) => setAmount(event.target.value)} /></div>
-        <div className="field"><label htmlFor="pirate-adjust-reason">Reason (shown to the crew)</label>
-          <input id="pirate-adjust-reason" value={reason} minLength={3} maxLength={300}
-            onChange={(event) => setReason(event.target.value)} /></div>
+        <Reason id="pirate-adjust-reason" label="Reason (shown to the crew)" value={reason} onChange={setReason} />
         <div className="row">
           <button type="button" disabled={!canAdjust} onClick={() => adjust(1)}>Add</button>
           <button type="button" disabled={!canAdjust} onClick={() => adjust(-1)}>Remove</button>

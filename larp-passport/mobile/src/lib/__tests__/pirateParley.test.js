@@ -25,13 +25,10 @@ test('pause, truce, PvP kill switch and mercy block new Parleys', () => {
   for (const state of [
     { paused: true }, { phase: 'truce' }, { pvp_enabled: false },
     { mercy_until: '2026-10-07T16:15:00Z' },
-  ]) expect(parleyActions({ ...base, ...state }, Date.parse('2026-10-07T16:00:00Z')).canOpen).toBe(false)
+  ]) expect(parleyActions({ ...base, ...state }, Date.parse('2026-10-07T16:00:00Z')).canStart).toBe(false)
 })
 
 test('players without a crew cannot open or join a Parley', () => {
-  for (const crew of [null, {}, undefined]) {
-    const actions = parleyActions({ ...base, crew })
-    expect(actions.canOpen).toBe(false)
-    expect(actions.canJoin).toBe(false)
-  }
+  for (const crew of [null, {}, undefined]) expect(parleyActions({ ...base, crew }).canStart).toBe(false)
+  expect(parleyActions(base).canStart).toBe(true)
 })

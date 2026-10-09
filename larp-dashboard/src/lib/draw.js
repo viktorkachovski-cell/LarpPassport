@@ -1,4 +1,4 @@
-// Pure helpers for polygon drawing (U06). Points are [longitude, latitude].
+// Pure helpers for polygon drawing. Points are [longitude, latitude].
 
 const samePoint = (a, b) => !!a && !!b && a[0] === b[0] && a[1] === b[1]
 

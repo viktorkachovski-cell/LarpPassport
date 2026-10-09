@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Reason, validReason } from './pirateCommon'
 
 // Every Pirate site with its standing claims. A GM voids a mistaken or cheated
 // claim with a reason (gm_void_claim): the shard and doubloons are reversed,
@@ -38,11 +39,9 @@ export default function PirateSiteBoard({ gameId, state, busy, run, rpc, refresh
     </table></div>
     {voiding && <form onSubmit={voidClaim} className="pirate-form-grid">
       <p className="hint">Void {voiding.crew_name}'s claim at {voiding.site_name}. Fails if the crew no longer holds the reward.</p>
-      <div className="field"><label htmlFor="pirate-claim-void-reason">Correction reason</label>
-        <input id="pirate-claim-void-reason" value={reason} minLength={3} maxLength={300} required
-          onChange={(event) => setReason(event.target.value)} /></div>
+      <Reason id="pirate-claim-void-reason" label="Correction reason" value={reason} onChange={setReason} />
       <div className="row">
-        <button type="submit" disabled={!!busy || reason.trim().length < 3}>Void claim</button>
+        <button type="submit" disabled={!!busy || !validReason(reason)}>Void claim</button>
         <button type="button" onClick={() => { setVoiding(null); setReason('') }}>Cancel</button>
       </div>
     </form>}

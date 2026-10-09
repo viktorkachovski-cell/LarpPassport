@@ -26,6 +26,40 @@ function getPlayerStatus(hunt) {
 }
 
 const MODE_TABS = [['hunt', 'HUNT']]
+const PHASE_CHIPS = { active: ['ACTIVE', C.green], finished: ['FINISHED', C.muted] }
+
+// The header follows the game row until the first hunt status arrives.
+function huntHeader(hunt, game) {
+  const phase = hunt?.phase ?? game?.status
+  const [phaseLabel, phaseColor] = PHASE_CHIPS[phase] ?? ['DRAFT', C.amber]
+  return { phase, phaseLabel, phaseColor }
+}
+
+// A boundary warning stays on screen for two minutes after the latest one.
+function boundaryWarningActive(events, now) {
+  const latest = events.find((event) => eventInfo(event.type).boundary)
+  return latest?.type === 'zone_boundary_warning' && now - new Date(latest.created_at).getTime() < 120000
+}
+
+function HuntCells({ hunt }) {
+  const status = getPlayerStatus(hunt)
+  return <>
+    <StateCell value={hunt?.alive_count ?? '--'} label={hunt?.phase === 'not_started' ? 'PLAYERS JOINED' : 'TRAVELLERS LEFT'} />
+    <StateCell value={status.value} label="YOUR STATUS" color={status.color} bordered />
+    <StateCell value={<Countdown to={hunt?.hidden_until} />} label="CLOAK LEFT" color={C.cyan} />
+  </>
+}
+
+function DecisionBanner({ onOpen }) {
+  return (
+    <View style={styles.decisionBanner} accessibilityLiveRegion="polite">
+      <Text style={styles.decisionText}>1 decision waiting: a hunter claims they defeated you.</Text>
+      <TouchableOpacity accessibilityRole="button" onPress={onOpen} style={styles.decisionButton}>
+        <Text style={styles.decisionButtonText}>OPEN HUNT</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
 
 export default function GameScreen({ gameId, session: auth, onBack }) {
   const syncLog = useSyncLog()
@@ -86,32 +120,11 @@ export default function GameScreen({ gameId, session: auth, onBack }) {
     } catch (error) { setHuntError(error.message) } finally { huntBusyRef.current = false; setHuntBusy(false) }
   }, [incomingClaimId, setHunt, setHuntError])
 
-  const latestBoundaryEvent = session.visibleEvents.find((event) => eventInfo(event.type).boundary)
-  const boundaryWarning = latestBoundaryEvent?.type === 'zone_boundary_warning'
-    && now - new Date(latestBoundaryEvent.created_at).getTime() < 120000
-
-  const phase = hunt?.phase ?? session.game?.status
-  const playerStatus = getPlayerStatus(hunt)
-  const phaseColor = phase === 'active' ? C.green : phase === 'finished' ? C.muted : C.amber
-  const phaseLabel = phase === 'active' ? 'ACTIVE' : phase === 'finished' ? 'FINISHED' : 'DRAFT'
-
   return (
     <GameFrame
       session={session} onBack={onBack} tab={tab} setTab={setTab} modeTabs={MODE_TABS}
-      phase={phase} phaseLabel={phaseLabel} phaseColor={phaseColor}
-      cells={<>
-        <StateCell value={hunt?.alive_count ?? '--'} label={phase === 'not_started' ? 'PLAYERS JOINED' : 'TRAVELLERS LEFT'} />
-        <StateCell value={playerStatus.value} label="YOUR STATUS" color={playerStatus.color} bordered />
-        <StateCell value={<Countdown to={hunt?.hidden_until} />} label="CLOAK LEFT" color={C.cyan} />
-      </>}
-      banner={!!hunt?.incoming_claim && tab !== 'hunt' && (
-        <View style={styles.decisionBanner} accessibilityLiveRegion="polite">
-          <Text style={styles.decisionText}>1 decision waiting: a hunter claims they defeated you.</Text>
-          <TouchableOpacity accessibilityRole="button" onPress={() => setTab('hunt')} style={styles.decisionButton}>
-            <Text style={styles.decisionButtonText}>OPEN HUNT</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {...huntHeader(hunt, session.game)} cells={<HuntCells hunt={hunt} />}
+      banner={!!hunt?.incoming_claim && tab !== 'hunt' && <DecisionBanner onOpen={() => setTab('hunt')} />}
     >
       {tab === 'hunt' && (
         <HuntPanel
@@ -121,7 +134,7 @@ export default function GameScreen({ gameId, session: auth, onBack }) {
           error={huntError}
           outcome={huntOutcome}
           dismissOutcome={() => setHuntOutcome('')}
-          boundaryWarning={boundaryWarning}
+          boundaryWarning={boundaryWarningActive(session.visibleEvents, now)}
           requestElimination={confirmEliminationRequest}
           respondToElimination={respondToElimination}
           refresh={session.refresh}

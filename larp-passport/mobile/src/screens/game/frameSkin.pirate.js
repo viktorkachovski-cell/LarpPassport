@@ -10,12 +10,12 @@ function BrassBack() {
 
 // A nailed plank per tab. The selected plank is seated into the rail and
 // takes the tide-green stain with a brass edge.
-function PlankTab({ label, selected, scroll, onPress }) {
+function PlankTab({ label, selected, onPress }) {
   return (
     <PressPlank accessibilityRole="tab" accessibilityLabel={label.toLowerCase()} accessibilityState={{ selected }}
       selected={selected} onPress={onPress} nails
       face={selected ? C.tide : C.wood600} lip={selected ? C.brassDeep : C.woodSeam} edge={selected ? C.brass : C.onWoodMuted}
-      style={scroll ? styles.plankTabScroll : styles.plankTab}>
+      style={styles.plankTab}>
       <Text style={[styles.tabText, selected && styles.activeTabText]}>{label}</Text>
     </PressPlank>
   )
@@ -46,10 +46,7 @@ const styles = StyleSheet.create({
   stateValue: { fontFamily: F.numeric, fontSize: 21, lineHeight: 26 },
   stateLabel: { color: C.onWoodMuted, fontFamily: F.mono, fontSize: 14, letterSpacing: 0.3 },
   tabs: { backgroundColor: 'transparent', borderBottomWidth: 0, paddingHorizontal: 8, paddingTop: 16, paddingBottom: 0, gap: 4 },
-  scrollTabsWrap: { backgroundColor: 'transparent', borderBottomWidth: 0 },
-  scrollTabs: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   plankTab: { flex: 1 },
-  plankTabScroll: { minWidth: 96 },
   tabText: { color: C.onWoodMuted, fontFamily: F.displayBold, fontSize: 14, lineHeight: 18, letterSpacing: 0, paddingHorizontal: 2, paddingVertical: 8, textAlign: 'center' },
   activeTabText: { color: C.onWood, textShadowColor: C.woodSeam, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
 })

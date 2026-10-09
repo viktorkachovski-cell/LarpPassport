@@ -1,4 +1,4 @@
-// Truthful connection/sync wording (U01). Each input is a separate fact:
+// Truthful connection/sync wording. Each input is a separate fact:
 // last successful authoritative snapshot, last failed request, the Realtime
 // socket hint and the browser's online hint. None of them is treated as proof
 // of the others.
@@ -25,13 +25,24 @@ export function describeRealtime(state) {
   return 'Connecting live updates'
 }
 
+function failureWording(lastOkAt, lastError, okAge) {
+  const network = isNetworkFailure(lastError)
+  if (!lastOkAt) {
+    return network
+      ? { text: 'Cannot reach the server', detail: 'No successful sync yet. Check your connection.' }
+      : { text: 'Server request failed', detail: `No successful sync yet. ${String(lastError ?? '')}`.trim() }
+  }
+  return network
+    ? { text: `Server unreachable · showing data from ${okAge}`, detail: 'Retrying automatically.' }
+    : { text: `Last refresh failed · showing data from ${okAge}`, detail: String(lastError ?? '') }
+}
+
 // online: navigator.onLine hint (false is a strong offline signal; true proves nothing).
 // realtime: socket hint, or null for a view that has no live channel and no
 // periodic refresh (it must not claim either).
 // subject names what the success line reports as updated.
 export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime, online = true, subject = 'Server', now = Date.now() }) {
   const failedSinceOk = lastErrorAt && (!lastOkAt || new Date(lastErrorAt) > new Date(lastOkAt))
-  const network = online === false || (failedSinceOk && isNetworkFailure(lastError))
   const okAge = formatAge(lastOkAt, now)
   const live = realtime == null ? null : describeRealtime(realtime)
 
@@ -46,22 +57,7 @@ export function describeServerSync({ lastOkAt, lastErrorAt, lastError, realtime,
   if (!lastOkAt && !lastErrorAt) {
     return { tone: 'checking', text: 'Checking server', detail: 'No successful sync yet', live }
   }
-  if (!lastOkAt) {
-    return {
-      tone: 'error',
-      text: network ? 'Cannot reach the server' : 'Server request failed',
-      detail: network ? 'No successful sync yet. Check your connection.' : `No successful sync yet. ${String(lastError ?? '')}`.trim(),
-      live,
-    }
-  }
-  if (failedSinceOk) {
-    return {
-      tone: 'error',
-      text: network ? `Server unreachable · showing data from ${okAge}` : `Last refresh failed · showing data from ${okAge}`,
-      detail: network ? 'Retrying automatically.' : String(lastError ?? ''),
-      live,
-    }
-  }
+  if (failedSinceOk) return { tone: 'error', ...failureWording(lastOkAt, lastError, okAge), live }
   const ageMs = now - new Date(lastOkAt).getTime()
   return {
     tone: ageMs > 3 * 60 * 1000 ? 'warning' : 'ok',

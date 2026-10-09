@@ -12,6 +12,27 @@ import { useGameRpc, useGameSession, useSyncLog } from './game/session'
 const CREW_TABS = [['sites', 'Sites'], ['parley', 'Parley'], ['hold', 'Hold']]
 const CAPTAIN_TABS = [['sites', 'Sites'], ['compass', 'Compass'], ['parley', 'Parley'], ['hold', 'Hold']]
 
+// The header follows the game row until the first Pirate state arrives.
+function phaseHeader(pirate, game) {
+  const phase = pirate?.phase ?? game?.phase ?? ''
+  const name = phaseName(phase)
+  const hint = phaseHint(pirate ?? (phase ? { phase } : null))
+  return {
+    phase,
+    phaseLabel: pirate?.paused ? 'Paused' : name.short,
+    phaseColor: pirate?.paused ? C.red : phase === 'finished' ? C.muted : C.amber,
+    phaseHint: hint ? `${name.long}. ${hint}` : name.long,
+  }
+}
+
+function PirateCells({ pirate }) {
+  return <>
+    <StateCell value={pirate?.shards ?? '--'} label="Shards" />
+    <StateCell value={pirate?.doubloons ?? '--'} label="Doubloons" color={C.brassLight} bordered />
+    <StateCell value={pirate ? `${(pirate.oath ?? []).length}/4` : '--'} label="Oath words" />
+  </>
+}
+
 export default function GameScreen({ gameId, session: auth, onBack }) {
   const syncLog = useSyncLog()
   const { data: pirate, error: pirateError, load: loadPirate } = useGameRpc('get_pirate_state', gameId, syncLog)
@@ -20,32 +41,18 @@ export default function GameScreen({ gameId, session: auth, onBack }) {
   const { sendNow } = session
   // Sends queued positions, then asks the server which site this is.
   const checkSpot = useCallback(async () => { await sendNow(); await loadPirate() }, [sendNow, loadPirate])
-  const modeTabs = pirate?.is_captain ? CAPTAIN_TABS : CREW_TABS
-  const tab = selectedTab === 'compass' && !pirate?.is_captain ? 'sites' : selectedTab
-
-  const phase = pirate?.phase ?? session.game?.phase ?? ''
-  const state = pirate ?? (phase ? { phase } : null)
-  const name = phaseName(phase)
-  const phaseColor = pirate?.paused ? C.red : phase === 'finished' ? C.muted : C.amber
-  const hint = phaseHint(state)
+  const captain = !!pirate?.is_captain
+  const tab = selectedTab === 'compass' && !captain ? 'sites' : selectedTab
+  const panel = { state: pirate, error: pirateError, gameId, refresh: loadPirate }
 
   return (
     <GameFrame
       session={session} onBack={onBack} tab={tab} setTab={setTab}
-      modeTabs={modeTabs} eventsLabel="Log" sheetTab={null} shareTab={null} gpsInHeader
-      phase={phase} phaseLabel={pirate?.paused ? 'Paused' : name.short} phaseColor={phaseColor}
-      phaseHint={hint ? `${name.long}. ${hint}` : name.long}
-      cells={<>
-        <StateCell value={pirate?.shards ?? '--'} label="Shards" />
-        <StateCell value={pirate?.doubloons ?? '--'} label="Doubloons" color={C.brassLight} bordered />
-        <StateCell value={pirate ? `${(pirate.oath ?? []).length}/4` : '--'} label="Oath words" />
-      </>}
+      modeTabs={captain ? CAPTAIN_TABS : CREW_TABS} eventsLabel="Log" sheetTab={null} shareTab={null} gpsInHeader
+      {...phaseHeader(pirate, session.game)} cells={<PirateCells pirate={pirate} />}
     >
-      {(tab === 'sites' || tab === 'compass') && (
-        <PiratePanel mode={tab} state={pirate} error={pirateError}
-          gameId={gameId} refresh={loadPirate} sharing={session.sharing} checkSpot={checkSpot} />
-      )}
-      {tab === 'parley' && <ParleyPanel state={pirate} error={pirateError} gameId={gameId} refresh={loadPirate} />}
+      {(tab === 'sites' || tab === 'compass') && <PiratePanel mode={tab} sharing={session.sharing} checkSpot={checkSpot} {...panel} />}
+      {tab === 'parley' && <ParleyPanel {...panel} />}
       {tab === 'hold' && <HoldPanel state={pirate} error={pirateError} session={session} />}
     </GameFrame>
   )

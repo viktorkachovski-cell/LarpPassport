@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Reason, validReason } from './pirateCommon'
 
 export const RULE_FIELDS = [
   ['treasure_percent', 'Treasure percentage (maximum 1000 doubloons)', 40, 0, 100],
@@ -15,7 +16,7 @@ export const RULE_FIELDS = [
   ['answer_lockout_seconds', 'Wrong-answer lockout seconds', 120, 30, 600],
   ['answer_attempt_limit', 'Wrong answers before lockout', 3, 1, 10],
 ]
-const DEFAULTS = Object.fromEntries(RULE_FIELDS.map(([key, _label, value]) => [key, value]))
+const DEFAULTS = Object.fromEntries(RULE_FIELDS.map(([key, , value]) => [key, value]))
 DEFAULTS.riddle_payouts = [20, 15, 10, 5]
 
 function makeDraft(settings) {
@@ -39,7 +40,7 @@ export default function PirateSettings({ gameId, state, busy, run, rpc, refresh 
   const payouts = payoutTokens.map(Number)
   const validPayouts = payoutTokens.every((value) => value !== '') && payouts.length >= 1 && payouts.length <= 20
     && payouts.every((value) => Number.isInteger(value) && value >= 0 && value <= 1000)
-  const validNumbers = RULE_FIELDS.every(([key, _label, _default, min, max]) => draft[key] !== ''
+  const validNumbers = RULE_FIELDS.every(([key, , , min, max]) => draft[key] !== ''
     && Number.isInteger(Number(draft[key])) && Number(draft[key]) >= min && Number(draft[key]) <= max)
   const changedElsewhere = dirty && JSON.stringify(base) !== currentJson
   function edit(key, value) { setDirty(true); setDraft((previous) => ({ ...previous, [key]: value })) }
@@ -64,15 +65,14 @@ export default function PirateSettings({ gameId, state, busy, run, rpc, refresh 
         <input id="pirate-riddle-payouts" value={draft.riddle_payouts} required onChange={(event) => edit('riddle_payouts', event.target.value)} />
         <p className="hint">Comma-separated whole doubloons, 0–1000 each. The last amount repeats for every later crew.</p>
       </div>
-      {RULE_FIELDS.map(([key, label, _default, min, max]) => <div className="field" key={key}>
+      {RULE_FIELDS.map(([key, label, , min, max]) => <div className="field" key={key}>
         <label htmlFor={'pirate-setting-' + key}>{label}</label>
         <input id={'pirate-setting-' + key} type="number" min={min} max={max} step="1" required value={draft[key]}
           onChange={(event) => edit(key, event.target.value)} />
       </div>)}
-      <div className="field"><label htmlFor="pirate-settings-reason">Settings change reason</label>
-        <input id="pirate-settings-reason" value={reason} minLength={3} maxLength={300} required onChange={(event) => setReason(event.target.value)} /></div>
+      <Reason id="pirate-settings-reason" label="Settings change reason" value={reason} onChange={setReason} />
       <div className="row">
-        <button type="submit" disabled={!!busy || state.phase === 'finished' || !dirty || changedElsewhere || !validPayouts || !validNumbers || reason.trim().length < 3}>Save rules</button>
+        <button type="submit" disabled={!!busy || state.phase === 'finished' || !dirty || changedElsewhere || !validPayouts || !validNumbers || !validReason(reason)}>Save rules</button>
         <button type="button" disabled={!!busy} onClick={discard}>Reload current settings</button>
       </div>
     </form>

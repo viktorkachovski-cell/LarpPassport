@@ -1,15 +1,23 @@
+import { COMPASS_PHASES } from '../pirate/phases'
+
+export const REPORT_STATES = ['yielded', 'fighting']
+
+export const mercyActive = (state, now) => !!state?.mercy_until && new Date(state.mercy_until).getTime() > now
+
+// Parley is open in the compass phases to crewed players, unless paused or switched off by the GM.
+function parleyOpen(state) {
+  return !!state?.is_pirate && state.role === 'player' && !!state.crew?.id && !state.paused
+    && !!state.pvp_enabled && COMPASS_PHASES.includes(state.phase)
+}
+
 export function parleyActions(state, now = Date.now()) {
   const active = state?.active_parley
-  const allowed = state?.is_pirate && state.role === 'player' && !!state.crew?.id && !state.paused
-    && state.pvp_enabled && ['cursed', 'hunt', 'hoard'].includes(state.phase)
-  const mercy = state?.mercy_until && new Date(state.mercy_until).getTime() > now
+  const open = parleyOpen(state)
+  const acting = open && !!active?.can_act
   return {
-    canOpen: !!allowed && !active && !mercy,
-    canJoin: !!allowed && !active && !mercy,
-    canChoose: !!allowed && !!active?.can_act && active.role === 'target' && active.state === 'joined',
-    canReport: !!allowed && !!active?.can_act && !active.self_reported
-      && ['yielded', 'fighting'].includes(active.state),
-    canPlunder: !!allowed && !!active?.can_act && active.state === 'awaiting_choice'
-      && active.winner_faction === state.crew?.id,
+    canStart: open && !active && !mercyActive(state, now),
+    canChoose: acting && active.role === 'target' && active.state === 'joined',
+    canReport: acting && !active.self_reported && REPORT_STATES.includes(active.state),
+    canPlunder: acting && active.state === 'awaiting_choice' && active.winner_faction === state.crew.id,
   }
 }

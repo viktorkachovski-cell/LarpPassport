@@ -3,7 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg'
 import { C, F, S, T } from '../lib/theme'
 import { useReducedMotion } from '../lib/useReducedMotion'
-import { DecorativeLayer, TouchableOpacity } from '../ui/presentation'
+import { DecorativeLayer, MotionScrollView as ScrollView, TouchableOpacity } from '../ui/presentation'
 
 // The Black Tide building blocks: wood, parchment and brass. Pirate build only.
 
@@ -59,6 +59,25 @@ export function Sheet({ children, style }) {
         {children}
       </View>
     </View>
+  )
+}
+
+// Text on the parchment sheet, shared by the tab panels' style sheets.
+export const SHEET_TEXT = {
+  body: { color: C.sheetInk, fontFamily: F.body, fontSize: T.bodyLarge, lineHeight: T.lineBody },
+  muted: { color: C.sheetMuted, fontFamily: F.body, fontSize: 15, lineHeight: 21 },
+  rule: { height: 1, backgroundColor: C.sheetRule, marginVertical: 6 },
+}
+
+// Scroll page for a player tab: any load error, then the content. A GM is
+// pointed at the dashboard instead.
+export function TabPage({ state, error, children }) {
+  const gm = !!state && state.role !== 'player'
+  return (
+    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      {!!error && !gm && <Notice tone="error" text={error} />}
+      {gm ? <Sheet><SheetTitle>Pirate game</SheetTitle><Text style={styles.body}>GM controls are available in the dashboard.</Text></Sheet> : children}
+    </ScrollView>
   )
 }
 
@@ -199,6 +218,8 @@ export function BackIcon({ size = 24, color = '#1C120A' }) {
 }
 
 const styles = StyleSheet.create({
+  ...SHEET_TEXT,
+  page: { padding: 16, gap: 16, paddingBottom: 40 },
   rivets: { position: 'absolute', left: 0, right: 0, top: 3, height: 8 },
   sheetShadow: { borderRadius: 12, backgroundColor: C.sheet, elevation: 4, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
   sheet: { borderRadius: 12, borderWidth: 1, borderColor: C.sheetEdge, backgroundColor: C.sheet, padding: 20, gap: 12, overflow: 'hidden' },

@@ -65,8 +65,9 @@ describe('describeServerSync', () => {
     expect(s.detail).toBe('Live updates off · refreshing periodically')
   })
 
-  it('never claims live or periodic refresh for a view without either', () => {
-    const s = describeServerSync({ lastOkAt: at(5), realtime: null, now: T0 })
+  it('names its subject and never claims live or periodic refresh for a view without either', () => {
+    const s = describeServerSync({ lastOkAt: at(15), realtime: null, subject: 'Games', now: T0 })
+    expect(s.text).toBe('Games updated 15s ago')
     expect(s.detail).toBe('Pull down to refresh')
     expect(s.live).toBeNull()
   })
@@ -115,12 +116,5 @@ describe('describeSharing', () => {
 
   it('does not claim a permission problem before permissions were queried', () => {
     expect(describeSharing({ sharing: false, permission: null, now: T0 }).lines).toEqual([])
-  })
-})
-
-describe('describeServerSync subject', () => {
-  it('names what was updated without rewriting the sentence', () => {
-    expect(describeServerSync({ lastOkAt: at(15), realtime: null, subject: 'Games', now: T0 }).text).toBe('Games updated 15s ago')
-    expect(describeServerSync({ lastOkAt: at(15), realtime: null, now: T0 }).text).toBe('Server updated 15s ago')
   })
 })

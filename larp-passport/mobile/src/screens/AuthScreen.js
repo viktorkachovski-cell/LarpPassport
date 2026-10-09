@@ -6,6 +6,10 @@ import { COPY, themeName } from '../lib/brand'
 import { C, F, S, T } from '../lib/theme'
 import { ScreenEntrance, screenStyles, TouchableOpacity } from '../ui/presentation'
 
+const submitLabel = (copy, signingIn, busy) => (signingIn
+  ? (busy ? copy.busySignin : copy.submitSignin)
+  : (busy ? copy.busySignup : copy.submitSignup))
+
 export default function AuthScreen() {
   const [mode, setMode] = useState('signin')
   const [email, setEmail] = useState('')
@@ -73,7 +77,7 @@ export default function AuthScreen() {
           <Field label="PASSWORD" value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
 
           <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={submit} style={[styles.primaryButton, busy && styles.disabled]}>
-            <Text style={styles.primaryButtonText}>{busy ? (signingIn ? copy.busySignin : copy.busySignup) : signingIn ? copy.submitSignin : copy.submitSignup}</Text>
+            <Text style={styles.primaryButtonText}>{submitLabel(copy, signingIn, busy)}</Text>
           </TouchableOpacity>
           {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
           {!!notice && <Text style={styles.notice} accessibilityLiveRegion="polite">{notice}</Text>}

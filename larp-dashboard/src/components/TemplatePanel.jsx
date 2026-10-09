@@ -4,6 +4,17 @@ import Outcome from './Outcome'
 import TableScroll from './TableScroll'
 
 const KEY_RE = /^[a-z0-9_]{1,32}$/
+const present = (value) => value !== '' && value !== undefined && value !== null
+
+// A stat as stored: trimmed label, typed default, numeric bounds when given.
+function cleanStat(s, key) {
+  const out = { key, label: (s.label ?? '').trim() || key, type: s.type, player_editable: !!s.player_editable }
+  if (s.type !== 'number') return { ...out, default: String(s.default ?? '') }
+  out.default = Number(s.default) || 0
+  if (present(s.min)) out.min = Number(s.min)
+  if (present(s.max)) out.max = Number(s.max)
+  return out
+}
 
 export default function TemplatePanel({ game, hasCharacters, updateGame }) {
   const [stats, setStats] = useState((game.template?.stats ?? []).map((s) => ({ ...s })))
@@ -23,15 +34,7 @@ export default function TemplatePanel({ game, hasCharacters, updateGame }) {
       if (!KEY_RE.test(key)) { invalid(`"${key || '(empty)'}" is not a valid key — lowercase letters, digits and _ only.`); return }
       if (keys.has(key)) { invalid(`Duplicate key "${key}".`); return }
       keys.add(key)
-      const out = { key, label: (s.label ?? '').trim() || key, type: s.type, player_editable: !!s.player_editable }
-      if (s.type === 'number') {
-        out.default = Number(s.default) || 0
-        if (s.min !== '' && s.min !== undefined && s.min !== null) out.min = Number(s.min)
-        if (s.max !== '' && s.max !== undefined && s.max !== null) out.max = Number(s.max)
-      } else {
-        out.default = String(s.default ?? '')
-      }
-      cleaned.push(out)
+      cleaned.push(cleanStat(s, key))
     }
     run(() => updateGame({ template: { stats: cleaned } }), { success: 'Template saved.' })
   }
