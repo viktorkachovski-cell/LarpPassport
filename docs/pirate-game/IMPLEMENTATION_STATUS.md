@@ -15,23 +15,28 @@ Review baseline: merged `main` commit `3853aa6`, whose GitHub CI passed; this up
 | Review fixes | `20261009083530_review_parley_lifecycle.sql`: <=75 m between participants, both fixes <=120 s old and hoard exclusion rechecked on each new decision; status reads expire codes/queue disputes; repeated reports do not extend timeout; plunder retries return original amount; minimum-integer adjustments return validation errors. |
 | Uncapped rewards | `20261009091310_pirate_uncapped_crews.sql`: new riddle claims pay 20/15/10/5, then 5 for every later successful crew; positive integer ranks persist beyond fifth. Historical ledger and saved responses are preserved. |
 | Battery lifecycle | `useNow.js` stops UI ticks while inactive and catches up immediately on resume; finite countdowns stop on expiry. `useTrueHeading.js` prevents overlapping async startup and removes late subscriptions. Background GPS profiles and event delivery are unchanged. |
-| Dashboard | Pirate setup, phase/safety controls, treasure map marker, captains, balances, site claim board/voids and active Parley disputes. Pirate games skip Hunt admin loads. |
+| GM recovery and settings | `20261009120958_pirate_gm_controls.sql`: reasoned/idempotent normal-rank claims, manual Mercy, valid captain replacement, future payouts/timers, fixed encounter rules and deadlines, private correction history and one-step phase reversal including finished. |
+| Dashboard | Pirate setup, phase/safety controls, treasure map marker, captains, balances, site claim board/voids, active disputes, GM recovery forms, settings with stale-edit protection, paginated ledger/claim/reading/Parley/audit history and stale-GPS/spread alerts. Pirate games skip Hunt admin loads. |
 | Android apps | One Expo project; default Pirate package `com.larppassport.app` replaces the old app, and Time Hunt package `com.larppassport.timehunt` installs beside it. Metro resolves variant screens/brands; captain-only compass tab. |
+
+The GM controls also preserve the updated player layout and wording from `7e4adf4`; rule text and plunder labels follow configured or snapshotted payouts.
 
 ## Verification on 2026-10-09
 
-- Dashboard: 68 Vitest tests and Vite production build.
-- Mobile: 89 Jest tests, Expo Doctor 18/18 and Android exports for both variants using CI placeholder configuration. Exports are not APK/device QA.
-- Local Docker Supabase: all migrations replayed from scratch; 23 pgTAP files, 501 assertions. The added attendance/reward suite covers six crews and 25 players, a fifth crewmate, full ranks, late payouts, retries, duplicate claims and void/reclaim. The new regression coverage checks each Parley decision for separation, stale fixes, hoard exclusion, pause and PvP disable, plus expiry, retries and grants.
-- Real-connection concurrency scripts cover Hunt consent/elimination/roster writes and Pirate captain locking, claim ranks/duplicates, void/reclaim, code joins, simultaneous confirmations/plunder retries and player/GM expiry sweeps (four Hunt races, nine Pirate races).
+- Dashboard: 78 Vitest tests and Vite production build.
+- Mobile: 96 Jest tests, Expo Doctor 18/18 and Android exports for both variants using CI placeholder configuration. Exports are not APK/device QA.
+- Local Docker Supabase: all migrations replayed from scratch; 24 pgTAP files, 597 assertions. The added attendance/reward suite covers six crews and 25 players, a fifth crewmate, full ranks, late payouts, retries, duplicate claims and void/reclaim. The new regression coverage checks each Parley decision for separation, stale fixes, hoard exclusion, pause and PvP disable, plus expiry, retries and grants.
+- Real-connection concurrency scripts cover Hunt consent/elimination/roster writes and Pirate captain locking, claim ranks/duplicates, void/reclaim, code joins, simultaneous confirmations/plunder retries and player/GM expiry sweeps (four Hunt races, fourteen Pirate races, including GM/player claims, GM retries, competing settings/captain edits and manual Mercy against Parley voids).
 - Local database advisors reported no security or performance issues at warning/error level. Database lint has no findings in the changed Pirate functions; existing PostGIS dynamic-SQL and Hunt compatibility/unused-variable notes remain.
 - Lighthouse simulator: four Python tests. Simulation cannot establish field GPS accuracy.
+
+The GM-control suite adds 96 assertions for authorization/grants, idempotency, normal ranked rewards, bounded settings, stale edits, captain privacy, fixed Parley terms/deadlines, manual Mercy preservation, history cursors, alerts and phase correction. Changed Pirate functions have zero database-lint findings. Browser/device gameplay was not exercised by these unit/database checks.
 
 ## Hosted state and release limits
 
 Read-only migration-history inspection on 2026-10-09 confirmed that hosted `Passport`
 (`ufcnxkowpkwayczbfnzy`) matches all 32 migrations through `20261008094234_pirate_gm_adjust`.
-The Parley review and uncapped-crew migrations are local/source work and must be applied separately to make their rules live. The hosted payout still stops after fifth place until the new migration is applied.
+The Parley review, uncapped-crew and GM-control migrations are local/source work and must be applied separately to make their rules live. The hosted payout still stops after fifth place until the new migration is applied.
 Pushing GitHub `main` does not apply Supabase migrations or replace installed APKs.
 
 The hosted backend before that corrective migration only flags >75 m separation at join,

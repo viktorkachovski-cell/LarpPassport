@@ -184,6 +184,38 @@ try:
     assert query(f"select state from private.pirate_parleys where id='{timeout_id}'") == 'disputed'
     assert query(f"select count(*) from public.game_events where game_id='{GAME}' and type='pirate_dispute' and payload->>'parley_id'='{timeout_id}'") == '1'
     print('PASS: simultaneous player/GM status sweeps create one timeout dispute')
+    # GM and player claims share the same rank and reward path.
+    stand_at([4], 4)
+    gm_claim = f"select public.gm_claim_for('{GAME}','{crew(2)}','{zone(4)}','Verified solve','19400000-0000-0000-0000-000000000090')->>'status';"
+    assert sorted(race([(GM, gm_claim), claim(4, 91)])) == ['already_claimed', 'ok']
+    assert query(f"select count(*) from private.pirate_claims where zone_id='{zone(4)}' and faction_id='{crew(2)}'") == '1'
+    assert query(f"select sum(l.delta) from private.pirate_ledger l join private.pirate_claims c on c.id=l.ref_id where c.zone_id='{zone(4)}' and l.currency='doubloon'") == '20'
+    print('PASS: GM recovery racing a player solve grants one normal reward')
+
+    gm_retry = f"select public.gm_claim_for('{GAME}','{crew(2)}','{zone(5)}','Verified solve','19400000-0000-0000-0000-000000000092')->>'claim_id';"
+    claim_ids = race([(GM, gm_retry), (GM, gm_retry)])
+    assert claim_ids[0] == claim_ids[1] and len(claim_ids[0]) == 36, claim_ids
+    assert query(f"select count(*) from private.pirate_gm_audit where game_id='{GAME}' and after_state->>'claim_id'='{claim_ids[0]}'") == '1'
+    print('PASS: simultaneous GM retries return the same claim and audit once')
+
+    old_settings = query(f"select private.pirate_settings('{GAME}')::text")
+    settings = [f"select public.gm_set_pirate_settings('{GAME}','{{\"yield_percent\":{n}}}'::jsonb,'Concurrent rule change','{old_settings}'::jsonb)->>'status';" for n in (20, 30)]
+    assert sorted(race([(GM, sql) for sql in settings])) == ['ok', 'settings_changed']
+    assert query(f"select count(*) from private.pirate_gm_audit where game_id='{GAME}' and action='settings'") == '1'
+    print('PASS: competing settings drafts cannot overwrite an unseen GM change')
+
+    previous = query(f"select profile_id from private.pirate_captains where game_id='{GAME}' and faction_id='{crew(1)}'")
+    replacements = [uid(n) for n in (1, 2, 3) if uid(n) != previous]
+    captain_requests = [f"select public.gm_replace_captain('{GAME}','{crew(1)}','{new}','Concurrent captain correction','{previous}')->>'status';" for new in replacements]
+    assert sorted(race([(GM, sql) for sql in captain_requests])) == ['captain_changed', 'ok']
+    print('PASS: competing captain replacements preserve the first confirmed change')
+
+    # An older void must leave manual Mercy standing in either lock order.
+    manual = f"select public.gm_set_mercy('{GAME}','{crew(2)}',30,'Field safety ruling')->>'status';"
+    old_void = f"select public.gm_void_parley('{GAME}','{parley_id}','Correct older result')->>'status';"
+    assert race([(GM, manual), (GM, old_void)]) == ['ok', 'ok']
+    assert query(f"select (source_parley_id is null and until_at>now()+interval '29 minutes') from private.pirate_mercy where game_id='{GAME}' and faction_id='{crew(2)}'") == 't'
+    print('PASS: manual Mercy survives a concurrently voided older Parley')
 finally:
     query(f"delete from public.games where id='{GAME}';")
     query("delete from auth.users where id::text like '19000000-0000-0000-0000-%';")

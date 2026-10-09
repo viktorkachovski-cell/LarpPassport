@@ -1,6 +1,6 @@
 # Pirate game: remaining work
 
-Updated 2026-10-09 after reviewing merged `main` (`3853aa6`), the uncapped-crew migration and battery lifecycle fixes.
+Updated 2026-10-09 after the code review, uncapped crews, battery lifecycle fixes and audited GM controls.
 
 [GAME_GUIDE.md](GAME_GUIDE.md) describes the implemented rules and event schedule.
 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) records verification and deployment limits.
@@ -10,7 +10,7 @@ This file is the deferred backlog. It does not instruct an agent to rebuild comp
 
 Private Pirate schema and RPCs, flexible setup, ranked riddle rewards, frozen treasure value,
 captains and captain-only compass, claims and claim voids, independent Parley confirmations,
-GM Parley rulings/voids, treasure awards/voids, GM balance adjustments, and separate Pirate/Time Hunt builds exist.
+GM Parley rulings/voids, treasure awards/voids, GM balance adjustments, reasoned GM claims/Mercy/captain replacement, editable future payouts/timers, paginated GM history, location alerts, reversible phase control, and separate Pirate/Time Hunt builds exist.
 The review adds strict Parley proximity, location rechecks, refresh-driven expiry, and idempotent report/plunder fixes. Attendance is uncapped; new riddle rewards pay five doubloons from fourth place onward. UI clocks pause while inactive and async heading startup cannot orphan a sensor subscription.
 Use the latest definition of each function across ordered migrations; older applied definitions are history, not unused code to delete.
 
@@ -20,17 +20,12 @@ These are retained at the owner's request on 2026-10-09. They are proposals, not
 
 | Work | Decision and acceptance criteria before implementation |
 | --- | --- |
-| `gm_claim_for` | Define the GM bypass of GPS/answer checks, audit attribution, successful-answer rank, and idempotency. Award the normal riddle rewards once. |
 | `gm_void_reading` | Reasoned void, audit event, and repeat-read policy. Preserve deterministic bearings and the treasure-point lock. |
-| `gm_set_mercy` | Decide allowed duration, interaction with Parley voids and existing immunity, and who can override it. |
-| Replace a valid captain after charting | Decide the lost/dead-phone recovery rule and what happens to previously disclosed readings. Currently only crews without a valid captain can receive one after setup. |
-| Editable payouts/timers | Current values are SQL constants. `pirate_games.settings` exists but the gameplay functions do not consume it. Define ranges, phase locks, and compatibility before exposing a settings UI. |
-| GM history and alerts | Ledger/reading/resolved-Parley drill-down, crew staleness/spread warnings, and correction controls beyond the existing site board and active dispute form. |
-| Pause-aware Parley timeout | Currently five minutes since the last new action; pause/truce does not stop the clock. Decide whether paused time should be excluded before changing this rule. |
+| Pause-aware Parley timeout | Currently the encounter’s configured timeout since the last new action (default five minutes); pause/truce does not stop the clock. Decide whether paused time should be excluded before changing this rule. |
 
 ## Release and field work
 
-- Apply the verified Parley and uncapped-crew migrations to the hosted backend before treating the new Parley behavior as live; record the hosted version and compare it with the repository.
+- Apply the verified Parley, uncapped-crew and GM-control migrations to the hosted backend before treating the new Parley behavior as live; record the hosted version and compare it with the repository.
 - Build a signed Pirate APK from the reviewed commit and test it on real Android devices. An Expo export proves bundling, not installation, sensors or background GPS.
 - Verify both GM accounts, including phone-width dashboard controls, and the exact dashboard deployment against the hosted backend.
 - Survey the treasure/lighthouse geometry with `tools/pirate/simulate_triangulation.py`; retain its estimates as planning inputs, then test real readings.

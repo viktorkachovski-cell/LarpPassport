@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { parleyActions } from '../lib/pirateParley'
 import { pirateRequestId } from '../lib/pirateRequestId'
+import { parleyTerms } from '../lib/pirateRules'
 import { supabase } from '../lib/supabase'
 import { C, F, S, T } from '../lib/theme'
 import { useNow } from '../lib/useNow'
@@ -22,7 +23,7 @@ function statusText(result) {
     target_treasure_exclusion: 'The other player is too near the hoard.',
     mercy: 'Davy’s Mercy protects this crew for now. No one can challenge them.',
     pair_cooldown: 'These crews must wait before another Parley.',
-    hourly_limit: 'Your crew has used its three Parleys this hour.',
+    hourly_limit: 'Your crew has reached the attacking limit for this window.',
     crew_busy: 'Your crew already has an active Parley.',
     invalid_code: 'That code has expired or is unavailable.',
     same_crew: 'A crew cannot Parley with itself.',
@@ -93,6 +94,7 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
       <Text style={styles.muted}>Challenged in person? Show your code. Challenging someone? Enter their code. Stay within 75 m with location sharing on, then settle it with Yield or Fight.</Text>
       {!state && <Text style={styles.body}>Loading Parley…</Text>}
       {state && <>
+        <Text style={styles.muted}>{parleyTerms(state)}{active ? ' These terms stay fixed for this Parley.' : ' Terms are fixed when a code opens.'}</Text>
         {state.mercy_until && new Date(state.mercy_until).getTime() > now
           && <Notice tone="warning" text={`Davy’s Mercy: no one can challenge your crew until ${new Date(state.mercy_until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`} />}
         {!active && <>
@@ -118,7 +120,6 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
           {active.self_reported && ['yielded', 'fighting'].includes(active.state)
             && <Text style={styles.body}>Your report is saved. Waiting for the other player.</Text>}
           {active.state === 'disputed' && <Notice tone="warning" text="Reports disagree or the session timed out. The GM must rule." />}
-          {actions.canChoose && <Text style={styles.muted}>Yield: you give 10% of your doubloons (at least 3). Fight: the loser gives 1 shard or 25% of doubloons (at least 5), winner’s choice.</Text>}
           {actions.canChoose && <View style={styles.row}>
             <ActionButton label="Yield" variant="plank" disabled={busy}
               onPress={() => call('parley_choice', { parley_id: active.id, choice: 'yield' }, () => 'Yield recorded. Both players must confirm the outcome.')} />
@@ -141,7 +142,7 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
           {actions.canPlunder && <View style={styles.row}>
             <ActionButton label="Take 1 shard" variant="plank" disabled={busy}
               onPress={() => call('parley_plunder', { parley_id: active.id, currency: 'bearing' }, () => 'One bearing shard transferred.')} />
-            <ActionButton label="Take 25% of doubloons" variant="plank" disabled={busy}
+            <ActionButton label={`Take ${active.rules?.fight_percent ?? state.settings?.fight_percent ?? 25}% of doubloons`} variant="plank" disabled={busy}
               onPress={() => call('parley_plunder', { parley_id: active.id, currency: 'doubloon' },
                 (data) => `${data.amount} doubloons transferred.`)} />
           </View>}

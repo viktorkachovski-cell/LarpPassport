@@ -5,6 +5,9 @@ import { useAction } from '../lib/useAction'
 import Outcome from './Outcome'
 import PirateCrews from './PirateCrews'
 import PirateSiteBoard from './PirateSiteBoard'
+import PirateGmControls from './PirateGmControls'
+import PirateSettings from './PirateSettings'
+import PirateHistory, { PirateAlerts } from './PirateHistory'
 
 const PHASES = ['setup', 'charting', 'cursed', 'truce', 'hunt', 'hoard', 'recall', 'finished']
 const PHASE_MESSAGES = {
@@ -85,6 +88,7 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
   const [awardCrew, setAwardCrew] = useState('')
   const [awardReason, setAwardReason] = useState('')
   const [voidReason, setVoidReason] = useState('')
+  const riddlePayouts = state?.settings?.riddle_payouts ?? [20, 15, 10, 5]
   const phaseIndex = PHASES.indexOf(state?.phase)
   const canSetSite = state?.phase === 'setup'
   const canSetTreasure = ['setup', 'charting'].includes(state?.phase)
@@ -106,9 +110,9 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
     setAnswer('')
   }
 
-  async function rpc(name, args) {
+  async function rpc(name, args, allowed = ['ok']) {
     const data = unwrap(await supabase.rpc(name, args))
-    if (data?.status && data.status !== 'ok') throw new Error(data.status.replaceAll('_', ' '))
+    if (data?.status && !allowed.includes(data.status)) throw new Error(data.status.replaceAll('_', ' '))
     return data
   }
 
@@ -173,7 +177,7 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
   }
 
   function movePhase(next) {
-    if (!window.confirm(`Change Pirate phase from ${state.phase} to ${next}? Players will be notified.`)) return
+    if (!window.confirm(`Change Pirate phase from ${state.phase} to ${next}? Players will be notified. Earlier phases reopen play without undoing rewards, readings or the frozen hoard value; finished-to-recall also restores active status. Players must re-enable sharing if finishing stopped it.`)) return
     run(async () => {
       await rpc('pirate_set_phase', { g: game.id, next_phase: next, message: phaseMessage || PHASE_MESSAGES[next] || null })
       setPhaseMessage('')
@@ -222,8 +226,9 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
     {state?.is_pirate && <>
       <section className="command-card pirate-section">
         <h3>Phase and safety controls</h3>
+        <p className="hint">Previous phase corrects an accidental selection, including finished. It preserves recorded gameplay; players whose tracking stopped on finish must turn sharing back on.</p>
         <div className="row">
-          <button type="button" disabled={!!busy || phaseIndex < 1 || phaseIndex === PHASES.length - 1}
+          <button type="button" disabled={!!busy || phaseIndex < 1}
             onClick={() => movePhase(PHASES[phaseIndex - 1])}>Previous phase</button>
           <button type="button" disabled={!!busy || phaseIndex < 0 || phaseIndex === PHASES.length - 1}
             onClick={() => movePhase(PHASES[phaseIndex + 1])}>Next: {PHASES[phaseIndex + 1] ?? 'finished'}</button>
@@ -239,8 +244,8 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
       </section>
       {canSetSite && <section className="command-card pirate-section">
         <h3>Register a Pirate site</h3>
-        <p className="hint">Create the zone on the map first: an event zone set to "Log silently for GMs", with a dwell time (20 s is a good start). The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays 20 / 15 / 10 doubloons for the first three correct crews, then 5 for every later crew. Crew count and crew size are uncapped.</p>
-        <p className="hint">Players see the prompt in the app's CHART tab once they have stood inside the zone for its dwell time with location sharing on, and type the answer there. The answer is stored only as a hash: it is cleared after saving and never shown again.</p>
+        <p className="hint">Create the zone on the map first: an event zone set to "Log silently for GMs", with a dwell time (20 s is a good start). The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays {riddlePayouts.join(' / ')} doubloons by rank, then {riddlePayouts.at(-1)} for every later crew. Crew count and crew size are uncapped.</p>
+        <p className="hint">Players see the prompt in the app's Sites tab once they have stood inside the zone for its dwell time with location sharing on, and type the answer there. The answer is stored only as a hash: it is cleared after saving and never shown again.</p>
         <form onSubmit={saveSite} autoComplete="off">
           <div className="pirate-form-grid">
             <div className="field"><label htmlFor="pirate-zone">Zone</label>
@@ -289,7 +294,7 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
               {onShowTreasure && <button type="button" onClick={onShowTreasure}>Show on map</button>}
             </div>
           : <p className="hint">No treasure point saved yet.</p>}
-        {canSetTreasure && <p className="hint">Coordinates can be changed through charting. They lock at cursed, or after a reading exists. The treasure's value is set when the hoard opens: 40% of the leading crew's doubloons, rounded.</p>}
+        {canSetTreasure && <p className="hint">Coordinates can be changed through charting. They lock at cursed, or after a reading exists. The treasure's value is set when the hoard opens: {state.settings?.treasure_percent ?? 40}% of the leading crew's doubloons, rounded, with a maximum of 1000 doubloons.</p>}
         {canSetTreasure && <form onSubmit={saveTreasure} className="pirate-form-grid">
           <div className="field"><label htmlFor="pirate-lat">Latitude</label><input id="pirate-lat" type="number" step="any" required min="-90" max="90" value={lat} onChange={(event) => setLat(event.target.value)} onPaste={pasteTreasure} /></div>
           <div className="field"><label htmlFor="pirate-lng">Longitude</label><input id="pirate-lng" type="number" step="any" required min="-180" max="180" value={lng} onChange={(event) => setLng(event.target.value)} onPaste={pasteTreasure} /></div>
@@ -306,11 +311,15 @@ export default function PiratePanel({ game, state, zones, refresh, onShowTreasur
             <ul className="hint">{readiness.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
           </>}</div>}
       </section>}
+      <PirateAlerts alerts={state.alerts} />
+      <PirateSettings key={game.id + "-settings"} gameId={game.id} state={state} busy={busy} run={run} rpc={rpc} refresh={refresh} />
+      <PirateGmControls key={game.id + "-gm"} gameId={game.id} state={state} busy={busy} run={run} rpc={rpc} refresh={refresh} />
+      <PirateHistory key={game.id + "-history"} gameId={game.id} state={state} busy={busy} run={run} rpc={rpc} refresh={refresh} />
       <PirateCrews gameId={game.id} state={state} busy={busy} run={run} rpc={rpc} refresh={refresh} />
       {state.phase === 'hoard' && <section className="command-card pirate-section">
         <h3>Treasure award</h3>
         {state.treasure?.value != null
-          ? <p className="hint">Worth {state.treasure.value} doubloons (40% of the leading {state.treasure.basis}, frozen when the hoard opened).</p>
+          ? <p className="hint">Worth {state.treasure.value} doubloons (based on the leading {state.treasure.basis}, frozen under the rules when the hoard first opened).</p>
           : <p className="hint">No value frozen yet. Open the hoard with the phase control to set it.</p>}
         {state.treasure_award ? <>
           <p>{state.treasure_award.crew_name} holds the hoard.</p>

@@ -4,7 +4,8 @@ import Outcome from './Outcome'
 
 // Crew scoreboard. During setup the GM picks the captain of each crew with
 // two or more players; a one-player crew's player is captain automatically.
-// Captains lock when charting starts, and only the captain has the compass.
+// Initial selection locks at charting; audited replacement lives in GM controls.
+// Only the current captain has the compass.
 // A crew left without a captain later (players added during the game) can
 // still get one. The GM can add or remove a crew's shards or doubloons with a
 // reason (gm_adjust); the crew reads the ruling in its logbook.
@@ -55,7 +56,7 @@ export default function PirateCrews({ gameId, state, busy, run, rpc, refresh }) 
     <h3>Crews</h3>
     <p className="hint">{inSetup
       ? 'Choose a captain for every crew of two or more. Only the captain sees the compass. Captains lock when charting starts.'
-      : 'Captains are locked. Only the captain sees the compass. A crew of two or more without a captain can still be given one.'}</p>
+      : 'Only the captain sees the compass. A GM can replace a captain with a recorded reason using the recovery controls. A crew without a captain can still be given one.'}</p>
     <div className="table-scroll"><table className="grid">
       <thead><tr><th>Crew</th><th>Captain</th><th>Players</th><th>Shards</th><th>Doubloons</th><th>Oath</th><th>Readings</th></tr></thead>
       <tbody>{crews.map((crew) => <tr key={crew.id}>
