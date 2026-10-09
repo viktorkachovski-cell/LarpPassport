@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { C, F, S, T } from '../lib/theme'
 import { compassProgress } from '../lib/pirateCompass'
 import { pirateRequestId } from '../lib/pirateRequestId'
+import { riddleRewardText } from '../lib/pirateRules'
 import { CompassDial } from './CompassDial'
 import { claimClosedReason, claimsOpen, compassOpen, readingClosedReason } from './phases'
 import { Kicker, Notice, Sheet, SheetTitle, TideButton } from './ui'
@@ -20,7 +21,7 @@ function claimMessage(result) {
     return `Solved ${result.site_name}. ${reward}${doubloons}`
   }
   if (result.status === 'wrong') return `That answer did not open it. ${result.attempts_remaining} attempts remain.`
-  if (result.status === 'locked_out') return 'Too many attempts. Wait two minutes before trying again.'
+  if (result.status === 'locked_out') return `Too many attempts. Wait ${result.remaining_seconds ?? 120} seconds before trying again.`
   if (result.status === 'already_claimed') {
     return result.claimed_by_name
       ? `${result.claimed_by_name} already solved this for your crew.`
@@ -136,7 +137,7 @@ export function PiratePanel({ mode, state, error, gameId, refresh, sharing, chec
           {site?.site_name ? <>
             <SheetTitle>{site.site_name}</SheetTitle>
             {!!site.reward && <Text style={styles.muted}>
-              Prize: {site.reward === 'bearing' ? '1 bearing shard' : '1 oath word'} + doubloons (20 if your crew is first, then 15, 10, and 5 for every later crew)
+              Prize: {site.reward === 'bearing' ? '1 bearing shard' : '1 oath word'} + doubloons ({riddleRewardText(state.settings)})
             </Text>}
             {!!site.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
             {site.claimed_by_my_crew && <Notice tone="ok" text="Your crew has solved this site." />}

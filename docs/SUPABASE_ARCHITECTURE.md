@@ -47,9 +47,10 @@ Internal `private` tables:
 | `hunt_rounds` | Server-owned lifecycle and winner for each time hunt |
 | `hunt_players` | Secret target chain, eliminations, and cloak expiry |
 | `hunt_claims` | Victim-confirmed elimination workflow |
-| `pirate_games` | Pirate mode, pause/PvP, secret treasure/HMAC state and frozen value |
+| `pirate_games` | Pirate mode, pause/PvP, editable future rules, secret treasure/HMAC state and frozen value |
 | `pirate_sites` / `pirate_attempts` | Private site answers/oath words and crew-wide wrong-answer lockout |
-| `pirate_claims` / `pirate_ledger` | Crew claims and append-only bearing/doubloon accounting |
+| `pirate_claims` / `pirate_ledger` | Player/GM crew claims and append-only bearing/doubloon accounting |
+| `pirate_gm_audit` / `pirate_gm_claim_requests` | Private reasoned before/after GM changes and idempotent recovery requests |
 | `pirate_readings` / `pirate_captains` | Deterministic compass records and captain ownership |
 | `pirate_parleys` / `pirate_mercy` | Two-player encounters, reports, transfers and loser immunity |
 | `pirate_treasure_awards` | Audited one-active-award hoard history |
@@ -111,12 +112,12 @@ Treasure coordinates are GM-only; answer hashes and the HMAC secret are never re
 Player API and mechanics are described once in [GAME_GUIDE.md](pirate-game/GAME_GUIDE.md).
 GM setup uses `pirate_enable`, `pirate_set_site`, `pirate_clear_site`, `pirate_set_treasure`, `pirate_validate`,
 `pirate_set_captain`, `pirate_set_phase`, `pirate_set_paused`, `pirate_set_pvp` and `gm_pirate_overview`.
-Correction RPCs are `gm_adjust`, `gm_void_claim`, `gm_award_treasure`, `gm_void_treasure`, `gm_resolve_parley` and `gm_void_parley`.
+Correction RPCs are `gm_adjust`, `gm_void_claim`, `gm_award_treasure`, `gm_void_treasure`, `gm_resolve_parley`, `gm_void_parley`, `gm_claim_for`, `gm_set_mercy` and `gm_replace_captain`. `gm_set_pirate_settings` validates bounded future rules; `gm_pirate_history` provides GM-only cursor pages for ledger, claims, readings, Parleys and corrections. See the game guide for policies and ranges.
 The GM overview returns site prompts and claim ranks, never answers or oath words.
 
 Mutations serialize with the game's `pirate:` advisory transaction lock. In the corrective review migration,
 `get_pirate_state` and `gm_pirate_overview` are volatile: they also take that lock and sweep expired Parleys before returning state.
-This makes polling release stale codes and surface disputes; it creates no timer/background job. Public RPC signatures/grants remain unchanged.
+This makes polling release stale codes and surface disputes; it creates no timer/background job. The GM-control migration adds authenticated-only RPCs, snapshots newly opened Parley rules, stores deadlines and adds informational GM GPS/spread alerts. Earlier committed responses and rewards remain fixed.
 `private.pirate_parley_pair_presence` shares the fresh-location, exclusion and <=75 m checks at each new participant decision.
 Existing committed retries return their saved outcome without a second transfer.
 

@@ -81,7 +81,7 @@ These are **candidate clusters, not approved game pins**. Some contain several p
 
 The implemented rules, source files and current checks are recorded in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 The revised riddle layout, payouts, frozen hoard value, flexible setup, captains, claim voids and GM balance adjustments already exist.
-Do not reimplement them. Future correction tools and editable settings are [deferred work](AGENT_PLAN.md), not event prerequisites unless the owner promotes them.
+Do not reimplement them. The owner promoted GM claims, Mercy, captain replacement, editable settings, history/alerts and phase reversal; they now exist in reviewed source. Remaining work is in [AGENT_PLAN.md](AGENT_PLAN.md). Hosted migrations, dashboard delivery and device rehearsal still need verification.
 
 - [ ] Apply the reviewed Parley and uncapped-crew migrations to the hosted backend after verification; compare migration histories and record exact version.
 - [ ] Verify both GM accounts, strict proximity at every Parley decision, location outage recovery, expiry/disputes and correction controls against the deployed dashboard and candidate APK.

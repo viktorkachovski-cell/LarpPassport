@@ -106,15 +106,15 @@ select extensions.is(
   (select status from public.games where id = 'e4000000-0000-0000-0000-000000000014'),
   'finished', 'finishing the Pirate phase also finishes the game'
 );
-select extensions.throws_ok(
-  $$ select public.pirate_set_phase('e4000000-0000-0000-0000-000000000014', 'recall', null) $$,
-  '55000', 'Pirate phase can move only one step', 'finished phase is terminal'
+select extensions.is(
+  public.pirate_set_phase('e4000000-0000-0000-0000-000000000014', 'recall', null)->>'status',
+  'ok', 'GM can correct an accidentally finished phase'
 );
 reset role;
 select extensions.is(
   (select count(*)::integer from public.game_events
    where game_id = 'e4000000-0000-0000-0000-000000000014' and type = 'pirate_phase'),
-  20, 'pause, PvP and eight transitions emit one event per player'
+  22, 'pause, PvP and corrected phase transitions emit one event per player'
 );
 select extensions.ok(
   not exists (select 1 from public.game_events

@@ -28,7 +28,8 @@ export default function PirateSiteBoard({ gameId, state, busy, run, rpc, refresh
         <td>{site.reward ?? '—'}</td><td>{site.answer_set ? 'set' : '—'}</td>
         <td>{(site.claims ?? []).length === 0 ? '—' : <ol className="pirate-claims">
           {site.claims.map((claim) => <li key={claim.id}>
-            {claim.crew_name}{claim.claimed_by_name && ` (${claim.claimed_by_name})`}
+            {claim.crew_name}{claim.claimed_by_name && ` (${claim.claimed_by_name})`}{claim.via_gm && ' · GM claim'}
+            {claim.gm_reason && <span> · {claim.gm_reason}</span>}
             {' '}<button type="button" disabled={!!busy} onClick={() => setVoiding({ ...claim, site_name: site.name })}>Void</button>
           </li>)}
         </ol>}</td>
