@@ -8,7 +8,7 @@ import { flush, isSharing, locationPermissionStatus, queueStatus, startSharing, 
 import { GAME_COLUMNS, supabase } from '../../lib/supabase'
 import { realtimeStateFromStatus } from '../../lib/syncStatus'
 
-// Separate facts (U01): last successful authoritative response, last failed
+// Separate facts: last successful authoritative response, last failed
 // one. The Realtime socket hint is tracked beside them; they may disagree.
 export function useSyncLog() {
   const [sync, setSync] = useState({ lastOkAt: null, lastErrorAt: null, lastError: '' })

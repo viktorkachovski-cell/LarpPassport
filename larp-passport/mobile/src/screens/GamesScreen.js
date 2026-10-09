@@ -21,7 +21,7 @@ export default function GamesScreen({ onOpen }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
-  // Last successful / failed games request (U01). Reset per account by the
+  // Last successful / failed games request. Reset per account by the
   // parent's key, so a second account never inherits the first one's status.
   const [sync, setSync] = useState({ lastOkAt: null, lastErrorAt: null, lastError: '' })
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { unwrap } from '../lib/unwrap'
 import { RULE_FIELDS } from './PirateSettings'
+import { CrewSelect, Reason, parleyTitle, validReason } from './pirateCommon'
 
 const KINDS = [['ledger', 'Ledger'], ['claims', 'Claims'], ['readings', 'Readings'], ['parleys', 'Parleys'], ['audit', 'GM changes']]
 const labelOf = (key) => RULE_FIELDS.find(([field]) => field === key)?.[1] ?? {
@@ -9,6 +10,8 @@ const labelOf = (key) => RULE_FIELDS.find(([field]) => field === key)?.[1] ?? {
   rank: 'Rank', doubloons: 'Doubloons', reward: 'Reward', amount: 'Amount', site_name: 'Site',
 }[key]
 const when = (value) => value ? new Date(value).toLocaleString() : 'not recorded'
+const voided = (row) => row.voided_at ? ' · voided' : ''
+const reportOf = (crews, id) => crews.find((crew) => crew.id === id)?.name ?? (id ? 'reported crew' : 'missing')
 
 function AuditDetails({ row, crews }) {
   function describe(value, key) {
@@ -26,21 +29,31 @@ function AuditDetails({ row, crews }) {
   </details>
 }
 
-function HistoryRow({ kind, row, crews }) {
+function ParleyDetails({ row, crews }) {
+  const plunder = row.plunder ? ` · ${row.transferred} ${row.plunder === 'bearing' ? 'shards' : 'doubloons'}` : ''
   return <>
-    <strong>{row.crew_name ?? (kind === 'parleys' ? row.target_name + ' / ' + (row.attacker_name ?? 'waiting') : row.action)}</strong>
-    <p className="hint">{when(row.at)}{row.actor_name ? ' · ' + row.actor_name : ''}</p>
-    {kind === 'ledger' && <p>{row.delta > 0 ? '+' : ''}{row.delta} {row.currency === 'bearing' ? 'bearing shards' : 'doubloons'} · {row.source}</p>}
-    {kind === 'claims' && <p>{row.site_name} · rank {row.rank ?? 'unrecorded'} · {row.via_gm ? 'GM claim' : 'player solve'}{row.voided_at && ' · voided'}</p>}
-    {kind === 'readings' && <p>{row.site_name} · {row.shards} shards · {row.centre_deg}° ±{row.half_width_deg}°{row.voided_at && ' · voided'}</p>}
-    {kind === 'parleys' && <>
-      <p>{row.state} · {row.choice ?? 'no exchange'}{row.winner_name && ' · winner: ' + row.winner_name}{row.plunder && ' · ' + row.transferred + ' ' + (row.plunder === 'bearing' ? 'shards' : 'doubloons')}</p>
-      <p className="hint">Target report: {crews.find((crew) => crew.id === row.target_report)?.name ?? (row.target_report ? 'reported crew' : 'missing')} · Attacker report: {crews.find((crew) => crew.id === row.attacker_report)?.name ?? (row.attacker_report ? 'reported crew' : 'missing')}</p>
-    </>}
-    {kind === 'parleys' && row.rules && <details><summary>Encounter terms</summary><dl>
+    <p>{row.state} · {row.choice ?? 'no exchange'}{row.winner_name && ' · winner: ' + row.winner_name}{plunder}</p>
+    <p className="hint">Target report: {reportOf(crews, row.target_report)} · Attacker report: {reportOf(crews, row.attacker_report)}</p>
+    {row.rules && <details><summary>Encounter terms</summary><dl>
       {RULE_FIELDS.filter(([key]) => key in row.rules && !key.startsWith('answer_') && key !== 'treasure_percent').map(([key, label]) =>
         <div key={key}><dt>{label}</dt><dd>{row.rules[key]}</dd></div>)}
     </dl></details>}
+  </>
+}
+
+const DETAILS = {
+  ledger: ({ row }) => <p>{row.delta > 0 ? '+' : ''}{row.delta} {row.currency === 'bearing' ? 'bearing shards' : 'doubloons'} · {row.source}</p>,
+  claims: ({ row }) => <p>{row.site_name} · rank {row.rank ?? 'unrecorded'} · {row.via_gm ? 'GM claim' : 'player solve'}{voided(row)}</p>,
+  readings: ({ row }) => <p>{row.site_name} · {row.shards} shards · {row.centre_deg}° ±{row.half_width_deg}°{voided(row)}</p>,
+  parleys: ParleyDetails,
+}
+
+function HistoryRow({ kind, row, crews }) {
+  const Details = DETAILS[kind]
+  return <>
+    <strong>{row.crew_name ?? (kind === 'parleys' ? parleyTitle(row) : row.action)}</strong>
+    <p className="hint">{when(row.at)}{row.actor_name ? ' · ' + row.actor_name : ''}</p>
+    {Details && <Details row={row} crews={crews} />}
     {row.reason && <p>Reason: {row.reason}</p>}
     {kind === 'audit' && <AuditDetails row={row} crews={crews} />}
   </>
@@ -109,11 +122,7 @@ export default function PirateHistory({ gameId, state, busy: actionBusy, run, rp
         <select id="pirate-history-kind" disabled={!!actionBusy} value={kind} onChange={(event) => setKind(event.target.value)}>
           {KINDS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select></div>
-      <div className="field"><label htmlFor="pirate-history-crew">History crew</label>
-        <select id="pirate-history-crew" disabled={!!actionBusy} value={crew} onChange={(event) => setCrew(event.target.value)}>
-          <option value="">All crews</option>
-          {crews.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select></div>
+      <CrewSelect id="pirate-history-crew" label="History crew" value={crew} onChange={setCrew} crews={crews} empty="All crews" disabled={!!actionBusy} />
       <button type="button" disabled={busy || !!actionBusy} onClick={() => load()}>{loaded ? 'Refresh history' : 'Load history'}</button>
     </div>
     {busy && <p role="status">Loading history…</p>}
@@ -126,10 +135,9 @@ export default function PirateHistory({ gameId, state, busy: actionBusy, run, rp
     </article>)}
     {cursor && <button type="button" disabled={busy || !!actionBusy} onClick={() => load(cursor)}>Load older entries</button>}
     {voiding && <form onSubmit={voidParley} className="pirate-form-grid">
-      <p>Void {voiding.target_name} / {voiding.attacker_name ?? 'waiting'}.</p>
-      <div className="field"><label htmlFor="pirate-history-void-reason">Historical Parley correction reason</label>
-        <input id="pirate-history-void-reason" value={reason} required minLength={3} maxLength={300} onChange={(event) => setReason(event.target.value)} /></div>
-      <button type="submit" disabled={!!actionBusy || reason.trim().length < 3}>Confirm historical void</button>
+      <p>Void {parleyTitle(voiding)}.</p>
+      <Reason id="pirate-history-void-reason" label="Historical Parley correction reason" value={reason} onChange={setReason} />
+      <button type="submit" disabled={!!actionBusy || !validReason(reason)}>Confirm historical void</button>
       <button type="button" onClick={() => setVoiding(null)}>Cancel historical void</button>
     </form>}
   </section>

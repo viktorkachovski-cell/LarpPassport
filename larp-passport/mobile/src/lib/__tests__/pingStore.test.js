@@ -20,12 +20,21 @@ function makePings(count, startOffset = 0) {
   return Array.from({ length: count }, (_, i) => makePing(startOffset + i))
 }
 
-// Deferred helper so tests can pause a send() mid-flight deterministically.
-function gate() {
-  let open
-  const opened = new Promise((resolve) => { open = resolve })
-  return { open, opened }
+// A send() whose first call stays in flight until release(), so a test can act
+// mid-flush. It accepts every batch, or rejects every call when `fail` is set.
+function heldSend({ fail = false } = {}) {
+  let release
+  const held = new Promise((resolve) => { release = resolve })
+  const result = { calls: 0, release }
+  result.send = async (pings) => {
+    result.calls += 1
+    if (result.calls === 1) await held
+    if (fail) throw new Error('network request failed')
+    return { accepted: pings.length }
+  }
+  return result
 }
+const settle = () => new Promise((r) => setTimeout(r, 10)) // lets drain claim its first batch
 
 function acceptAll() {
   const calls = []
@@ -137,44 +146,33 @@ describe('drain', () => {
       accuracy: 8,
       battery: 71,
     })
-    // null accuracy/battery are omitted, exactly like the old queue payloads
+    // null accuracy/battery are left out of the wire payload
     expect(Object.keys(calls[0][1]).sort()).toEqual(['lat', 'lng', 'recorded_at'])
   })
 
   test('ACCEPTANCE: a point enqueued after a flush begins is never removed unless the server accepted it', async () => {
     await store.enqueue(GAME, makePings(3))
-    const firstSend = gate()
-    let sendCount = 0
-    const send = async (pings) => {
-      sendCount += 1
-      if (sendCount === 1) await firstSend.opened // hold the first batch in flight
-      return { accepted: pings.length }
-    }
-
-    const drainPromise = store.drain({ gameId: GAME, send })
-    await new Promise((r) => setTimeout(r, 10)) // let drain claim batch 1
+    const held = heldSend()
+    const drainPromise = store.drain({ gameId: GAME, send: held.send })
+    await settle()
 
     // background tick enqueues while the flush is mid-send
     await store.enqueue(GAME, [makePing(100)])
-    firstSend.open()
+    held.release()
     const result = await drainPromise
 
     // the running drain picked the new point up in its next claim
     expect(result).toEqual({ accepted: 4, queued: 0 })
-    expect(sendCount).toBe(2)
+    expect(held.calls).toBe(2)
   })
 
   test('a point enqueued mid-flush survives even if the flush errors out', async () => {
     await store.enqueue(GAME, makePings(2))
-    const firstSend = gate()
-    const send = async () => {
-      await firstSend.opened
-      throw new Error('network request failed')
-    }
-    const drainPromise = store.drain({ gameId: GAME, send })
-    await new Promise((r) => setTimeout(r, 10))
+    const held = heldSend({ fail: true })
+    const drainPromise = store.drain({ gameId: GAME, send: held.send })
+    await settle()
     await store.enqueue(GAME, [makePing(100)])
-    firstSend.open()
+    held.release()
     const result = await drainPromise
 
     expect(result.error).toBe('network request failed')
@@ -184,22 +182,15 @@ describe('drain', () => {
 
   test('two simultaneous flush calls share one drain (no double send)', async () => {
     await store.enqueue(GAME, makePings(150))
-    const firstSend = gate()
-    let sendCount = 0
-    const send = async (pings) => {
-      sendCount += 1
-      if (sendCount === 1) await firstSend.opened
-      return { accepted: pings.length }
-    }
-
-    const first = store.drain({ gameId: GAME, send })
-    const second = store.drain({ gameId: GAME, send })
+    const held = heldSend()
+    const first = store.drain({ gameId: GAME, send: held.send })
+    const second = store.drain({ gameId: GAME, send: held.send })
     expect(second).toBe(first) // coalesced onto the same run
-    firstSend.open()
+    held.release()
     const [a, b] = await Promise.all([first, second])
     expect(a).toEqual({ accepted: 150, queued: 0 })
     expect(b).toEqual(a)
-    expect(sendCount).toBe(2) // 100 + 50, sent exactly once
+    expect(held.calls).toBe(2) // 100 + 50, sent exactly once
   })
 
   test('server failure returns the batch to pending; the retry succeeds', async () => {
@@ -267,18 +258,12 @@ describe('drain', () => {
 describe('consent revocation', () => {
   test('revoked while a flush is in progress: purge wins, nothing resurrects', async () => {
     await store.enqueue(GAME, makePings(120))
-    const firstSend = gate()
-    let sendCount = 0
-    const send = async (pings) => {
-      sendCount += 1
-      if (sendCount === 1) await firstSend.opened
-      return { accepted: pings.length }
-    }
-    const drainPromise = store.drain({ gameId: GAME, send })
-    await new Promise((r) => setTimeout(r, 10))
+    const held = heldSend()
+    const drainPromise = store.drain({ gameId: GAME, send: held.send })
+    await settle()
 
     await store.purgeGame(GAME) // player flips the switch off mid-send
-    firstSend.open()
+    held.release()
     await drainPromise
 
     const remaining = await db.getAllAsync('select * from pending_pings where game_id = ?', [GAME])
@@ -287,15 +272,11 @@ describe('consent revocation', () => {
 
   test('revoked mid-flight with a FAILING send: the nack does not resurrect purged rows', async () => {
     await store.enqueue(GAME, makePings(5))
-    const firstSend = gate()
-    const send = async () => {
-      await firstSend.opened
-      throw new Error('network request failed')
-    }
-    const drainPromise = store.drain({ gameId: GAME, send })
-    await new Promise((r) => setTimeout(r, 10))
+    const held = heldSend({ fail: true })
+    const drainPromise = store.drain({ gameId: GAME, send: held.send })
+    await settle()
     await store.purgeGame(GAME)
-    firstSend.open()
+    held.release()
     await drainPromise
 
     const remaining = await db.getAllAsync('select * from pending_pings where game_id = ?', [GAME])
@@ -325,13 +306,13 @@ describe('restart recovery and retention', () => {
     expect((await restarted.status(GAME)).queued).toBe(7)
   })
 
-  test('points older than the server acceptance window are pruned instead of poisoning batches', async () => {
+  test('points older than the server acceptance window are pruned instead of sent', async () => {
     await store.enqueue(GAME, makePings(3))
     clock += 22 * 60 * 60_000 // 22h later: points still valid, kept
     expect(await store.claimBatch(GAME)).toHaveLength(3)
     await store.nackBatch((await rowsByStatus(PING_STATUS.IN_FLIGHT)).map((r) => r.id), 'net', false)
 
-    clock += 2 * 60 * 60_000 // now 24h+: server would reject the whole batch forever
+    clock += 2 * 60 * 60_000 // now 24h+: the server would only skip them
     expect(await store.claimBatch(GAME)).toHaveLength(0)
     expect((await store.status(GAME)).queued).toBe(0)
   })

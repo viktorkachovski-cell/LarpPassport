@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { circlePolygon, haversine, pointEwkt, polygonEwkt, centroidOf } from '../lib/geo'
+import { circlePolygon, haversine, centroidOf } from '../lib/geo'
 import { formatAge } from '../lib/time'
 import { canFinishPolygon, dedupeVertices } from '../lib/draw'
 import { eventInfo } from '../lib/events'
 import { useAction } from '../lib/useAction'
 import { useNow } from '../lib/useNow'
 import Outcome from './Outcome'
+import { editorFor, NEW_ZONE, ZoneEditor, zoneFromEditor } from './ZoneEditor'
 
 const MAP_STYLE = {
   version: 8,
@@ -23,9 +24,44 @@ const MAP_STYLE = {
 }
 
 const EMPTY_FC = { type: 'FeatureCollection', features: [] }
-const NEW_ZONE = {
-  name: '', zone_type: 'event', warning_distance_m: 50, trigger_mode: 'gm_confirm',
-  dwell_seconds: 0, exit_buffer_m: 15, one_shot: false, active: true, message: '',
+
+// Pin colour, tag and tooltip of one player marker.
+function styleMarker(el, position, { name, off, color, now }) {
+  const batt = position.battery_pct != null ? Math.round(position.battery_pct) : null
+  el.querySelector('.pin').style.background = off ? '#3a463c' : color
+  el.querySelector('.tag').textContent = name + (off ? ' · off' : batt != null && batt <= 30 ? ` · ${batt}%` : '')
+  const stale = !position.recorded_at || now - new Date(position.recorded_at).getTime() > 120000
+  el.classList.toggle('stale', stale || off)
+  el.title = `${name} · ${formatAge(position.recorded_at) ?? '—'} · ±${Math.round(position.accuracy_m ?? 0)}m` +
+    (batt != null ? ` · battery ${batt}%` : '') + (off ? ' · sharing off' : '')
+}
+
+function drawHint(draw) {
+  if (draw.type !== 'circle') return `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} — tap or click the map to add corners`
+  return draw.center ? `Radius ${Math.round(draw.radiusM)} m — tap or click the edge to set it` : 'Tap or click the map to set the center'
+}
+
+function DrawControls({ draw, onToggle, onFinish, onUndo, onCancel }) {
+  const drawing = (type) => draw?.type === type
+  return <>
+    <div className="row mb">
+      <button className={drawing('circle') ? 'primary' : ''} aria-pressed={drawing('circle')} onClick={() => onToggle('circle')}>+ Circle</button>
+      <button className={drawing('polygon') ? 'primary' : ''} aria-pressed={drawing('polygon')} onClick={() => onToggle('polygon')}>+ Polygon</button>
+    </div>
+    {draw && <p className="hint" role="status">{drawHint(draw)}{' · Esc cancels'}</p>}
+    {drawing('polygon') && (
+      <div className="row mb draw-controls" role="group" aria-label="Polygon drawing controls">
+        <button type="button" className="primary" disabled={!canFinishPolygon(draw.points)} onClick={() => onFinish(draw.points)}>Finish polygon</button>
+        <button type="button" disabled={draw.points.length === 0} onClick={onUndo}>Undo last point</button>
+        <button type="button" className="ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    )}
+    {drawing('circle') && (
+      <div className="row mb draw-controls" role="group" aria-label="Circle drawing controls">
+        <button type="button" className="ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    )}
+  </>
 }
 
 export default function MapPanel({
@@ -203,37 +239,13 @@ export default function MapPanel({
 
   function openEditor(z) {
     clear()
-    setEditing({
-      id: z.id, shape: z.shape, name: z.name, trigger_mode: z.trigger_mode,
-      dwell_seconds: z.dwell_seconds, exit_buffer_m: z.exit_buffer_m,
-      one_shot: z.one_shot, active: z.active, radius_m: z.radius_m ?? undefined,
-      message: z.payload?.message ?? '', zone_type: z.zone_type ?? 'event',
-      warning_distance_m: z.warning_distance_m ?? 50,
-    })
+    setEditing(editorFor(z))
   }
 
   function submitEditor() {
     if (!editing || saving) return
-    const base = {
-      id: editing.id,
-      name: editing.name.trim() || 'Unnamed zone',
-      zone_type: editing.zone_type,
-      warning_distance_m: Math.max(5, Number(editing.warning_distance_m) || 50),
-      trigger_mode: editing.zone_type === 'play_area' ? 'silent' : editing.trigger_mode,
-      dwell_seconds: editing.zone_type === 'play_area' ? 0 : Number(editing.dwell_seconds) || 0,
-      exit_buffer_m: Number(editing.exit_buffer_m) || 0,
-      one_shot: editing.zone_type === 'play_area' ? false : !!editing.one_shot,
-      active: !!editing.active,
-      radius_m: editing.shape === 'circle' ? Math.max(1, Number(editing.radius_m) || 1) : null,
-      payload: editing.message?.trim() ? { message: editing.message.trim() } : {},
-      shape: editing.shape,
-    }
-    if (!editing.id) {
-      base.geog = editing.shape === 'circle'
-        ? pointEwkt(editing.center.lng, editing.center.lat)
-        : polygonEwkt(editing.points)
-    }
-    run(() => saveZone(base), { success: `Zone "${base.name}" ${editing.id ? 'saved' : 'created'}.`, onSuccess: closeEditor })
+    const zone = zoneFromEditor(editing)
+    run(() => saveZone(zone), { success: `Zone "${zone.name}" ${editing.id ? 'saved' : 'created'}.`, onSuccess: closeEditor })
   }
 
   function removeZone() {
@@ -320,16 +332,7 @@ export default function MapPanel({
         playerMarkers.current.set(pid, marker)
       }
       marker.setLngLat([p.lng, p.lat])
-      const el = marker.getElement()
-      const off = !sharingActive(pid)
-      const batt = p.battery_pct != null ? Math.round(p.battery_pct) : null
-      el.querySelector('.pin').style.background = off ? '#3a463c' : factionColorOf(pid)
-      el.querySelector('.tag').textContent =
-        usernameOf(pid) + (off ? ' · off' : batt != null && batt <= 30 ? ` · ${batt}%` : '')
-      const stale = !p.recorded_at || now - new Date(p.recorded_at).getTime() > 120000
-      el.classList.toggle('stale', !!stale || off)
-      el.title = `${usernameOf(pid)} · ${formatAge(p.recorded_at) ?? '—'} · ±${Math.round(p.accuracy_m ?? 0)}m` +
-        (batt != null ? ` · battery ${batt}%` : '') + (off ? ' · sharing off' : '')
+      styleMarker(marker.getElement(), p, { name: usernameOf(pid), off: !sharingActive(pid), color: factionColorOf(pid), now })
     }
     for (const [pid, marker] of playerMarkers.current.entries()) {
       if (!seen.has(pid)) { marker.remove(); playerMarkers.current.delete(pid) }
@@ -397,30 +400,8 @@ export default function MapPanel({
       <div className="map-side">
         <div className="side-section">
           <h3>Zones</h3>
-          <div className="row mb">
-            <button className={draw?.type === 'circle' ? 'primary' : ''} aria-pressed={draw?.type === 'circle'} onClick={() => (draw?.type === 'circle' ? cancelDraw() : startDraw('circle'))}>+ Circle</button>
-            <button className={draw?.type === 'polygon' ? 'primary' : ''} aria-pressed={draw?.type === 'polygon'} onClick={() => (draw?.type === 'polygon' ? cancelDraw() : startDraw('polygon'))}>+ Polygon</button>
-          </div>
-          {draw && (
-            <p className="hint" role="status">
-              {draw.type === 'circle'
-                ? draw.center ? `Radius ${Math.round(draw.radiusM)} m — tap or click the edge to set it` : 'Tap or click the map to set the center'
-                : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} — tap or click the map to add corners`}
-              {' · Esc cancels'}
-            </p>
-          )}
-          {draw?.type === 'polygon' && (
-            <div className="row mb draw-controls" role="group" aria-label="Polygon drawing controls">
-              <button type="button" className="primary" disabled={!canFinishPolygon(draw.points)} onClick={() => finalizePolygon(draw.points)}>Finish polygon</button>
-              <button type="button" disabled={draw.points.length === 0} onClick={undoVertex}>Undo last point</button>
-              <button type="button" className="ghost" onClick={cancelDraw}>Cancel</button>
-            </div>
-          )}
-          {draw?.type === 'circle' && (
-            <div className="row mb draw-controls" role="group" aria-label="Circle drawing controls">
-              <button type="button" className="ghost" onClick={cancelDraw}>Cancel</button>
-            </div>
-          )}
+          <DrawControls draw={draw} onToggle={(type) => (draw?.type === type ? cancelDraw() : startDraw(type))}
+            onFinish={finalizePolygon} onUndo={undoVertex} onCancel={cancelDraw} />
           {zones.map((z) => (
             <button type="button" key={z.id} className={`zone-row ${z.id === selectedId ? 'selected' : ''}`} aria-pressed={z.id === selectedId} onClick={() => selectAndFly(z)}>
               <span className={`dot ${z.active ? '' : 'inactive'}`} aria-hidden="true" />
@@ -439,54 +420,8 @@ export default function MapPanel({
           {outcome?.tone === 'ok' && <Outcome outcome={outcome} onDismiss={clear} />}
         </div>
 
-        {editing && (
-          <div className="side-section">
-            <h3>{editing.id ? 'Edit zone' : 'New zone'}</h3>
-            <div className="field"><label htmlFor="zone-name">Name</label>
-              <input id="zone-name" style={{ width: '100%' }} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></div>
-            <div className="field"><label htmlFor="zone-purpose">Purpose</label>
-              <select id="zone-purpose" style={{ width: '100%' }} value={editing.zone_type} onChange={(e) => setEditing({ ...editing, zone_type: e.target.value })}>
-                <option value="event">Event trigger zone</option>
-                <option value="play_area">Time anomaly play area</option>
-              </select></div>
-            {editing.zone_type === 'event' && (
-              <div className="field"><label htmlFor="zone-trigger">When a player enters</label>
-                <select id="zone-trigger" style={{ width: '100%' }} value={editing.trigger_mode} onChange={(e) => setEditing({ ...editing, trigger_mode: e.target.value })}>
-                  <option value="auto">Notify the player automatically</option>
-                  <option value="gm_confirm">Ask a GM to confirm first</option>
-                  <option value="silent">Log silently for GMs</option>
-                </select></div>
-            )}
-            <div className="row">
-              {editing.zone_type === 'event' && (
-                <div className="field" style={{ flex: 1 }}><label htmlFor="zone-dwell">Dwell (s)</label>
-                  <input id="zone-dwell" type="number" min="0" style={{ width: '100%' }} value={editing.dwell_seconds} onChange={(e) => setEditing({ ...editing, dwell_seconds: e.target.value })} /></div>
-              )}
-              {editing.zone_type === 'play_area' && (
-                <div className="field" style={{ flex: 1 }}><label htmlFor="zone-warning">Edge warning (m)</label>
-                  <input id="zone-warning" type="number" min="5" max="5000" style={{ width: '100%' }} value={editing.warning_distance_m} onChange={(e) => setEditing({ ...editing, warning_distance_m: e.target.value })} /></div>
-              )}
-              <div className="field" style={{ flex: 1 }}><label htmlFor="zone-exit-buffer">Exit buffer (m)</label>
-                <input id="zone-exit-buffer" type="number" min="0" style={{ width: '100%' }} value={editing.exit_buffer_m} onChange={(e) => setEditing({ ...editing, exit_buffer_m: e.target.value })} /></div>
-              {editing.shape === 'circle' && (
-                <div className="field" style={{ flex: 1 }}><label htmlFor="zone-radius">Radius (m)</label>
-                  <input id="zone-radius" type="number" min="1" style={{ width: '100%' }} value={editing.radius_m} onChange={(e) => setEditing({ ...editing, radius_m: e.target.value })} /></div>
-              )}
-            </div>
-            <div className="row mb">
-              {editing.zone_type === 'event' && <label className="inline"><input type="checkbox" checked={editing.one_shot} onChange={(e) => setEditing({ ...editing, one_shot: e.target.checked })} /> One-shot per player</label>}
-              <label className="inline"><input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} /> Active</label>
-            </div>
-            {editing.zone_type === 'event' && <div className="field"><label htmlFor="zone-message">Message to the player (payload)</label>
-              <textarea id="zone-message" rows="2" style={{ width: '100%' }} value={editing.message} onChange={(e) => setEditing({ ...editing, message: e.target.value })} /></div>}
-            <div className="row">
-              <button className="primary" disabled={saving} onClick={submitEditor}>{saving ? 'Saving…' : editing.id ? 'Save zone' : 'Create zone'}</button>
-              <button className="ghost" disabled={saving} onClick={closeEditor}>Close</button>
-              {editing.id && <button className="danger" disabled={saving} onClick={removeZone}>Delete</button>}
-            </div>
-            {outcome?.tone === 'error' && <Outcome outcome={outcome} onDismiss={clear} />}
-          </div>
-        )}
+        {editing && <ZoneEditor editing={editing} setEditing={setEditing} saving={saving} outcome={outcome} clear={clear}
+          onSave={submitEditor} onClose={closeEditor} onDelete={removeZone} />}
 
         <div className="side-section">
           <h3>Pending triggers ({pendingEvents.length})</h3>

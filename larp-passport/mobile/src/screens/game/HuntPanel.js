@@ -9,7 +9,55 @@ import { DirectionSignal } from './DirectionSignal'
 
 const BANDS = ['immediate', 'close', 'nearby', 'distant', 'far']
 
-export const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, error, outcome, dismissOutcome, boundaryWarning, requestElimination, respondToElimination, refresh }) {
+export const HuntPanel = memo(function HuntPanel(props) {
+  const { hunt } = props
+  if (!hunt) return <HuntLoading error={props.error} refresh={props.refresh} />
+  if (hunt.phase === 'not_started') return <NotStarted hasCharacter={props.hasCharacter} error={props.error} refresh={props.refresh} />
+  if (!hunt.participant) return <Observer />
+  if (hunt.phase === 'finished') return <FinishedState hunt={hunt} />
+  if (!hunt.alive) return <EliminatedState aliveCount={hunt.alive_count} />
+  return <ActiveHunt {...props} />
+})
+
+function HuntLoading({ error, refresh }) {
+  return (
+    <View style={styles.centerState}>
+      <Text style={[styles.centerCopy, error && common.errorText]}>{error || 'Loading hunt status...'}</Text>
+      {!!error && <GhostButton label="RETRY" onPress={refresh} />}
+    </View>
+  )
+}
+
+function NotStarted({ hasCharacter, error, refresh }) {
+  return (
+    <ScrollView style={common.flex} contentContainerStyle={common.scrollContent}>
+      <View style={common.neutralCard}>
+        <Text style={common.cyanKicker}>O AWAITING THE HUNT</Text>
+        <Text style={common.sectionTitle}>Hunt not started</Text>
+        <Text style={common.bodyCopy}>The GM will lock the roster and assign one secret target to every traveller.</Text>
+        {!hasCharacter && (
+          <View style={styles.warningInset}>
+            <Text style={styles.warningInsetText}>Create your character before the hunt can start.</Text>
+          </View>
+        )}
+        {!!error && <Text style={common.errorText}>{error}</Text>}
+        <GhostButton label="REFRESH" onPress={refresh} />
+      </View>
+    </ScrollView>
+  )
+}
+
+function Observer() {
+  return (
+    <View style={styles.centerState}>
+      <View style={styles.neutralIcon}><Text style={styles.neutralIconText}>O</Text></View>
+      <Text style={common.sectionTitle}>Observer</Text>
+      <Text style={styles.centerCopy}>You are not part of this hunt's target chain.</Text>
+    </View>
+  )
+}
+
+function ActiveHunt({ hunt, busy, boundaryWarning, respondToElimination, ...claim }) {
   function confirmDefeat() {
     Alert.alert(
       'Confirm your elimination?',
@@ -20,52 +68,7 @@ export const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, err
       ],
     )
   }
-
-  if (!hunt) {
-    return (
-      <View style={styles.centerState}>
-        <Text style={[styles.centerCopy, error && common.errorText]}>{error || 'Loading hunt status...'}</Text>
-        {!!error && <GhostButton label="RETRY" onPress={refresh} />}
-      </View>
-    )
-  }
-
-  if (hunt.phase === 'not_started') {
-    return (
-      <ScrollView style={common.flex} contentContainerStyle={common.scrollContent}>
-        <View style={common.neutralCard}>
-          <Text style={common.cyanKicker}>O AWAITING THE HUNT</Text>
-          <Text style={common.sectionTitle}>Hunt not started</Text>
-          <Text style={common.bodyCopy}>The GM will lock the roster and assign one secret target to every traveller.</Text>
-          {!hasCharacter && (
-            <View style={styles.warningInset}>
-              <Text style={styles.warningInsetText}>Create your character before the hunt can start.</Text>
-            </View>
-          )}
-          {!!error && <Text style={common.errorText}>{error}</Text>}
-          <GhostButton label="REFRESH" onPress={refresh} />
-        </View>
-      </ScrollView>
-    )
-  }
-
-  if (!hunt.participant) {
-    return (
-      <View style={styles.centerState}>
-        <View style={styles.neutralIcon}><Text style={styles.neutralIconText}>O</Text></View>
-        <Text style={common.sectionTitle}>Observer</Text>
-        <Text style={styles.centerCopy}>You are not part of this hunt's target chain.</Text>
-      </View>
-    )
-  }
-
-  if (hunt.phase === 'finished') return <FinishedState hunt={hunt} />
-  if (!hunt.alive) return <EliminatedState aliveCount={hunt.alive_count} />
-
   const cloakMinutes = remainingMinutes(hunt.hidden_until)
-  const awaitingTarget = !hunt.target
-  const claimPending = !!hunt.outgoing_claim
-  const disabled = busy || claimPending || awaitingTarget
 
   return (
     <ScrollView style={common.flex} contentContainerStyle={common.scrollContent}>
@@ -94,39 +97,57 @@ export const HuntPanel = memo(function HuntPanel({ hunt, hasCharacter, busy, err
         </View>
       )}
 
-      <View style={[styles.targetCard, awaitingTarget && styles.awaitingCard]}>
-        <View style={[styles.targetHeader, awaitingTarget && styles.awaitingHeader]}>
-          <Text style={[styles.targetKicker, awaitingTarget && styles.mutedKicker]}>+ YOUR TARGET</Text>
-          {!!hunt.direction_enabled && <Text style={styles.directionChip}>DIRECTION ON</Text>}
-          {!!hunt.target?.proximity?.last_seen_at && (
-            <Text style={[styles.signalAge, hunt.target.proximity.state === 'stale' && common.amberText]}>{formatAge(hunt.target.proximity.last_seen_at)}</Text>
-          )}
-        </View>
-        <View style={styles.targetBody}>
-          <Text style={[styles.targetName, awaitingTarget && styles.awaitingName]}>{hunt.target?.character_name ?? 'NO TARGET YET'}</Text>
-          {awaitingTarget ? (
-            <Text style={common.bodyCopy}>Elimination confirmed. Waiting for the GM to assign your next target. No claim can start until then.</Text>
-          ) : (
-            <ProximitySignal proximity={hunt.target.proximity} />
-          )}
-
-          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={requestElimination} style={[disabled ? styles.disabledClaimButton : styles.claimButton, busy && common.disabled]}>
-            <Text style={disabled ? styles.disabledButtonText : common.filledButtonText}>
-              {awaitingTarget ? 'WAITING FOR GM TARGET ASSIGNMENT' : claimPending ? 'WAITING FOR TARGET CONFIRMATION' : 'CLAIM ELIMINATION'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.claimCaption}>
-            {claimPending ? 'TARGET RESPONSE PENDING' : 'CLAIM ONLY AFTER THE LIVE BATTLE IS RESOLVED\nYOUR TARGET MUST CONFIRM // YOU STAY ANONYMOUS'}
-          </Text>
-          {!!error && <Text style={common.errorText} accessibilityLiveRegion="polite">{error}</Text>}
-          {!!outcome && <OutcomeNote text={outcome} onDismiss={dismissOutcome} />}
-        </View>
-      </View>
+      <TargetCard hunt={hunt} busy={busy} {...claim} />
       <Text style={styles.hunterWarning}>SOMEONE IS HUNTING YOU. THEIR NAME IS NEVER SHOWN.</Text>
     </ScrollView>
   )
-})
+}
 
+function TargetHeader({ hunt, awaiting }) {
+  const lastSeen = hunt.target?.proximity?.last_seen_at
+  return (
+    <View style={[styles.targetHeader, awaiting && styles.awaitingHeader]}>
+      <Text style={[styles.targetKicker, awaiting && styles.mutedKicker]}>+ YOUR TARGET</Text>
+      {!!hunt.direction_enabled && <Text style={styles.directionChip}>DIRECTION ON</Text>}
+      {!!lastSeen && (
+        <Text style={[styles.signalAge, hunt.target.proximity.state === 'stale' && common.amberText]}>{formatAge(lastSeen)}</Text>
+      )}
+    </View>
+  )
+}
+
+function claimLabel(awaiting, pending) {
+  if (awaiting) return 'WAITING FOR GM TARGET ASSIGNMENT'
+  return pending ? 'WAITING FOR TARGET CONFIRMATION' : 'CLAIM ELIMINATION'
+}
+
+function TargetCard({ hunt, busy, error, outcome, dismissOutcome, requestElimination }) {
+  const awaiting = !hunt.target
+  const pending = !!hunt.outgoing_claim
+  const disabled = busy || pending || awaiting
+  return (
+    <View style={[styles.targetCard, awaiting && styles.awaitingCard]}>
+      <TargetHeader hunt={hunt} awaiting={awaiting} />
+      <View style={styles.targetBody}>
+        <Text style={[styles.targetName, awaiting && styles.awaitingName]}>{hunt.target?.character_name ?? 'NO TARGET YET'}</Text>
+        {awaiting ? (
+          <Text style={common.bodyCopy}>Elimination confirmed. Waiting for the GM to assign your next target. No claim can start until then.</Text>
+        ) : (
+          <ProximitySignal proximity={hunt.target.proximity} />
+        )}
+
+        <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={requestElimination} style={[disabled ? styles.disabledClaimButton : styles.claimButton, busy && common.disabled]}>
+          <Text style={disabled ? styles.disabledButtonText : common.filledButtonText}>{claimLabel(awaiting, pending)}</Text>
+        </TouchableOpacity>
+        <Text style={styles.claimCaption}>
+          {pending ? 'TARGET RESPONSE PENDING' : 'CLAIM ONLY AFTER THE LIVE BATTLE IS RESOLVED\nYOUR TARGET MUST CONFIRM // YOU STAY ANONYMOUS'}
+        </Text>
+        {!!error && <Text style={common.errorText} accessibilityLiveRegion="polite">{error}</Text>}
+        {!!outcome && <OutcomeNote text={outcome} onDismiss={dismissOutcome} />}
+      </View>
+    </View>
+  )
+}
 function ProximitySignal({ proximity }) {
   if (!proximity || proximity.state === 'waiting_for_location') {
     return (

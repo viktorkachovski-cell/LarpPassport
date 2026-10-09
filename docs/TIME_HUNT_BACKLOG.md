@@ -38,7 +38,7 @@ Do not silently choose a new cloak duration, reveal lifetime, inventory cap, rew
 
 ## 3. Q01 — QR scanning to join a game
 
-**Existing:** `GamesScreen.js` already joins by typed code using `join_game(code)`; `GameView.jsx` retrieves the GM's code using `gm_get_join_code(g)`. No camera package or app link scheme is configured.
+**Existing:** `GamesScreen.js` already joins by typed code using `join_game(code)`; the dashboard's `useGameData.js` retrieves the GM's code using `gm_get_join_code(g)`. No camera package or app link scheme is configured.
 
 **Proposed additions:** `M/src/components/QrScanner.js`, `M/src/lib/qrPayload.js`, and a small dashboard QR display component. These paths are proposals; create them only during implementation.
 

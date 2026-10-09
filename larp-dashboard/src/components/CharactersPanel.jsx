@@ -6,7 +6,7 @@ import { useAction } from '../lib/useAction'
 import Outcome from './Outcome'
 import TableScroll from './TableScroll'
 
-export default function CharactersPanel({ game, characters, members, factions, usernameOf, saveCharacter, addNpc, deleteCharacter, addFaction }) {
+export default function CharactersPanel({ game, characters, factions, usernameOf, saveCharacter, addNpc, deleteCharacter, addFaction }) {
   const stats = game.template?.stats ?? []
   const [drafts, setDrafts] = useState({})
   const [npcName, setNpcName] = useState('')

@@ -14,7 +14,7 @@ export default function GamesList({ session, onOpen }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
-  // Last successful / failed games request (U01); the parent keys this
+  // Last successful / failed games request; the parent keys this
   // component by account, so a second account starts from "Checking".
   const [sync, setSync] = useState({ lastOkAt: null, lastErrorAt: null, lastError: '' })
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false))

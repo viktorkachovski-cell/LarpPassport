@@ -42,63 +42,30 @@ vi.mock('./HuntPanel', () => ({ default: (props) => {
 import GameView from './GameView'
 
 function resultFor(table, operation) {
-  if (operation === 'update') {
-    return mocks.mutationResults[table] ?? { data: null, error: null }
-  }
+  if (operation === 'update') return mocks.mutationResults[table] ?? { data: null, error: null }
   return mocks.queryResults[table] ?? { data: [], error: null }
 }
 
+// A chainable stand-in for the Supabase query builder. Pending-event reads
+// resolve from queryResults[`${table}_pending`].
 function queryBuilder(table) {
   let operation = 'select'
   let pending = false
+  const result = () => Promise.resolve(resultFor(pending ? `${table}_pending` : table, operation))
   const builder = {
-    delete() {
-      operation = 'delete'
-      return builder
-    },
-    eq(key, value) {
-      if (key === 'status' && value === 'pending') pending = true
-      return builder
-    },
-    lt() { return builder },
-    insert() {
-      operation = 'insert'
-      return builder
-    },
-    limit() {
-      return builder
-    },
-    order() {
-      return builder
-    },
-    select() {
-      return builder
-    },
-    single() {
-      return Promise.resolve(resultFor(pending ? `${table}_pending` : table, operation))
-    },
-    then(resolve, reject) {
-      return Promise.resolve(resultFor(pending ? `${table}_pending` : table, operation)).then(resolve, reject)
-    },
-    update(patch) {
-      operation = 'update'
-      mocks.mutationPatches.push({ patch, table })
-      return builder
-    },
+    delete() { operation = 'delete'; return builder },
+    eq(key, value) { if (key === 'status' && value === 'pending') pending = true; return builder },
+    insert() { operation = 'insert'; return builder },
+    update(patch) { operation = 'update'; mocks.mutationPatches.push({ patch, table }); return builder },
+    lt: () => builder, limit: () => builder, order: () => builder, select: () => builder,
+    single: result,
+    then: (resolve, reject) => result().then(resolve, reject),
   }
   return builder
 }
 
-function game(gmId = 'gm-user') {
-  return {
-    gm_id: gmId,
-    id: 'game-1',
-    join_code: 'ABCDEFGH',
-    location_visibility: 'gm_only',
-    name: 'Test game',
-    status: 'draft',
-  }
-}
+const game = (gmId = 'gm-user') => ({ gm_id: gmId, id: 'game-1', join_code: 'ABCDEFGH', location_visibility: 'gm_only', name: 'Test game', status: 'draft' })
+const mount = (uid = 'gm-user') => render(<GameView gameId="game-1" session={{ user: { id: uid } }} onBack={() => {}} />)
 
 beforeEach(() => {
   mocks.mapError = null
@@ -135,7 +102,7 @@ describe('GameView access and mutation errors', () => {
     try {
       mocks.mapError = new Error('WebGL unavailable')
       mocks.queryResults.games = { data: game(), error: null }
-      render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+      mount()
       await screen.findByText('Test game')
       fireEvent.click(screen.getByRole('tab', { name: 'MAP', exact: true }))
       await screen.findByText('The map could not load. Check your connection and reload to try again.')
@@ -148,7 +115,7 @@ describe('GameView access and mutation errors', () => {
 
   it('loads the map on first use and keeps it mounted between tabs', async () => {
     mocks.queryResults.games = { data: game(), error: null }
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Test game')
     expect(screen.queryByText('Map panel')).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'MAP', exact: true }))
@@ -159,20 +126,10 @@ describe('GameView access and mutation errors', () => {
 
   it('does not fetch dashboard data or subscribe for a non-GM', async () => {
     mocks.queryResults = {
-      game_players: {
-        data: [{ profile_id: 'player-user', profile: { username: 'player' }, role: 'player' }],
-        error: null,
-      },
+      game_players: { data: [{ profile_id: 'player-user', profile: { username: 'player' }, role: 'player' }], error: null },
       games: { data: game(), error: null },
     }
-
-    render(
-      <GameView
-        gameId="game-1"
-        session={{ user: { id: 'player-user' } }}
-        onBack={() => {}}
-      />
-    )
+    mount('player-user')
 
     await screen.findByText('GM access required')
 
@@ -181,29 +138,10 @@ describe('GameView access and mutation errors', () => {
   })
 
   it('shows a database error when a GM mutation fails', async () => {
-    mocks.queryResults = {
-      characters: { data: [], error: null },
-      factions: { data: [], error: null },
-      game_events: { data: [], error: null },
-      game_players: {
-        data: [{ profile_id: 'gm-user', profile: { username: 'gm' }, role: 'gm' }],
-        error: null,
-      },
-      games: { data: game(), error: null },
-      player_positions_view: { data: [], error: null },
-      zones_view: { data: [], error: null },
-    }
-    mocks.mutationResults = {
-      games: { data: null, error: new Error('permission denied') },
-    }
+    mocks.queryResults.games = { data: game(), error: null }
+    mocks.mutationResults.games = { data: null, error: new Error('permission denied') }
 
-    render(
-      <GameView
-        gameId="game-1"
-        session={{ user: { id: 'gm-user' } }}
-        onBack={() => {}}
-      />
-    )
+    mount()
 
     await screen.findByText('Test game')
     fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'active' } })
@@ -217,7 +155,7 @@ describe('GameView access and mutation errors', () => {
 describe('GameView hunt actions', () => {
   it('moves the game row with the returned hunt phase and leaves failures to the panel', async () => {
     mocks.queryResults.games = { data: { ...game(), location_visibility: 'all' }, error: null }
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Hunt panel')
     mocks.rpc.mockImplementation((fn) => Promise.resolve(fn === 'start_hunt'
       ? { data: { phase: 'active', players: [], claims: [] }, error: null }
@@ -241,7 +179,7 @@ describe('GameView realtime', () => {
       { id: 'a', seq: 2, status: 'pending', type: 'zone_enter' },
       { id: 'b', seq: 1, status: 'pending', type: 'zone_enter' },
     ], error: null }
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Hunt panel')
     fireEvent.click(screen.getByRole('tab', { name: /EVENTS/ }))
     expect(await screen.findByText('a')).toBeTruthy()
@@ -260,7 +198,7 @@ describe('GameView authoritative recovery', () => {
     mocks.queryResults.games = { data: game(), error: null }
     mocks.queryResults.game_events = { data: Array.from({ length: 300 }, (_, i) => ({ id: `new-${i}`, seq: 400-i, status: 'confirmed' })), error: null }
     mocks.queryResults.game_events_pending = { data: [{ id: 'old-pending', seq: 1, status: 'pending' }], error: null }
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Hunt panel')
     fireEvent.click(screen.getByRole('tab', { name: /EVENTS/ }))
     expect(await screen.findByText('old-pending')).toBeTruthy()
@@ -268,7 +206,7 @@ describe('GameView authoritative recovery', () => {
 
   it('refreshes game status after reconnect and recovers a failed request on retry', async () => {
     mocks.queryResults.games = { data: null, error: { message: 'Network unavailable' } }
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Network unavailable')
     mocks.queryResults.games = { data: game(), error: null }
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
@@ -280,7 +218,7 @@ describe('GameView authoritative recovery', () => {
 
   it('keeps the last good snapshot and reports a failed refresh instead of claiming sync', async () => {
     mocks.queryResults.games = { data: game(), error: null }
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Hunt panel')
     expect(screen.getByText('Server updated just now')).toBeTruthy()
     expect(screen.getByText(/Connecting live updates/)).toBeTruthy()
@@ -301,7 +239,7 @@ describe('GameView authoritative recovery', () => {
 
   it('reports the browser offline hint without dropping loaded data', async () => {
     mocks.queryResults.games = { data: game(), error: null }
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Hunt panel')
     act(() => window.dispatchEvent(new Event('offline')))
     expect(screen.getByText(/Offline · showing data from/)).toBeTruthy()
@@ -325,7 +263,7 @@ describe('GameView authoritative recovery', () => {
           claims: [{ id: 'c1', status: 'pending' }, { id: 'c2', status: 'confirmed' }],
         }, error: null },
     ))
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     const region = await screen.findByRole('region', { name: 'Pending decisions' })
     expect(region.textContent).toContain('4 DECISIONS WAITING')
     expect(region.textContent).toContain('1 elimination claim to rule on')
@@ -341,7 +279,7 @@ describe('GameView authoritative recovery', () => {
   it('lets the GM toggle hunter direction through the ordinary game update', async () => {
     mocks.queryResults.games = { data: game(), error: null }
     mocks.mutationResults.games = { data: { ...game(), direction_enabled: true }, error: null }
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Hunt panel')
     const select = screen.getByRole('combobox', { name: 'Hunter direction to target' })
     expect(select.value).toBe('off')
@@ -353,7 +291,7 @@ describe('GameView authoritative recovery', () => {
   it('ignores an older snapshot that finishes after a newer refresh', async () => {
     let resolveOld
     mocks.queryResults.games = new Promise((resolve) => { resolveOld = resolve })
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     mocks.queryResults.games = { data: { ...game(), status: 'finished' }, error: null }
     act(() => window.dispatchEvent(new Event('focus')))
     await screen.findByText('Hunt panel')
@@ -367,7 +305,7 @@ describe('GameView authoritative recovery', () => {
       ? { data: 'ABCDEFGH', error: null }
       : { data: { is_pirate: true, phase: 'setup', paused: false, pvp_enabled: false,
         crews: [], sites: [] }, error: null }))
-    render(<GameView gameId="game-1" session={{ user: { id: 'gm-user' } }} onBack={() => {}} />)
+    mount()
     await screen.findByText('Phase and safety controls')
     expect(screen.queryByRole('tab', { name: 'HUNT', exact: true })).toBeNull()
     expect(screen.getByRole('tab', { name: 'PIRATE', exact: true })).toBeTruthy()

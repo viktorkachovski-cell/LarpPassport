@@ -52,24 +52,31 @@ export const SharingTab = memo(function SharingTab({ game, phase, sharing, permi
           <Text style={styles.detailsToggleText}>{detailsOpen ? 'Hide details' : 'Show details'}</Text>
         </TouchableOpacity>
       )}
-      {detailsOpen && <View style={styles.telemetryCard}>
-        <Text style={styles.telemetryKicker}>SYNC DETAILS</Text>
-        <View style={styles.telemetryRow}>
-          <TelemetryCell label="QUEUED" value={queue.queued ?? 0} color={C.cyan} />
-          <TelemetryCell label="LAST SENT" value={(formatAge(queue.lastSent) ?? 'never').toUpperCase()} color={queue.lastSent ? C.green : C.muted} />
-          <TelemetryCell label="GPS FIX" value={(formatAge(queue.lastFixAt) ?? 'none').toUpperCase()} color={queue.lastFixAt ? C.text : C.muted} />
-          <TelemetryCell label="GPS MODE" value={queue.profile === 'far' ? 'RELAXED' : 'PRECISE'} />
-        </View>
-        {(queue.failed ?? 0) > 0 && (
-          <Text style={common.errorText}>{queue.failed} update{queue.failed === 1 ? '' : 's'} rejected by the server and will not be retried{queue.lastError ? `: ${queue.lastError}` : '.'}</Text>
-        )}
-        <Text style={styles.telemetryNote}>Queued updates are sent automatically. "Last sent" is about location updates only; it does not prove the rest of the game data is current.</Text>
-        <GhostButton label="SEND NOW" onPress={sendNow} />
-      </View>}
+      {detailsOpen && <SyncDetails queue={queue} sendNow={sendNow} />}
       {!!SHARING_FOOTNOTE && <Text style={styles.sharingFootnote}>{SHARING_FOOTNOTE}</Text>}
     </ScrollView>
   )
 })
+
+function SyncDetails({ queue, sendNow }) {
+  const failed = queue.failed ?? 0
+  return (
+    <View style={styles.telemetryCard}>
+      <Text style={styles.telemetryKicker}>SYNC DETAILS</Text>
+      <View style={styles.telemetryRow}>
+        <TelemetryCell label="QUEUED" value={queue.queued ?? 0} color={C.cyan} />
+        <TelemetryCell label="LAST SENT" value={(formatAge(queue.lastSent) ?? 'never').toUpperCase()} color={queue.lastSent ? C.green : C.muted} />
+        <TelemetryCell label="GPS FIX" value={(formatAge(queue.lastFixAt) ?? 'none').toUpperCase()} color={queue.lastFixAt ? C.text : C.muted} />
+        <TelemetryCell label="GPS MODE" value={queue.profile === 'far' ? 'RELAXED' : 'PRECISE'} />
+      </View>
+      {failed > 0 && (
+        <Text style={common.errorText}>{failed} update{failed === 1 ? '' : 's'} rejected by the server and will not be retried{queue.lastError ? `: ${queue.lastError}` : '.'}</Text>
+      )}
+      <Text style={styles.telemetryNote}>Queued updates are sent automatically. "Last sent" is about location updates only; it does not prove the rest of the game data is current.</Text>
+      <GhostButton label="SEND NOW" onPress={sendNow} />
+    </View>
+  )
+}
 
 const TelemetryCell = memo(function TelemetryCell({ label, value, color = C.text }) {
   return (

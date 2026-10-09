@@ -3,6 +3,31 @@ import { useAction } from '../lib/useAction'
 import Outcome from './Outcome'
 import TableScroll from './TableScroll'
 
+const nameOf = (m) => m.profile?.username ?? 'member'
+
+function sharingBadge(m) {
+  if (m.role === 'gm') return <span className="badge-pill gm">GM</span>
+  return m.sharing_enabled ? <span className="badge-pill on">sharing on</span> : <span className="badge-pill off">sharing off</span>
+}
+
+function MemberRow({ member: m, position, isSelf, lastGm, busy, onRole, onRemove }) {
+  return (
+    <tr>
+      <td>{m.profile?.username}{isSelf && <span className="hint"> (you)</span>}</td>
+      <td>
+        <select aria-label={`Role for ${nameOf(m)}`} value={m.role} disabled={busy || lastGm} onChange={(e) => onRole(e.target.value)}>
+          <option value="player">player</option>
+          <option value="gm">GM</option>
+        </select>
+      </td>
+      <td>{sharingBadge(m)}</td>
+      <td className="hint">{formatAge(position?.recorded_at) ?? '—'}</td>
+      <td className="hint">{position?.battery_pct != null ? Math.round(position.battery_pct) + '%' : '—'}</td>
+      <td>{!isSelf && <button className="danger" aria-label={`Remove ${nameOf(m)}`} disabled={busy} onClick={onRemove}>Remove</button>}</td>
+    </tr>
+  )
+}
+
 export default function PlayersPanel({ members, positions, uid, game, setMemberRole, removeMember, updateGame }) {
   const gmCount = members.filter((m) => m.role === 'gm').length
   const { busy, outcome, clear, run } = useAction()
@@ -34,24 +59,10 @@ export default function PlayersPanel({ members, positions, uid, game, setMemberR
         <thead><tr><th>Member</th><th>Role</th><th>Location sharing</th><th>Last seen</th><th>Battery</th><th><span className="visually-hidden">Actions</span></th></tr></thead>
         <tbody>
           {members.map((m) => (
-            <tr key={m.profile_id}>
-              <td>{m.profile?.username}{m.profile_id === uid && <span className="hint"> (you)</span>}</td>
-              <td>
-                <select aria-label={`Role for ${m.profile?.username ?? 'member'}`} value={m.role} disabled={busy === m.profile_id || (m.profile_id === uid && m.role === 'gm' && gmCount === 1)}
-                  onChange={(e) => act(m.profile_id, `Role of ${m.profile?.username ?? 'member'} set to ${e.target.value === 'gm' ? 'GM' : 'player'}`, () => setMemberRole(m.profile_id, e.target.value))}>
-                  <option value="player">player</option>
-                  <option value="gm">GM</option>
-                </select>
-              </td>
-              <td>
-                {m.role === 'gm' ? <span className="badge-pill gm">GM</span>
-                  : m.sharing_enabled ? <span className="badge-pill on">sharing on</span>
-                  : <span className="badge-pill off">sharing off</span>}
-              </td>
-              <td className="hint">{formatAge(positions[m.profile_id]?.recorded_at) ?? '—'}</td>
-              <td className="hint">{positions[m.profile_id]?.battery_pct != null ? Math.round(positions[m.profile_id].battery_pct) + '%' : '—'}</td>
-              <td>{m.profile_id !== uid && <button className="danger" aria-label={`Remove ${m.profile?.username ?? 'member'}`} disabled={busy === m.profile_id} onClick={() => remove(m)}>Remove</button>}</td>
-            </tr>
+            <MemberRow key={m.profile_id} member={m} position={positions[m.profile_id]} isSelf={m.profile_id === uid}
+              lastGm={m.profile_id === uid && m.role === 'gm' && gmCount === 1} busy={busy === m.profile_id}
+              onRole={(role) => act(m.profile_id, `Role of ${nameOf(m)} set to ${role === 'gm' ? 'GM' : 'player'}`, () => setMemberRole(m.profile_id, role))}
+              onRemove={() => remove(m)} />
           ))}
         </tbody>
       </table>

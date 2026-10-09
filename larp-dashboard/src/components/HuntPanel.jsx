@@ -25,27 +25,132 @@ function orderedAlivePlayers(players) {
   return ordered.length === alive.length ? ordered : alive
 }
 
+function Readiness({ players, characters, busy, onBegin, onRefresh, outcomeBox }) {
+  const readyCharacters = new Set(characters.filter((character) => !character.is_npc).map((character) => character.user_id))
+  const enoughPlayers = players.length >= 2
+  const enoughCharacters = readyCharacters.size >= players.length
+  const ready = enoughPlayers && players.every((player) => readyCharacters.has(player.profile_id))
+  return (
+    <div className="panel-pad hunt-panel">
+      <div className="card hunt-start-card">
+        <span className="micro-label">TIME HUNT // START CONTROL</span>
+        <h2 className="display">Roster readiness</h2>
+        <p className="hint">
+          Starting randomizes every player into one secret circular target chain. GMs remain observers,
+          player positions become GM-only, and the roster locks until reset or a winner is declared.
+        </p>
+        <div className="readiness-row">
+          <span className={`badge-pill ${enoughPlayers ? 'on' : 'off'}`}>{players.length} PLAYERS {enoughPlayers ? '✓' : ''}</span>
+          <span className={`badge-pill ${enoughCharacters ? 'on' : 'off'}`}>{readyCharacters.size} CHARACTERS {enoughCharacters ? '✓' : ''}</span>
+        </div>
+        {!ready && <p className="error mt">At least two players are required, and every player needs a non-NPC character.</p>}
+        {outcomeBox}
+        <div className="row mt">
+          <button className="primary" disabled={!ready || busy} onClick={onBegin}>{busy ? 'Starting...' : 'Start hunt'}</button>
+          <button className="ghost" disabled={busy} onClick={onRefresh}>Refresh readiness</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ChainEditor({ order, playerById, busy, onMove, onApply, onCancel }) {
+  return (
+    <div className="card chain-editor mb">
+      <span className="micro-label">TARGET ORDER // GM EYES ONLY</span>
+      <h3>Target order</h3>
+      <p className="hint">Each traveller targets the next row; the last row targets the first.</p>
+      {order.map((profileId, index) => {
+        const name = playerById.get(profileId)?.character_name
+        const next = playerById.get(order[(index + 1) % order.length])
+        return (
+          <div className="chain-order-row" key={profileId}>
+            <span className="chain-index">{String(index + 1).padStart(2, '0')}</span>
+            <span className="chain-route"><b>{name}</b> targets <b>{next?.character_name}</b></span>
+            <button className="ghost" aria-label={`Move ${name ?? 'player'} up`} disabled={busy || index === 0} onClick={() => onMove(index, -1)}>Up</button>
+            <button className="ghost" aria-label={`Move ${name ?? 'player'} down`} disabled={busy || index === order.length - 1} onClick={() => onMove(index, 1)}>Down</button>
+          </div>
+        )
+      })}
+      <div className="row mt">
+        <button className="primary" disabled={busy} onClick={onApply}>Apply chain</button>
+        <button className="ghost" disabled={busy} onClick={onCancel}>Cancel</button>
+        <span className="chain-warning">SAVING REJECTS STALE PENDING CLAIMS</span>
+      </div>
+    </div>
+  )
+}
+
+// Hunt players are either alive or eliminated.
+function ChainActions({ player, awaiting, canEliminate, busy, actions }) {
+  if (player.state === 'eliminated') {
+    return <button className="ghost" aria-label={`Restore ${player.character_name}`} disabled={busy} onClick={() => actions.restore(player)}>Restore</button>
+  }
+  return <>
+    {canEliminate && (
+      <button className="danger" aria-label={`Eliminate ${player.character_name}`} disabled={busy || actions.assignmentPending} onClick={() => actions.eliminate(player)}>Eliminate</button>
+    )}
+    {awaiting && (
+      <button className="primary" aria-label={`Assign target to ${player.character_name}`} disabled={busy} onClick={() => actions.assign(player)}>Assign target</button>
+    )}
+  </>
+}
+
+function targetText(player, awaiting) {
+  if (player.target_name) return <>→ {player.target_name}</>
+  return awaiting ? 'Waiting for GM target assignment' : '-'
+}
+
+function ChainRow({ player, active, aliveCount, busy, actions }) {
+  const alive = player.state === 'alive'
+  const awaiting = active && alive && !player.target_profile_id
+  const signal = alive ? cloakLabel(player.hidden_until) : '-'
+  return (
+    <tr className={`${alive ? '' : 'eliminated-row'} ${awaiting ? 'awaiting-row' : ''}`}>
+      <td><b>{player.character_name}</b><div className="hint">@{player.username}</div></td>
+      <td><span className={`badge-pill ${alive ? 'on' : 'off'}`}>{player.state.toUpperCase()}</span></td>
+      <td className={awaiting ? 'awaiting-target' : 'target-cell'}>{targetText(player, awaiting)}</td>
+      <td className={signal.startsWith('cloaked') ? 'signal-cloaked' : 'hint'}>{signal}</td>
+      <td className="hint">{formatAge(player.eliminated_at) ?? '-'}</td>
+      <td className="action-cell">
+        <ChainActions player={player} awaiting={awaiting} canEliminate={active && aliveCount > 1} busy={busy} actions={actions} />
+      </td>
+    </tr>
+  )
+}
+
+function ClaimsQueue({ claims, busy, onForce }) {
+  const pending = claims.filter((claim) => claim.status === 'pending').length
+  return (
+    <section className="command-card claims-card">
+      <div className="command-card-header compact">
+        <div><span className="micro-label">ELIMINATION CLAIMS</span><h3>Adjudication queue</h3></div>
+        {pending > 0 && <span className="queue-count">{pending}</span>}
+      </div>
+      {claims.map((claim) => (
+        <div key={claim.id} className="claim-row">
+          <div className="claim-meta"><span className={`status ${claim.status}`}>{claim.status.toUpperCase()}</span><span>{formatAge(claim.requested_at)}</span></div>
+          <p><b>{claim.hunter_name}</b> claimed <b className="victim-name">{claim.victim_name}</b></p>
+          {claim.status === 'pending' && (
+            <div className="claim-actions">
+              <button className="primary" disabled={busy} onClick={() => onForce(claim, true)}>Force confirm</button>
+              <button className="ghost" disabled={busy} onClick={() => onForce(claim, false)}>Force reject</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {claims.length === 0 && <p className="hint">No claims yet.</p>}
+    </section>
+  )
+}
+
 export default function HuntPanel({
-  hunt,
-  members,
-  characters,
-  startHunt,
-  resetHunt,
-  resolveClaim,
-  eliminatePlayer,
-  restorePlayer,
-  saveChain,
-  assignNextTarget,
-  refresh,
+  hunt, members, characters, startHunt, resetHunt, resolveClaim, eliminatePlayer, restorePlayer, saveChain, assignNextTarget, refresh,
 }) {
   const { busy, outcome, clear, run } = useAction()
   const [editingChain, setEditingChain] = useState(false)
   const [chainOrder, setChainOrder] = useState([])
   const players = members.filter((member) => member.role === 'player')
-  const readyCharacters = new Set(
-    characters.filter((character) => !character.is_npc).map((character) => character.user_id),
-  )
-  const ready = players.length >= 2 && players.every((player) => readyCharacters.has(player.profile_id))
 
   function begin() {
     if (!window.confirm(`Start the hunt with ${players.length} players? The roster and GM-only location privacy will be locked.`)) return
@@ -67,21 +172,6 @@ export default function HuntPanel({
     })
   }
 
-  function forceEliminate(player) {
-    if (!window.confirm(`Eliminate ${player.character_name} and repair the target chain?`)) return
-    run(() => eliminatePlayer(player.profile_id), { success: `${player.character_name} eliminated. The target chain was repaired.` })
-  }
-
-  function restore(player) {
-    if (!window.confirm(`Restore ${player.character_name} to the hunt? Their location consent will remain off until they enable it.`)) return
-    run(() => restorePlayer(player.profile_id), { success: `${player.character_name} restored to the hunt.` })
-  }
-
-  function editChain() {
-    setChainOrder(orderedAlivePlayers(hunt.players ?? []).map((player) => player.profile_id))
-    setEditingChain(true)
-  }
-
   function moveChain(index, offset) {
     const target = index + offset
     if (target < 0 || target >= chainOrder.length) return
@@ -94,55 +184,48 @@ export default function HuntPanel({
     })
   }
 
+  function editChain() {
+    setChainOrder(orderedAlivePlayers(hunt.players ?? []).map((player) => player.profile_id))
+    setEditingChain(true)
+  }
+
   function applyChain() {
     if (!window.confirm('Apply this complete target order? Pending claims will be rejected.')) return
     run(() => saveChain(chainOrder), { onSuccess: () => setEditingChain(false), success: 'Target chain applied. Stale pending claims were rejected.' })
   }
 
-  function assignTarget(player) {
-    if (!window.confirm(`Assign the inherited target to ${player.character_name}?`)) return
-    run(() => assignNextTarget(player.profile_id), { success: `Target assigned to ${player.character_name}.` })
+  const outcomeBox = <Outcome outcome={outcome} onDismiss={clear} />
+  if (!hunt) return <div className="panel-pad hunt-panel"><p className="hint">Loading hunt state...</p></div>
+  if (hunt.phase === 'not_started') {
+    return <Readiness players={players} characters={characters} busy={busy} onBegin={begin} onRefresh={() => run(refresh)} outcomeBox={outcomeBox} />
   }
 
-  const outcomeBox = <Outcome outcome={outcome} onDismiss={clear} />
-
-  if (!hunt) return <div className="panel-pad hunt-panel"><p className="hint">Loading hunt state...</p></div>
-
-  if (hunt.phase === 'not_started') return (
-    <div className="panel-pad hunt-panel">
-      <div className="card hunt-start-card">
-        <span className="micro-label">TIME HUNT // START CONTROL</span>
-        <h2 className="display">Roster readiness</h2>
-        <p className="hint">
-          Starting randomizes every player into one secret circular target chain. GMs remain observers,
-          player positions become GM-only, and the roster locks until reset or a winner is declared.
-        </p>
-        <div className="readiness-row">
-          <span className={`badge-pill ${players.length >= 2 ? 'on' : 'off'}`}>{players.length} PLAYERS {players.length >= 2 ? '✓' : ''}</span>
-          <span className={`badge-pill ${readyCharacters.size >= players.length ? 'on' : 'off'}`}>{readyCharacters.size} CHARACTERS {readyCharacters.size >= players.length ? '✓' : ''}</span>
-        </div>
-        {!ready && <p className="error mt">At least two players are required, and every player needs a non-NPC character.</p>}
-        {outcomeBox}
-        <div className="row mt">
-          <button className="primary" disabled={!ready || busy} onClick={begin}>{busy ? 'Starting...' : 'Start hunt'}</button>
-          <button className="ghost" disabled={busy} onClick={() => run(refresh)}>Refresh readiness</button>
-        </div>
-      </div>
-    </div>
-  )
-
-  const alive = hunt.players?.filter((player) => player.state === 'alive') ?? []
-  const pending = hunt.claims?.filter((claim) => claim.status === 'pending') ?? []
-  const assignmentPending = alive.some((player) => !player.target_profile_id)
-  const playerById = new Map((hunt.players ?? []).map((player) => [player.profile_id, player]))
+  const roster = hunt.players ?? []
+  const alive = roster.filter((player) => player.state === 'alive')
+  const active = hunt.phase === 'active'
+  const actions = {
+    assignmentPending: alive.some((player) => !player.target_profile_id),
+    eliminate(player) {
+      if (!window.confirm(`Eliminate ${player.character_name} and repair the target chain?`)) return
+      run(() => eliminatePlayer(player.profile_id), { success: `${player.character_name} eliminated. The target chain was repaired.` })
+    },
+    restore(player) {
+      if (!window.confirm(`Restore ${player.character_name} to the hunt? Their location consent will remain off until they enable it.`)) return
+      run(() => restorePlayer(player.profile_id), { success: `${player.character_name} restored to the hunt.` })
+    },
+    assign(player) {
+      if (!window.confirm(`Assign the inherited target to ${player.character_name}?`)) return
+      run(() => assignNextTarget(player.profile_id), { success: `Target assigned to ${player.character_name}.` })
+    },
+  }
 
   return (
     <div className="panel-pad hunt-panel">
       <div className="hunt-phase-row">
-        <span className={`badge-pill phase-pill ${hunt.phase === 'active' ? 'on' : 'gm'}`}>
-          {hunt.phase === 'active' && <span className="pulse-dot" />}{hunt.phase.toUpperCase()}
+        <span className={`badge-pill phase-pill ${active ? 'on' : 'gm'}`}>
+          {active && <span className="pulse-dot" />}{hunt.phase.toUpperCase()}
         </span>
-        <span className="hunt-count">{alive.length} of {hunt.players?.length ?? 0} travellers remain</span>
+        <span className="hunt-count">{alive.length} of {roster.length} travellers remain</span>
         {hunt.winner && <b className="winner-inline">Winner: {hunt.winner.character_name}</b>}
         <span className="spacer" />
         <button className="ghost" disabled={busy} onClick={() => run(refresh)}>Refresh</button>
@@ -161,36 +244,14 @@ export default function HuntPanel({
         </div>
       )}
 
-      {editingChain && (
-        <div className="card chain-editor mb">
-          <span className="micro-label">TARGET ORDER // GM EYES ONLY</span>
-          <h3>Target order</h3>
-          <p className="hint">Each traveller targets the next row; the last row targets the first.</p>
-          {chainOrder.map((profileId, index) => {
-            const player = playerById.get(profileId)
-            const next = playerById.get(chainOrder[(index + 1) % chainOrder.length])
-            return (
-              <div className="chain-order-row" key={profileId}>
-                <span className="chain-index">{String(index + 1).padStart(2, '0')}</span>
-                <span className="chain-route"><b>{player?.character_name}</b> targets <b>{next?.character_name}</b></span>
-                <button className="ghost" aria-label={`Move ${player?.character_name ?? 'player'} up`} disabled={busy || index === 0} onClick={() => moveChain(index, -1)}>Up</button>
-                <button className="ghost" aria-label={`Move ${player?.character_name ?? 'player'} down`} disabled={busy || index === chainOrder.length - 1} onClick={() => moveChain(index, 1)}>Down</button>
-              </div>
-            )
-          })}
-          <div className="row mt">
-            <button className="primary" disabled={busy} onClick={applyChain}>Apply chain</button>
-            <button className="ghost" disabled={busy} onClick={() => setEditingChain(false)}>Cancel</button>
-            <span className="chain-warning">SAVING REJECTS STALE PENDING CLAIMS</span>
-          </div>
-        </div>
-      )}
+      {editingChain && <ChainEditor order={chainOrder} playerById={new Map(roster.map((player) => [player.profile_id, player]))}
+        busy={busy} onMove={moveChain} onApply={applyChain} onCancel={() => setEditingChain(false)} />}
 
       <div className="hunt-command-grid">
         <section className="command-card chain-card">
           <div className="command-card-header">
             <div><span className="micro-label">TARGET CHAIN // GM EYES ONLY</span><h3>Live assignment ring</h3></div>
-            {hunt.phase === 'active' && alive.length >= 2 && (
+            {active && alive.length >= 2 && (
               <button className="ghost" disabled={busy} onClick={editChain}>Edit target chain</button>
             )}
           </div>
@@ -198,30 +259,7 @@ export default function HuntPanel({
             <table className="grid hunt-grid">
               <thead><tr><th>Traveller</th><th>State</th><th>Targets</th><th>Signal</th><th>Eliminated</th><th>GM action</th></tr></thead>
               <tbody>
-                {(hunt.players ?? []).map((player) => {
-                  const awaitingAssignment = hunt.phase === 'active' && player.state === 'alive' && !player.target_profile_id
-                  const signal = player.state === 'alive' ? cloakLabel(player.hidden_until) : '-'
-                  return (
-                    <tr key={player.profile_id} className={`${player.state === 'eliminated' ? 'eliminated-row' : ''} ${awaitingAssignment ? 'awaiting-row' : ''}`}>
-                      <td><b>{player.character_name}</b><div className="hint">@{player.username}</div></td>
-                      <td><span className={`badge-pill ${player.state === 'alive' ? 'on' : 'off'}`}>{player.state.toUpperCase()}</span></td>
-                      <td className={awaitingAssignment ? 'awaiting-target' : 'target-cell'}>{player.target_name ? <>→ {player.target_name}</> : awaitingAssignment ? 'Waiting for GM target assignment' : '-'}</td>
-                      <td className={signal.startsWith('cloaked') ? 'signal-cloaked' : 'hint'}>{signal}</td>
-                      <td className="hint">{formatAge(player.eliminated_at) ?? '-'}</td>
-                      <td className="action-cell">
-                        {hunt.phase === 'active' && player.state === 'alive' && alive.length > 1 && (
-                          <button className="danger" aria-label={`Eliminate ${player.character_name}`} disabled={busy || assignmentPending} onClick={() => forceEliminate(player)}>Eliminate</button>
-                        )}
-                        {awaitingAssignment && (
-                          <button className="primary" aria-label={`Assign target to ${player.character_name}`} disabled={busy} onClick={() => assignTarget(player)}>Assign target</button>
-                        )}
-                        {player.state === 'eliminated' && (
-                          <button className="ghost" aria-label={`Restore ${player.character_name}`} disabled={busy} onClick={() => restore(player)}>Restore</button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
+                {roster.map((player) => <ChainRow key={player.profile_id} player={player} active={active} aliveCount={alive.length} busy={busy} actions={actions} />)}
               </tbody>
             </table>
           </TableScroll>
@@ -233,26 +271,7 @@ export default function HuntPanel({
             <h3>Rulings and corrections</h3>
             <p className="hint">Override claims, eliminate or restore a traveller, or replace the complete living-player chain. Every action is recorded.</p>
           </section>
-
-          <section className="command-card claims-card">
-            <div className="command-card-header compact">
-              <div><span className="micro-label">ELIMINATION CLAIMS</span><h3>Adjudication queue</h3></div>
-              {pending.length > 0 && <span className="queue-count">{pending.length}</span>}
-            </div>
-            {(hunt.claims ?? []).map((claim) => (
-              <div key={claim.id} className="claim-row">
-                <div className="claim-meta"><span className={`status ${claim.status}`}>{claim.status.toUpperCase()}</span><span>{formatAge(claim.requested_at)}</span></div>
-                <p><b>{claim.hunter_name}</b> claimed <b className="victim-name">{claim.victim_name}</b></p>
-                {claim.status === 'pending' && (
-                  <div className="claim-actions">
-                    <button className="primary" disabled={busy} onClick={() => forceClaim(claim, true)}>Force confirm</button>
-                    <button className="ghost" disabled={busy} onClick={() => forceClaim(claim, false)}>Force reject</button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {(hunt.claims ?? []).length === 0 && <p className="hint">No claims yet.</p>}
-          </section>
+          <ClaimsQueue claims={hunt.claims ?? []} busy={busy} onForce={forceClaim} />
         </aside>
       </div>
     </div>

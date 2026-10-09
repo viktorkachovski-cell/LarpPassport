@@ -1,12 +1,8 @@
-// SQLite-backed queue for location pings (replaces the AsyncStorage JSON array).
-//
-// Why: the old flush() read the whole queue, sent it, then wrote back '[]'.
-// Any point enqueued between the read and the clear was silently erased.
-// Here every point is a row; a flush claims a batch (pending -> in_flight)
-// inside a transaction, sends ONLY that batch, and deletes ONLY those ids on
-// success. A point can never be removed unless the server accepted the batch
-// that contained that specific point, it was pruned as permanently
-// unsendable (see below), or the player revoked consent.
+// SQLite-backed queue for location pings. Every point is a row; a flush claims
+// a batch (pending -> in_flight) inside a transaction, sends ONLY that batch,
+// and deletes ONLY those ids on success. A point can never be removed unless
+// the server accepted the batch that contained that specific point, it was
+// pruned as permanently unsendable (see below), or the player revoked consent.
 //
 // This module is dependency-free on purpose: it receives an already-opened
 // database handle whose shape matches expo-sqlite's async API
@@ -20,14 +16,13 @@
 // - invalid points (bad coords/accuracy/battery/timestamp, older than 24h,
 //   more than 5min in the future) are skipped and counted server-side rather
 //   than failing the batch. Local validation at enqueue and staleness pruning
-//   before every claim stay anyway: they keep garbage off the wire and off
-//   the free-tier request budget, and protect against older server versions.
-//   Structural abuse (non-array, >500 points, >256 KiB) still raises 22023.
+//   before every claim keep garbage off the wire and off the free-tier request
+//   budget. Structural abuse (non-array, >500 points, >256 KiB) raises 22023.
 
 export const PING_STATUS = { PENDING: 'pending', IN_FLIGHT: 'in_flight', FAILED: 'failed' }
 
 const DEFAULTS = {
-  maxQueue: 1000, // proposal allows 500-1000; oldest *pending* rows drop first
+  maxQueue: 1000, // oldest *pending* rows drop first
   batchSize: 100, // well under the server's 500-point / 256 KiB batch limits
   maxBatchesPerDrain: 20, // safety valve: 20 * 100 = 2000 points per drain
   maxValidationAttempts: 3, // server says the data itself is bad -> park as 'failed'
@@ -61,22 +56,17 @@ function makeId(now) {
   return `${now.toString(36)}-${idCounter.toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function isFiniteNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value)
-}
+const inRange = (value, min, max) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+const optionalInRange = (value, min, max) => value == null || inRange(value, min, max)
 
-// Mirrors the validation in public.ingest_pings so a point we accept locally
-// can never fail the server's whole-batch validation later.
+// Mirrors the per-point checks in public.ingest_pings, which skips points that
+// fail them, so nothing we queue is silently dropped by the server.
 export function validatePing(ping, nowMs, { maxAgeMs, maxFutureMs }) {
   if (!ping || typeof ping !== 'object') return 'not an object'
-  if (!isFiniteNumber(ping.lat) || ping.lat < -90 || ping.lat > 90) return 'latitude out of range'
-  if (!isFiniteNumber(ping.lng) || ping.lng < -180 || ping.lng > 180) return 'longitude out of range'
-  if (ping.accuracy != null && (!isFiniteNumber(ping.accuracy) || ping.accuracy < 0 || ping.accuracy > 10000)) {
-    return 'accuracy out of range'
-  }
-  if (ping.battery != null && (!isFiniteNumber(ping.battery) || ping.battery < 0 || ping.battery > 100)) {
-    return 'battery out of range'
-  }
+  if (!inRange(ping.lat, -90, 90)) return 'latitude out of range'
+  if (!inRange(ping.lng, -180, 180)) return 'longitude out of range'
+  if (!optionalInRange(ping.accuracy, 0, 10000)) return 'accuracy out of range'
+  if (!optionalInRange(ping.battery, 0, 100)) return 'battery out of range'
   const recorded = Date.parse(ping.recorded_at)
   if (!Number.isFinite(recorded)) return 'invalid recorded_at'
   if (recorded < nowMs - maxAgeMs) return 'recorded_at too old'
@@ -121,7 +111,7 @@ export function createPingStore({ db, now = () => Date.now(), ...options } = {})
   }
 
   // Insert new points. Returns counts so callers/tests can observe policy.
-  // - invalid points are rejected (would poison a whole server batch)
+  // - invalid points are rejected (the server would only skip them)
   // - duplicate (game_id, recorded_at) is ignored (matches server dedup key)
   // - when over maxQueue, oldest PENDING rows drop; in_flight rows are never
   //   dropped because their fate belongs to the flush that claimed them
