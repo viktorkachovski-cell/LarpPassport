@@ -62,10 +62,10 @@ export function HoldPanel({ state, error, session }) {
 const styles = StyleSheet.create({
   ...SHEET_TEXT,
   crewName: { color: C.onWood, fontFamily: F.blackletter, fontSize: 34, lineHeight: 40, textShadowColor: C.woodSeam, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  ledgerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16, minHeight: 30 },
-  ledgerName: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  ledgerLabel: { color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
+  ledgerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16, minHeight: 40 },
+  ledgerName: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ledgerLabel: { flexShrink: 1, color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
   ledgerValue: { flexShrink: 1, color: C.sheetInk, fontFamily: F.numeric, fontSize: 19, lineHeight: 25, textAlign: 'right' },
   missing: { color: C.sheetMuted, fontFamily: F.body },
-  pirate: { marginTop: 6 },
+  pirate: { marginTop: 8 },
 })

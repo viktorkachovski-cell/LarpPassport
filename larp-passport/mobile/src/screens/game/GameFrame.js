@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { COPY, OTHER_APP, ownsGame } from '../../lib/brand'
 import { describeServerSync, describeSharing } from '../../lib/syncStatus'
@@ -7,6 +7,7 @@ import { C, F, S, T, toneColor } from '../../lib/theme'
 import { useNow } from '../../lib/useNow'
 import { common } from '../../ui/common'
 import { LiveDot } from '../../ui/primitives'
+import { ScreenEntrance, TouchableOpacity } from '../../ui/presentation'
 import { CharacterSheet, CreateCharacter } from './CharacterTab'
 import { EventsTab } from './EventsTab'
 import { SharingTab } from './SharingTab'
@@ -61,7 +62,7 @@ function FrameHeader({ session, onBack, chip, phaseHint, gpsInHeader, tab, setTa
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to games" onPress={onBack} style={[styles.backButton, sk.backButton]}>
         {skin.BackGlyph ? <skin.BackGlyph /> : <Text style={styles.backText}>&lt;</Text>}
       </TouchableOpacity>
-      <Text style={[styles.gameName, sk.gameName]} numberOfLines={1}>{skin.upperName ? name.toUpperCase() : name}</Text>
+      <Text style={[styles.gameName, sk.gameName]} numberOfLines={skin.nameLines ?? 1}>{skin.upperName ? name.toUpperCase() : name}</Text>
       {!phaseHint && chip}
       {gpsInHeader && <GpsButton session={session} selected={tab === 'share'} onPress={() => setTab('share')} />}
     </View>
@@ -109,8 +110,10 @@ export function GameFrame({
       <View style={[styles.tabs, sk.tabs]}>
         {tabs.map(([key, label]) => <TabButton key={key} label={label} selected={tab === key} onPress={() => setTab(key)} />)}
       </View>
-      {children}
-      <SharedTab tab={tab} session={session} phase={phase} hasSheet={!!sheetTab} />
+      <ScreenEntrance transitionKey={tab} style={common.flex}>
+        {children}
+        <SharedTab tab={tab} session={session} phase={phase} hasSheet={!!sheetTab} />
+      </ScreenEntrance>
     </SafeAreaView>
   )
 }

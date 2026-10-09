@@ -1,9 +1,10 @@
 import { memo, useState } from 'react'
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ScrollView, Text, TextInput, View } from 'react-native'
 import { COPY } from '../../lib/brand'
 import { supabase } from '../../lib/supabase'
 import { C, F, S, T } from '../../lib/theme'
 import { common } from '../../ui/common'
+import { screenStyles, TouchableOpacity } from '../../ui/presentation'
 import { Field, OutcomeNote } from '../../ui/primitives'
 
 const copy = COPY.character
@@ -158,7 +159,7 @@ function statColor(stat, value) {
   return C.cyan
 }
 
-const styles = StyleSheet.create({
+const styles = screenStyles('character', {
   cyanButton: { minHeight: S.touch, backgroundColor: C.cyan, borderRadius: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 13, paddingHorizontal: 12 },
   identityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   avatar: { width: 46, height: 46, borderRadius: 6, backgroundColor: C.panel, borderColor: C.cyanBorder, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginRight: 12 },

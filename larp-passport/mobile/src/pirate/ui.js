@@ -1,8 +1,9 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import { Animated, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import Svg, { Circle, Defs, Line, Path, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg'
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Pattern, RadialGradient, Rect, Stop } from 'react-native-svg'
 import { C, F, S, T } from '../lib/theme'
 import { useReducedMotion } from '../lib/useReducedMotion'
+import { DecorativeLayer, MotionScrollView as ScrollView, TouchableOpacity } from '../ui/presentation'
 
 // The Black Tide building blocks: wood, parchment and brass. Pirate build only.
 
@@ -13,12 +14,12 @@ export const WoodBackdrop = memo(function WoodBackdrop() {
       <Defs>
         <Pattern id="planks" width="160" height="48" patternUnits="userSpaceOnUse">
           <Rect width="160" height="48" fill={C.wood700} />
-          <Line x1="0" y1="9" x2="160" y2="11" stroke={C.woodSeam} strokeOpacity="0.18" strokeWidth="1" />
-          <Line x1="0" y1="21" x2="160" y2="19" stroke={C.onWood} strokeOpacity="0.04" strokeWidth="2" />
-          <Line x1="0" y1="31" x2="160" y2="33" stroke={C.woodSeam} strokeOpacity="0.14" strokeWidth="1" />
-          <Line x1="0" y1="40" x2="160" y2="39" stroke={C.onWood} strokeOpacity="0.035" strokeWidth="1.5" />
-          <Rect x="0" y="46" width="160" height="2" fill={C.woodSeam} />
-          <Rect x="118" y="0" width="2" height="46" fill={C.woodSeam} opacity="0.7" />
+          <Line x1="0" y1="9" x2="160" y2="11" stroke={C.woodSeam} strokeOpacity="0.09" strokeWidth="1" />
+          <Line x1="0" y1="21" x2="160" y2="19" stroke={C.onWood} strokeOpacity="0.025" strokeWidth="2" />
+          <Line x1="0" y1="31" x2="160" y2="33" stroke={C.woodSeam} strokeOpacity="0.07" strokeWidth="1" />
+          <Line x1="0" y1="40" x2="160" y2="39" stroke={C.onWood} strokeOpacity="0.02" strokeWidth="1.5" />
+          <Rect x="0" y="46" width="160" height="2" fill={C.woodSeam} opacity="0.45" />
+          <Rect x="118" y="0" width="2" height="46" fill={C.woodSeam} opacity="0.3" />
         </Pattern>
       </Defs>
       <Rect width="100%" height="100%" fill="url(#planks)" />
@@ -32,7 +33,7 @@ export const Rivets = memo(function Rivets() {
     <Svg style={styles.rivets} pointerEvents="none" importantForAccessibility="no-hide-descendants">
       <Defs>
         <Pattern id="rivets" width="40" height="8" patternUnits="userSpaceOnUse">
-          <Circle cx="20" cy="4" r="2.5" fill={C.brassDeep} />
+          <Circle cx="20" cy="4" r="2" fill={C.brassDeep} />
         </Pattern>
       </Defs>
       <Rect width="100%" height="8" fill="url(#rivets)" />
@@ -49,11 +50,12 @@ export function Sheet({ children, style }) {
           <Defs>
             <RadialGradient id="burn" cx="50%" cy="42%" rx="62%" ry="62%">
               <Stop offset="0.62" stopColor={C.sheetEdge} stopOpacity="0" />
-              <Stop offset="1" stopColor={C.sheetEdge} stopOpacity="0.55" />
+              <Stop offset="1" stopColor={C.sheetEdge} stopOpacity="0.16" />
             </RadialGradient>
           </Defs>
           <Rect width="100%" height="100%" fill="url(#burn)" />
         </Svg>
+        <DecorativeLayer kind="glow" />
         {children}
       </View>
     </View>
@@ -89,12 +91,12 @@ export function SheetTitle({ children }) {
 
 // A raised plank or brass plate on a dark lip. The face sinks onto the lip
 // while pressed and stays seated while selected. Only a transform animates,
-// on the native driver; reduced motion snaps instead of springing.
-const LIP = 5
+// on the native driver; reduced motion snaps instead of easing.
+const LIP = 3
 const SEATED = 0.7 // a selected tab sits most of the way down
 
 export function PressPlank({
-  children, onPress, disabled, selected = false, face, lip, edge, nails = false, grain = true,
+  children, onPress, disabled, selected = false, face, lip, edge, nails = false, grain = true, shimmer = false,
   style, faceStyle, accessibilityRole = 'button', accessibilityLabel, accessibilityState,
 }) {
   const reduced = useReducedMotion()
@@ -104,8 +106,8 @@ export function PressPlank({
 
   useEffect(() => {
     if (reduced) { depth.setValue(target); return undefined }
-    const animation = Animated.spring(depth, {
-      toValue: target, useNativeDriver: true, speed: pressed ? 40 : 18, bounciness: pressed ? 0 : 6,
+    const animation = Animated.timing(depth, {
+      toValue: target, useNativeDriver: true, duration: pressed ? 90 : 140, easing: Easing.out(Easing.cubic),
     })
     animation.start()
     return () => animation.stop()
@@ -119,6 +121,14 @@ export function PressPlank({
       style={[styles.plankOuter, disabled && styles.disabled, style]}>
       <View style={[styles.plankLip, { backgroundColor: lip }]} />
       <Animated.View style={[styles.plankFace, { backgroundColor: face, borderTopColor: edge }, faceStyle, { transform: [{ translateY }] }]}>
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+          <Defs><LinearGradient id="plateLight" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={C.brassLight} stopOpacity={grain ? 0.07 : 0.2} />
+            <Stop offset="0.55" stopColor={C.brassLight} stopOpacity="0" />
+          </LinearGradient></Defs>
+          <Rect width="100%" height="100%" fill="url(#plateLight)" />
+        </Svg>
+        {shimmer && <DecorativeLayer kind="shimmer" enabled={!disabled} />}
         {grain && <View pointerEvents="none" style={styles.grainWrap} importantForAccessibility="no-hide-descendants">
           <View style={[styles.grain, { top: '28%' }]} />
           <View style={[styles.grain, styles.grainFaint, { top: '62%' }]} />
@@ -152,7 +162,7 @@ export function TideButton({ label, onPress, disabled, variant = 'brass', style,
   }
   return (
     <PressPlank onPress={onPress} disabled={disabled} face={plate.face} lip={plate.lip} edge={plate.edge}
-      grain={plate.grain} style={style} faceStyle={styles.buttonFace} accessibilityLabel={accessibilityLabel}>
+      grain={plate.grain} shimmer={variant === 'brass'} style={style} faceStyle={styles.buttonFace} accessibilityLabel={accessibilityLabel}>
       <Text style={[styles.buttonText, styles[plate.text]]}>{label}</Text>
     </PressPlank>
   )
@@ -169,7 +179,7 @@ const SEAL = {
 export function Notice({ text, tone = 'info' }) {
   const seal = SEAL[tone] ?? SEAL.info
   return (
-    <View style={styles.notice} accessibilityLiveRegion="polite">
+    <View style={[styles.notice, tone === 'warning' && styles.noticeWarning]} accessibilityLiveRegion="polite">
       <View style={[styles.seal, { backgroundColor: C[seal.fill] }]} importantForAccessibility="no-hide-descendants">
         <Text style={[styles.sealGlyph, { color: C[seal.glyphColor] }]}>{seal.glyph}</Text>
       </View>
@@ -209,23 +219,23 @@ export function BackIcon({ size = 24, color = '#1C120A' }) {
 
 const styles = StyleSheet.create({
   ...SHEET_TEXT,
-  page: { padding: S.pad, gap: 10, paddingBottom: 40 },
+  page: { padding: 16, gap: 16, paddingBottom: 40 },
   rivets: { position: 'absolute', left: 0, right: 0, top: 3, height: 8 },
-  sheetShadow: { borderRadius: 4, backgroundColor: C.sheet, elevation: 8, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
-  sheet: { borderRadius: 4, borderWidth: 1, borderColor: C.sheetEdge, backgroundColor: C.sheet, padding: 20, gap: 10, overflow: 'hidden' },
+  sheetShadow: { borderRadius: 12, backgroundColor: C.sheet, elevation: 4, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  sheet: { borderRadius: 12, borderWidth: 1, borderColor: C.sheetEdge, backgroundColor: C.sheet, padding: 20, gap: 12, overflow: 'hidden' },
   kicker: { color: C.sheetMuted, fontFamily: F.mono, fontSize: 15, lineHeight: 18, letterSpacing: 0.9 },
   sheetTitle: { color: C.sheetInk, fontFamily: F.blackletter, fontSize: 28, lineHeight: 32 },
-  button: { minHeight: S.touch, borderRadius: 6, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 10 },
+  button: { minHeight: S.touch, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   ink: { backgroundColor: 'transparent', borderColor: C.sheetInk, borderWidth: 1.5 },
-  plankOuter: { minHeight: S.touch + LIP, paddingBottom: LIP },
-  plankLip: { position: 'absolute', left: 0, right: 0, top: LIP, bottom: 0, borderRadius: 8 },
-  plankFace: { flex: 1, minHeight: S.touch, borderRadius: 8, borderWidth: 1, borderColor: C.woodSeam, borderTopWidth: 1.5,
+  plankOuter: { minHeight: S.touch + LIP, paddingBottom: LIP, maxWidth: '100%' },
+  plankLip: { position: 'absolute', left: 0, right: 0, top: LIP, bottom: 0, borderRadius: 10 },
+  plankFace: { flex: 1, minHeight: S.touch, borderRadius: 10, borderWidth: 1, borderColor: C.woodSeam, borderTopWidth: 1.5,
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   buttonFace: { paddingHorizontal: 16, paddingVertical: 10 },
   grainWrap: { ...StyleSheet.absoluteFillObject },
-  grain: { position: 'absolute', left: -4, right: -4, height: 1.5, backgroundColor: C.woodSeam, opacity: 0.22, transform: [{ rotate: '-0.6deg' }] },
-  grainFaint: { backgroundColor: C.onWood, opacity: 0.07, height: 2, transform: [{ rotate: '0.5deg' }] },
-  nail: { position: 'absolute', top: 5, width: 5, height: 5, borderRadius: 3, backgroundColor: C.brassDeep, borderWidth: 0.5, borderColor: C.woodSeam },
+  grain: { position: 'absolute', left: -4, right: -4, height: 1.5, backgroundColor: C.woodSeam, opacity: 0.1, transform: [{ rotate: '-0.6deg' }] },
+  grainFaint: { backgroundColor: C.onWood, opacity: 0.04, height: 2, transform: [{ rotate: '0.5deg' }] },
+  nail: { position: 'absolute', top: 5, width: 4, height: 4, borderRadius: 2, backgroundColor: C.brassDeep, borderWidth: 0.5, borderColor: C.woodSeam },
   nailLeft: { left: 5 },
   nailRight: { right: 5 },
   disabled: { opacity: 0.5 },
@@ -233,7 +243,8 @@ const styles = StyleSheet.create({
   brassText: { color: C.wood900 },
   woodText: { color: C.onWood },
   inkText: { color: C.sheetInk },
-  notice: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: C.sheetShade, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 10 },
+  notice: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: C.sheetShade, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12 },
+  noticeWarning: { backgroundColor: C.sheet, borderWidth: 1, borderColor: C.sheetRule },
   seal: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   sealGlyph: { fontFamily: F.bodyBold, fontSize: 13, lineHeight: 16 },
   noticeText: { flex: 1, fontFamily: F.bodySemiBold, fontSize: T.bodyLarge, lineHeight: T.lineBody },

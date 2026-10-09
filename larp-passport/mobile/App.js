@@ -12,6 +12,7 @@ import { C, F } from './src/lib/theme'
 import AuthScreen from './src/screens/AuthScreen'
 import GamesScreen from './src/screens/GamesScreen'
 import GameScreen from './src/screens/GameScreen'
+import { PresentationRoot } from './src/ui/presentation'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -69,7 +70,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      {body}
+      <PresentationRoot>{body}</PresentationRoot>
     </SafeAreaProvider>
   )
 }

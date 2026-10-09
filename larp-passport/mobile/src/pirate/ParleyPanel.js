@@ -176,10 +176,10 @@ export function ParleyPanel({ state, error, gameId, refresh }) {
 const styles = StyleSheet.create({
   ...SHEET_TEXT,
   step: { color: C.sheetInk, fontFamily: F.bodyBold, fontSize: 19, lineHeight: 25 },
-  input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 6,
-    fontFamily: F.numeric, fontSize: 22, letterSpacing: 6, minHeight: S.touch, paddingHorizontal: 14 },
-  codeBox: { alignItems: 'center', gap: 2, borderColor: C.sheetInk, borderWidth: 2, borderStyle: 'dashed', borderRadius: 6, paddingVertical: 12 },
+  input: { color: C.sheetInk, backgroundColor: C.sheetShade, borderColor: C.sheetInk, borderWidth: 1.5, borderRadius: 10,
+    fontFamily: F.numeric, fontSize: 22, letterSpacing: 6, minHeight: S.touch, paddingHorizontal: 16, paddingVertical: 12 },
+  codeBox: { alignItems: 'center', gap: 8, borderColor: C.sheetInk, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 12, paddingVertical: 16 },
   code: { color: C.sheetInk, fontFamily: F.numeric, fontSize: 44, lineHeight: 50, letterSpacing: 10, paddingLeft: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  action: { flexGrow: 1 },
+  action: { flexGrow: 1, flexShrink: 1, maxWidth: '100%' },
 })
