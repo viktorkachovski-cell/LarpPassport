@@ -3,7 +3,7 @@ import { Reason, validReason } from './pirateCommon'
 
 // Every Pirate site with its standing claims. A GM voids a mistaken or cheated
 // claim with a reason (gm_void_claim): the shard and doubloons are reversed,
-// an oath word is withdrawn, and the crew may solve the riddle again.
+// an oath line is withdrawn, and the crew may solve the riddle again.
 export default function PirateSiteBoard({ gameId, state, busy, run, rpc, refresh, onRemoveSite }) {
   const [voiding, setVoiding] = useState(null)
   const [reason, setReason] = useState('')

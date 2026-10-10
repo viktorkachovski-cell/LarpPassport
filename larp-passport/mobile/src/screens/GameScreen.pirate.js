@@ -29,7 +29,7 @@ function PirateCells({ pirate }) {
   return <>
     <StateCell value={pirate?.shards ?? '--'} label="Shards" />
     <StateCell value={pirate?.doubloons ?? '--'} label="Doubloons" color={C.brassLight} bordered />
-    <StateCell value={pirate ? `${(pirate.oath ?? []).length}/4` : '--'} label="Oath words" />
+    <StateCell value={pirate ? `${(pirate.oath ?? []).length}/4` : '--'} label="Oath lines" />
   </>
 }
 

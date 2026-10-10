@@ -1,3 +1,4 @@
+import { COPY } from './brand'
 import { C } from './theme'
 
 // Player-facing catalogue of game_events types. The events list and push
@@ -29,7 +30,8 @@ const DEFAULTS = {
 }
 
 const EVENTS = {
-  zone_enter: {},
+  // A notify zone carries the GM's message; a brand may restyle it.
+  zone_enter: COPY.log.zoneEnter ?? {},
   zone_exit: {},
   zone_boundary_warning: {
     tag: BOUNDARY, boundary: true,

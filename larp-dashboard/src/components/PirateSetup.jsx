@@ -15,7 +15,7 @@ export function SiteForm({ gameId, state, zones, busy, run, rpc, refresh, onChan
   const oath = riddle && reward === 'oath'
 
   // A registered zone loads its saved settings; a new zone keeps the chosen
-  // kind and reward. The answer and oath word are never sent back.
+  // kind and reward. The answer and oath line are never sent back.
   function chooseZone(id) {
     const site = siteOf(id)
     setZoneId(id)
@@ -48,7 +48,7 @@ export function SiteForm({ gameId, state, zones, busy, run, rpc, refresh, onChan
 
   return <section className="command-card pirate-section">
     <h3>Register a Pirate site</h3>
-    <p className="hint">Create the zone on the map first: an event zone set to "Log silently for GMs", with a dwell time (20 s is a good start). The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays {payouts.join(' / ')} doubloons by rank, then {payouts.at(-1)} for every later crew. Crew count and crew size are uncapped.</p>
+    <p className="hint">Create the zone on the map first: an event zone with a dwell time (20 s is a good start), set to "Log silently for GMs", or to "Notify the player automatically" with lore in its message and One-shot ticked so each player hears it once on arrival. Set this before Charting: changing a zone's trigger resets who stands in it. The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays {payouts.join(' / ')} doubloons by rank, then {payouts.at(-1)} for every later crew. Crew count and crew size are uncapped.</p>
     <p className="hint">Players see the prompt in the app's Sites tab once they have stood inside the zone for its dwell time with location sharing on, and type the answer there. The answer is stored only as a hash: it is cleared after saving and never shown again.</p>
     <form onSubmit={save} autoComplete="off">
       <div className="pirate-form-grid">
@@ -67,14 +67,14 @@ export function SiteForm({ gameId, state, zones, busy, run, rpc, refresh, onChan
           </select></div>
         {riddle && <div className="field"><label htmlFor="pirate-reward">Riddle reward</label>
           <select id="pirate-reward" value={reward} onChange={(event) => setReward(event.target.value)}>
-            <option value="bearing">Bearing shard</option><option value="oath">Oath word</option>
+            <option value="bearing">Bearing shard</option><option value="oath">Oath line</option>
           </select></div>}
         {oath && <>
           <div className="field"><label htmlFor="pirate-oath-index">Oath index</label>
             <select id="pirate-oath-index" value={oathIndex} onChange={(event) => setOathIndex(event.target.value)}>
               {[1, 2, 3, 4].map((index) => <option key={index} value={index}>{index}</option>)}
             </select></div>
-          <div className="field"><label htmlFor="pirate-oath-word">Oath word</label>
+          <div className="field pirate-wide"><label htmlFor="pirate-oath-word">Oath line (the whole line, up to 40 characters)</label>
             <input id="pirate-oath-word" value={oathWord} maxLength={40} required
               onChange={(event) => setOathWord(event.target.value)} /></div>
         </>}

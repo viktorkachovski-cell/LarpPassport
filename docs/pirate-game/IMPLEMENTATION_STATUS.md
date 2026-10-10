@@ -16,6 +16,7 @@ Review baseline: merged `main` commit `3853aa6`, whose GitHub CI passed; this up
 | Uncapped rewards | `20261009091310_pirate_uncapped_crews.sql`: new riddle claims pay 20/15/10/5, then 5 for every later successful crew; positive integer ranks persist beyond fifth. Historical ledger and saved responses are preserved. |
 | Battery lifecycle | `useNow.js` stops UI ticks while inactive and catches up immediately on resume; finite countdowns stop on expiry. `useTrueHeading.js` prevents overlapping async startup and removes late subscriptions. Background GPS profiles and event delivery are unchanged. |
 | GM recovery and settings | `20261009120958_pirate_gm_controls.sql`: reasoned/idempotent normal-rank claims, manual Mercy, valid captain replacement, future payouts/timers, fixed encounter rules and deadlines, private correction history and one-step phase reversal including finished. |
+| Arrival lore | `20261010154950_pirate_sites_allow_auto_zones.sql`: riddle and lighthouse sites may use `auto` zones, whose message reaches each player after the dwell time (once with One-shot); `gm_confirm` stays refused. The Pirate Log shows these under a LORE tag. |
 | Dashboard | Pirate setup, phase/safety controls, treasure map marker, captains, balances, site claim board/voids, active disputes, GM recovery forms, settings with stale-edit protection, paginated ledger/claim/reading/Parley/audit history and stale-GPS/spread alerts. Pirate games skip Hunt admin loads. |
 | Android apps | One Expo project; default Pirate package `com.larppassport.app` replaces the old app, and Time Hunt package `com.larppassport.timehunt` installs beside it. Metro resolves variant screens/brands; captain-only compass tab. |
 
@@ -37,6 +38,7 @@ The GM-control suite adds 96 assertions for authorization/grants, idempotency, n
 Read-only migration-history inspection on 2026-10-09 confirmed that hosted `Passport`
 (`ufcnxkowpkwayczbfnzy`) matches all 32 migrations through `20261008094234_pirate_gm_adjust`.
 The Parley review, uncapped-crew and GM-control migrations are local/source work and must be applied separately to make their rules live. The hosted payout still stops after fifth place until the new migration is applied.
+On 2026-10-10 `20261010154950_pirate_sites_allow_auto_zones` was applied to hosted `Passport` on top of `20261008094234`; it only replaces `pirate_set_site`, which none of the three pending 2026-10-09 migrations touch.
 Pushing GitHub `main` does not apply Supabase migrations or replace installed APKs.
 
 The hosted backend before that corrective migration only flags >75 m separation at join,

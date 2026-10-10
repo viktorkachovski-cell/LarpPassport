@@ -29,7 +29,7 @@ These are retained at the owner's request on 2026-10-09. They are proposals, not
 - Build a signed Pirate APK from the reviewed commit and test it on real Android devices. An Expo export proves bundling, not installation, sensors or background GPS.
 - Verify both GM accounts, including phone-width dashboard controls, and the exact dashboard deployment against the hosted backend.
 - Survey the treasure/lighthouse geometry with `tools/pirate/simulate_triangulation.py`; retain its estimates as planning inputs, then test real readings.
-- Write nine riddles and four oath words, arrange the printed chart, and complete [EVENT_READINESS_2026-10-31.md](EVENT_READINESS_2026-10-31.md). Event layout counts are a plan, not validation gates.
+- Write nine riddles and four oath lines, arrange the printed chart, and complete [EVENT_READINESS_2026-10-31.md](EVENT_READINESS_2026-10-31.md). Event layout counts are a plan, not validation gates.
 
 ## Implementation constraints
 

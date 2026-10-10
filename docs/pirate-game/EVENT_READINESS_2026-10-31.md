@@ -45,7 +45,7 @@ These are **candidate clusters, not approved game pins**. Some contain several p
 
 ## 3. Riddles, story and physical production
 
-- [ ] Write a one-page player premise: why the crews seek the Black Tide, what bearing shards do, how the four oath words form the final phrase, how doubloons determine the winner, and why the Ghost Captain waits until dusk at 17:30.
+- [ ] Write a one-page player premise: why the crews seek the Black Tide, what bearing shards do, how the four oath lines form the spoken oath, how doubloons determine the winner, and why the Ghost Captain waits until dusk at 17:30.
 - [ ] Write the briefing, consent and safety script, in-fiction phase broadcasts, tavern trading prompt, Ghost Captain dialogue, emergency stop announcement, and final awards script. Keep all game instructions clear when read aloud over street noise.
 - [ ] Make **9 unique site riddles**: five shard riddles and four oath riddles. Draft concepts below; final text and answer must be derived from what a player can actually see from the permitted public standing spot. The examples are prompts for writing, not approved answers or site assignments.
 
@@ -62,7 +62,7 @@ These are **candidate clusters, not approved game pins**. Some contain several p
 | Oath 4 | “The last light”: a word from the Old Town/theatre approach, reachable before and after dark. | No ticket or opening-hour dependency. |
 
 - [ ] For each riddle record: pin ID, crew-facing title, exact prompt, normalized accepted answer(s), hint 1, hint 2, solution explanation, role in story, difficulty target (roughly 2–5 minutes), and fallback if a sign is removed. Have a writer and a fresh tester solve it independently on site.
-- [ ] Choose four oath words that form a speakable sentence with unambiguous order. Check pronunciation in the language used at the event; keep the words secret in GM notes and player rewards only.
+- [x] Choose the oath: four numbered lines of verse (one per oath site, each at most 40 characters) with unambiguous order. Check pronunciation in the language used at the event; keep the text secret in GM notes and player rewards only, never in this repository.
 - [ ] Set a replacement answer and GM manual claim procedure for every shard and oath riddle. Do not hide containers in public space or attach anything to monuments without permission.
 - [ ] Print one chart per confirmed crew plus spare copies, each with a legend distinguishing shard and oath sites and lighthouses, safe routes, play boundary, emergency contact, Truce/Final Muster address, and no exact treasure point. Add armbands or crew markers, GM ID, pencils, weatherproof sleeves, power banks and chargers.
 - [ ] Put the Ghost Captain’s costume and any prop through a public-safety check: clearly theatrical, no realistic weapons, no touching or chasing, no prop that looks abandoned or suspicious.
@@ -92,7 +92,7 @@ Do not reimplement them. The owner promoted GM claims, Mercy, captain replacemen
 - [ ] Produce an installable Pirate APK with the correct public Supabase configuration and an agreed signing/distribution plan. Its package ID replaces the ordinary LARP Passport app on the same phone; warn testers and plan rollback/reinstall.
 - [ ] Boot the exact candidate APK on at least two Android models. Verify login, joining, location sharing and consent, foreground/background recovery, compass heading, all four player tabs, Parley, and battery drain over at least 60 minutes.
 - [ ] Deploy a preview dashboard and verify mobile-width Ghost Captain actions. Confirm the dashboard and APK target the same reviewed backend. Record exact commit, CI run, migration list, deployment ID and APK hash in a release record.
-- [ ] Before the real-game database is populated, enter the confirmed crews, zone geometry, 12 activity-site records and the separate treasure point, answers, oath words, treasure and GM roles. Run `pirate_validate` and inspect every failure. Restrict the treasure point and answer list to GMs.
+- [ ] Before the real-game database is populated, enter the confirmed crews, zone geometry, 12 activity-site records and the separate treasure point, answers, oath lines, treasure and GM roles. Run `pirate_validate` and inspect every failure. Restrict the treasure point and answer list to GMs.
 - [ ] Rehearse on **24 October** with two GMs and 4–6 testers at dusk. Walk every proposed point with two Android models. Solve every riddle in place; claim all site types; take and plot several lighthouse arcs; find the treasure from readings; run Yield, Fight, conflicting reports, GM ruling and void; test pause and PvP off; lose data for five minutes and recover; award/void treasure from the Ghost Captain’s phone.
 - [ ] Time three realistic crew routes. The old 29-point timing estimate is invalid; confirm this shorter map sustains the 245 playable minutes without forcing every crew to visit every site. Adjust pacing, walking distances or puzzle time from rehearsal evidence.
 - [ ] Fix rehearsal defects and freeze gameplay changes by **27 October**. Reprint charts and recheck all pins after any site move. Keep 28–31 October for content, enrolment and verified bug fixes.

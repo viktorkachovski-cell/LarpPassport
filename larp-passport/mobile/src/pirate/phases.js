@@ -35,7 +35,7 @@ export function phaseHint(state) {
   if (!state?.phase) return ''
   if (state.paused) return 'The tide has stopped. Everything is paused until the GM resumes play.'
   if (state.phase === 'setup') return 'Crews are gathering. Play starts at Charting.'
-  if (state.phase === 'truce') return 'Everything is paused. Warm up, charge your phone, trade oath words.'
+  if (state.phase === 'truce') return 'Everything is paused. Warm up, charge your phone, trade oath lines.'
   if (state.phase === 'recall') return 'Play is over. Head to the Final Muster.'
   if (state.phase === 'finished') return 'The game is over.'
   const open = []
