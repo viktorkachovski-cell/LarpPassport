@@ -3,11 +3,11 @@ import { C, F } from '../lib/theme'
 import { CharacterSheet, CreateCharacter } from '../screens/game/CharacterTab'
 import { DoubloonIcon, Kicker, SHEET_TEXT, ShardIcon, Sheet, TabPage } from './ui'
 
-// Every game has four oath words, one per oath site (game guide, section 3).
+// The oath is four lines, one per oath site (game guide, section 3).
 const OATH_SLOTS = [1, 2, 3, 4]
 
 function CrewPurse({ state }) {
-  const words = new Map((state.oath ?? []).map((word) => [word.index, word.word]))
+  const lines = new Map((state.oath ?? []).map((line) => [line.index, line.word]))
   const captain = state.is_captain
     ? 'You are the captain. You carry the compass.'
     : `${state.crew?.captain_name ?? 'Your captain (not chosen yet)'} carries the compass. Ask them for bearings.`
@@ -28,14 +28,14 @@ function CrewPurse({ state }) {
       </View>
 
       <View style={styles.rule} />
-      <Kicker>Oath words · {words.size}/4</Kicker>
+      <Kicker>The oath · {lines.size}/4 lines</Kicker>
       {OATH_SLOTS.map((index) => (
-        <View key={index} style={styles.ledgerRow} accessibilityLabel={`Oath word ${index}: ${words.get(index) ?? 'missing'}`}>
-          <Text style={styles.ledgerLabel}>Word {index}</Text>
-          <Text style={[styles.ledgerValue, !words.has(index) && styles.missing]}>{words.get(index) ?? '—'}</Text>
+        <View key={index} style={styles.oathRow} accessibilityLabel={`Oath line ${index}: ${lines.get(index) ?? 'missing'}`}>
+          <Text style={styles.oathIndex}>{index}</Text>
+          <Text style={[styles.oathLine, !lines.has(index) && styles.missing]}>{lines.get(index) ?? '—'}</Text>
         </View>
       ))}
-      {words.size < 4 && <Text style={styles.muted}>Solve oath sites or trade with other crews. The Truce is a good time to trade.</Text>}
+      {lines.size < 4 && <Text style={styles.muted}>Solve oath sites or trade lines with other crews. The Truce is a good time to trade.</Text>}
     </Sheet>
   </>
 }
@@ -66,6 +66,9 @@ const styles = StyleSheet.create({
   ledgerName: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   ledgerLabel: { flexShrink: 1, color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
   ledgerValue: { flexShrink: 1, color: C.sheetInk, fontFamily: F.numeric, fontSize: 19, lineHeight: 25, textAlign: 'right' },
+  oathRow: { flexDirection: 'row', alignItems: 'baseline', gap: 12, paddingVertical: 4 },
+  oathIndex: { width: 14, color: C.sheetMuted, fontFamily: F.numeric, fontSize: 15 },
+  oathLine: { flex: 1, color: C.sheetInk, fontFamily: F.body, fontSize: 18, lineHeight: 25 },
   missing: { color: C.sheetMuted, fontFamily: F.body },
   pirate: { marginTop: 8 },
 })

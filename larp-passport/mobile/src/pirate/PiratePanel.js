@@ -31,7 +31,7 @@ const CLAIM_MESSAGES = {
 function claimMessage(result) {
   if (!result) return ''
   if (result.status === 'ok') {
-    const reward = result.reward === 'oath' ? `Oath word ${result.oath_index}: ${result.oath_word}.` : '+1 bearing shard.'
+    const reward = result.reward === 'oath' ? `Oath line ${result.oath_index}: “${result.oath_word}”` : '+1 bearing shard.'
     const doubloons = result.doubloons > 0 ? ` +${result.doubloons} doubloons (solved ${ordinal(result.rank)}).` : ''
     return `Solved ${result.site_name}. ${reward}${doubloons}`
   }
@@ -56,7 +56,7 @@ function SiteHere({ site, state, answer, setAnswer, busy, onClaim }) {
   return <>
     <SheetTitle>{site.site_name}</SheetTitle>
     {!!site.reward && <Text style={styles.muted}>
-      Prize: {site.reward === 'bearing' ? '1 bearing shard' : '1 oath word'} + doubloons ({riddleRewardText(state.settings)})
+      Prize: {site.reward === 'bearing' ? '1 bearing shard' : '1 line of the oath'} + doubloons ({riddleRewardText(state.settings)})
     </Text>}
     {!!site.prompt && <Text style={styles.prompt}>{site.prompt}</Text>}
     {site.claimed_by_my_crew && <Notice tone="ok" text="Your crew has solved this site." />}

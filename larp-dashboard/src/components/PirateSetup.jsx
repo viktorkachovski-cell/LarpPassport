@@ -15,7 +15,7 @@ export function SiteForm({ gameId, state, zones, busy, run, rpc, refresh, onChan
   const oath = riddle && reward === 'oath'
 
   // A registered zone loads its saved settings; a new zone keeps the chosen
-  // kind and reward. The answer and oath word are never sent back.
+  // kind and reward. The answer and oath line are never sent back.
   function chooseZone(id) {
     const site = siteOf(id)
     setZoneId(id)
@@ -67,14 +67,14 @@ export function SiteForm({ gameId, state, zones, busy, run, rpc, refresh, onChan
           </select></div>
         {riddle && <div className="field"><label htmlFor="pirate-reward">Riddle reward</label>
           <select id="pirate-reward" value={reward} onChange={(event) => setReward(event.target.value)}>
-            <option value="bearing">Bearing shard</option><option value="oath">Oath word</option>
+            <option value="bearing">Bearing shard</option><option value="oath">Oath line</option>
           </select></div>}
         {oath && <>
           <div className="field"><label htmlFor="pirate-oath-index">Oath index</label>
             <select id="pirate-oath-index" value={oathIndex} onChange={(event) => setOathIndex(event.target.value)}>
               {[1, 2, 3, 4].map((index) => <option key={index} value={index}>{index}</option>)}
             </select></div>
-          <div className="field"><label htmlFor="pirate-oath-word">Oath word</label>
+          <div className="field pirate-wide"><label htmlFor="pirate-oath-word">Oath line (the whole line, up to 40 characters)</label>
             <input id="pirate-oath-word" value={oathWord} maxLength={40} required
               onChange={(event) => setOathWord(event.target.value)} /></div>
         </>}
