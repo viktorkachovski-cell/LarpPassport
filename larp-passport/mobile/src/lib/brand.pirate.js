@@ -197,7 +197,13 @@ export const COPY = {
   },
   log: {
     messageCaption: 'Only the GMs see this.',
-    hiddenTypes: ['zone_enter', 'zone_exit', 'consent_granted', 'consent_revoked'],
+    // Silent sites never reach the player; a notify site carries the GM's lore.
+    hiddenTypes: ['zone_exit', 'consent_granted', 'consent_revoked'],
+    zoneEnter: {
+      tag: { label: 'LORE', color: palette.amber, borderColor: palette.amberBorder },
+      title: 'A tale on the tide',
+      notification: 'A tale on the tide',
+    },
     showReasons: true,
   },
   sharing: { collapseDetails: true },

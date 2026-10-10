@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(16);
+select extensions.plan(18);
 
 select extensions.is(private.pirate_normalize_answer('  Black, Tide!  '), 'blacktide',
   'English answers ignore case, spacing and punctuation');
@@ -38,7 +38,13 @@ values
    40, 'silent'),
   ('c6000000-0000-0000-0000-000000000006', 'c4000000-0000-0000-0000-000000000004',
    'Other Riddle', extensions.st_setsrid(extensions.st_makepoint(30.01, 50), 4326)::extensions.geography,
-   40, 'silent');
+   40, 'silent'),
+  ('c7000000-0000-0000-0000-000000000007', 'c3000000-0000-0000-0000-000000000003',
+   'Lore Riddle', extensions.st_setsrid(extensions.st_makepoint(30.02, 50), 4326)::extensions.geography,
+   40, 'auto'),
+  ('c8000000-0000-0000-0000-000000000008', 'c3000000-0000-0000-0000-000000000003',
+   'Confirm Riddle', extensions.st_setsrid(extensions.st_makepoint(30.03, 50), 4326)::extensions.geography,
+   40, 'gm_confirm');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c1000000-0000-0000-0000-000000000001', true);
@@ -67,6 +73,18 @@ select extensions.ok(
        'c5000000-0000-0000-0000-000000000005', 'riddle', 'bearing', null, null,
        'What is the tide?', null) ? 'answer'),
   'updating a site does not return its answer'
+);
+select extensions.lives_ok(
+  $$ select public.pirate_set_site('c3000000-0000-0000-0000-000000000003',
+       'c7000000-0000-0000-0000-000000000007', 'riddle', 'bearing', null, null,
+       'What is the tide?', 'Black Tide') $$,
+  'an auto zone can carry a site, so its message reaches players on arrival'
+);
+select extensions.throws_ok(
+  $$ select public.pirate_set_site('c3000000-0000-0000-0000-000000000003',
+       'c8000000-0000-0000-0000-000000000008', 'riddle', 'bearing', null, null,
+       'What is the tide?', 'Black Tide') $$,
+  '22023', 'this Pirate site needs a silent or auto zone', 'a GM-confirm zone cannot carry a site'
 );
 reset role;
 select extensions.is(

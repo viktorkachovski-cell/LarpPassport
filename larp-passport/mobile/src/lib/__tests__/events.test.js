@@ -28,4 +28,5 @@ test('pirate events have crew-safe wording', () => {
   expect(eventInfo('pirate_parley').tag.label).toBe('PARLEY')
   expect(eventInfo('pirate_captain').body).toContain('compass')
   expect(eventInfo('pirate_something_new').tag.label).toBe('TIDE')
+  expect(eventInfo('zone_enter')).toMatchObject({ title: 'A tale on the tide', tag: { label: 'LORE' } })
 })

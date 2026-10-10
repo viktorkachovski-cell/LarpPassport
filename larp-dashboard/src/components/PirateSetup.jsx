@@ -48,7 +48,7 @@ export function SiteForm({ gameId, state, zones, busy, run, rpc, refresh, onChan
 
   return <section className="command-card pirate-section">
     <h3>Register a Pirate site</h3>
-    <p className="hint">Create the zone on the map first: an event zone set to "Log silently for GMs", with a dwell time (20 s is a good start). The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays {payouts.join(' / ')} doubloons by rank, then {payouts.at(-1)} for every later crew. Crew count and crew size are uncapped.</p>
+    <p className="hint">Create the zone on the map first: an event zone with a dwell time (20 s is a good start), set to "Log silently for GMs", or to "Notify the player automatically" with lore in its message and One-shot ticked so each player hears it once on arrival. Set this before Charting: changing a zone's trigger resets who stands in it. The event plan has 5 bearing riddles, 4 oath riddles and 3 lighthouses, but any number can start a test. Each riddle pays {payouts.join(' / ')} doubloons by rank, then {payouts.at(-1)} for every later crew. Crew count and crew size are uncapped.</p>
     <p className="hint">Players see the prompt in the app's Sites tab once they have stood inside the zone for its dwell time with location sharing on, and type the answer there. The answer is stored only as a hash: it is cleared after saving and never shown again.</p>
     <form onSubmit={save} autoComplete="off">
       <div className="pirate-form-grid">

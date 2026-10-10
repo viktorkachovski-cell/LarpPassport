@@ -66,9 +66,9 @@ Playable time is about 245 minutes: charting at 14:00 through recall at 18:20, m
 
 | Site | Count | Zone setup | Per-crew rule |
 | --- | --- | --- | --- |
-| Shard riddle sites | **5** | circle 40-50 m, `silent`, dwell 20 s; private site kind `riddle`, reward `bearing` | Once per crew after correct answer, +1 shard and doubloons by successful-answer rank |
+| Shard riddle sites | **5** | circle 40-50 m, `silent` (or `auto` + one-shot to push site lore on arrival), dwell 20 s; private site kind `riddle`, reward `bearing` | Once per crew after correct answer, +1 shard and doubloons by successful-answer rank |
 | Oath riddle sites | **4** (one per oath line) | same, reward `oath`, oath index 1..4 | Once per crew after correct answer, reveals that whole line and pays doubloons by successful-answer rank |
-| Lighthouses | **3** | circle 40-60 m, `silent`, dwell 20 s; private site kind `lighthouse` | One reading per crew per lighthouse per shard level; no site reward |
+| Lighthouses | **3** | circle 40-60 m, `silent` or `auto` + one-shot, dwell 20 s; private site kind `lighthouse` | One reading per crew per lighthouse per shard level; no site reward |
 | Treasure | **1** | Secret point set by the GM (not a map zone; the `treasure` site kind was removed 2026-10-07) | Separate staffed point; GM award in `hoard` phase |
 
 Total: **12 activity sites plus 1 separate treasure point = 13 physical locations**. There are no caches or Safe Harbour zones.
