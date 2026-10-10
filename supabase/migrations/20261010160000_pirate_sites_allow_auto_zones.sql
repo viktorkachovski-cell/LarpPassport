@@ -106,5 +106,3 @@ begin
   return pg_catalog.jsonb_build_object('status', 'ok', 'zone_id', zone_id, 'answer_set', new_hash is not null);
 end;
 $$;
-
-create or replace function public.pirate_validate(g uuid)
